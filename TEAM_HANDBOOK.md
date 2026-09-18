@@ -1,6 +1,6 @@
 # 团队执行手册 — Averis x Monash Hackathon 2026
 
-给团队3人看的分工/协作手册。技术细节遵循 [CLAUDE.md](CLAUDE.md)（3人的 Claude Code 都会自动读取那份文件）。
+给团队3人看的分工/协作手册。技术细节遵循 [CLAUDE.md](CLAUDE.md)（3人的 Claude Code 都会自动读取那份文件），核心决策的来龙去脉见 [DECISION_LOG.md](DECISION_LOG.md)。
 
 ## 0. 现状快照
 
