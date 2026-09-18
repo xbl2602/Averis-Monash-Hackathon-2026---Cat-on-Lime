@@ -34,7 +34,7 @@ docker compose up --build
 
 仓库连到 Vercel 后，push 到 `main` 会自动部署。需要在 Vercel 项目的 Environment Variables 里，把 `.env.example` 里列的变量都配置一遍（`LM_STUDIO_BASE_URL` 除外，云端用不到，见下文）。
 
-**线上 demo 地址**：https://hackathon-demo-blond.vercel.app （目前 Git 仓库还没连上这个 Vercel 项目，`git push` 还不会自动更新这个地址，需要团队有人去 Vercel 后台 Settings → Git 手动连一下，见 DECISION_LOG.md 决策17）
+**线上 demo 地址**：https://hackathonaveris.vercel.app （已连 GitHub `main` 分支，push 会自动重新部署。Supabase 的地址/key 已经配置好，但 LLM 的 API key 还没填，见 CLAUDE.md「项目状态」）
 
 ## 环境变量说明
 

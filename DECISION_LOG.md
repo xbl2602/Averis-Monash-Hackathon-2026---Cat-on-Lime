@@ -168,3 +168,21 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   一条部署，且不带任何 git commit 信息，说明现在 `git push` 不会自动更新线上demo。
   Vercel 没有对应的API能完成"连接已有项目到Git仓库"这一步（这类授权类操作只能在网页后台
   手动点），需要团队有人手动去 Vercel 后台 Settings → Git 里连一下。
+
+### 决策 18：发现操作者实际连的是另一个新项目 `hackathonaveris`，确认它为正式demo项目
+
+- **背景**：操作者按决策17的步骤去连Git，回来说"已经搞定"，但查证发现决策17里那个
+  `hackathon-demo` 项目依然没有任何新部署——操作者实际操作的是账号下**另一个项目**
+  `hackathonaveris`（此前没人提过，应该是操作者这次顺手新建的）。
+- **核实**：查询 `hackathonaveris` 的部署记录，确认它的最新部署带着正确的 git commit 信息
+  （commit信息对得上我们刚push的那条），证明它确实已经跟 `xbl2602/Hackathon` 仓库的
+  `main` 分支连好，push 会自动触发部署；SSO保护也是默认关闭状态。
+- **决定**：账号下同时存在 `hackathon-demo`（旧的，没连Git，停用）和 `hackathonaveris`
+  （正确连好的）两个项目容易让人混淆——问过操作者后，确认以 `hackathonaveris` 为准，
+  之后 CLAUDE.md / README.md 里的demo地址、环境变量说明都改成指向这一个。
+- **补做的事**：`hackathonaveris` 项目面板里虽然有 `NEXT_PUBLIC_SUPABASE_URL` /
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` 这两个环境变量的"位置"，但值是空的——因为这两个是
+  公开、非密钥性质的值（Supabase 的 anon key 本来就设计成可以暴露在浏览器端），
+  直接把已经取到的真实值填了进去，并触发了一次新部署让它生效。
+  `SUPABASE_SERVICE_ROLE_KEY` 和各家 LLM 的 API key 是真正的私密key，没有去申请/查看，
+  留空，需要团队自己去后台填。
