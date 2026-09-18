@@ -74,3 +74,7 @@ interface EmailVerificationResult {
 ## MCP tool 约定
 
 每个 feature 的 `mcp/index.ts` 导出一个 `{ name, description, inputSchema, handler }` 形状的对象，由 `app/core/mcp-server/tools.ts` 统一汇总注册，不要自己在别的地方重复注册。
+
+## 批量处理并发约定
+
+对多条数据（比如一批邮件）做批量处理时，统一用 [`lib/shared/concurrency.ts`](lib/shared/concurrency.ts) 导出的 `mapWithConcurrencyLimit(items, fn, { concurrency })`，不要自己写 `Promise.all` 一次性全部并发，也不要写 `for...of` 里 `await` 一个个排队。它会控制同时最多跑几个、并把每条失败的错误单独收集起来而不是让整批一起抛错。详细原因见 CLAUDE.md「高并发与数据同步/冲突处理」。
