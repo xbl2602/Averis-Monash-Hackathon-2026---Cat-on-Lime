@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+
+# next.js build output
+/.next/
+/out/
+next-env.d.ts
+
+# production build
+/build
+
+# env files — 真正的密钥只放在这些文件里，不要提交
+.env
+.env.local
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# TypeScript build info
+*.tsbuildinfo

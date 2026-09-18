@@ -1,0 +1,10 @@
+# 本地一条命令启动：docker compose up --build
+# 需要先复制 .env.example 为 .env，填好真实的 key（见 README.md）
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
