@@ -155,3 +155,16 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   Docker Desktop未启动，没有做到实际验证，只做到了写好Dockerfile。
 - **明确排除的范围**：三个模块的真实业务逻辑（占位实现，标了TODO给负责人）、
   MCP协议真实握手（只做到"能列出tool"）——这些是"地基"之上的真功能，不属于本次搭建范围。
+
+### 决策 17：Supabase / Vercel 真实项目本来就已存在，接上并关闭了挡住评委的 SSO 保护
+
+- **背景**：操作者问"怎么没看到supabase和vercel注册"，一查发现两个云账号下其实早就有同名
+  `hackathon-demo` 项目（应该是团队之前建好但没人跟AI提过），不需要重新注册。
+- **做了什么**：把 Supabase 真实的项目地址和公开 key 取出来写进本地 `.env.local`
+  （不进git，只影响自己电脑本地开发）；检查发现 Vercel 项目默认开着"SSO Protection"，
+  会导致外人（包括评委）打开线上demo网址时被拦在登录页——操作者明确授权后关闭了这个开关。
+- **验证**：关闭后重新查询项目设置，确认 `ssoProtection.enabled` 已经是 `false`。
+- **仍未解决**：这个 Vercel 项目还没连上 GitHub 仓库——查了部署记录，从建项目到现在只有
+  一条部署，且不带任何 git commit 信息，说明现在 `git push` 不会自动更新线上demo。
+  Vercel 没有对应的API能完成"连接已有项目到Git仓库"这一步（这类授权类操作只能在网页后台
+  手动点），需要团队有人手动去 Vercel 后台 Settings → Git 里连一下。

@@ -9,6 +9,7 @@
 - **题目（已确认）**：航运单证核验（Shipping Documents Verification）。系统要做到：① 分类邮件（SI/BL确认/发票询问/垃圾邮件）② 从正文/附件抽取字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI，标出差异 ④ 拿不准时提示需要人工介入。完整背景见 OPENING_CEREMONY_NOTES.md。
 - **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
 - **功能模块划分**：`classification` / `extraction` / `comparison` 三个 feature，各自负责人见文末"各功能模块负责人"。
+- **Supabase / Vercel 真实项目已建好（不用重新注册）**：项目名都叫 `hackathon-demo`。Supabase 的地址和公开 key 已经写进本地 `.env.local`（不进git）。Vercel 线上demo地址是 `https://hackathon-demo-blond.vercel.app`，之前默认开着的"Vercel Authentication（SSO保护）"已关闭，外部评委不登录也能直接打开看。**尚未完成**：这个 Vercel 项目还没连上 GitHub 仓库（Vercel后台没有API能做这一步，需要人手动在网页上点 Settings → Git → Connect Git Repository），所以现在 `git push` 还不会自动触发线上更新，谁做这件事之前先去 Vercel 后台确认一下有没有别人已经连过。
 
 ## 产品形态要求（硬性，初赛截止前必须做到）
 
