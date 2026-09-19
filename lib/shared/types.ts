@@ -47,6 +47,17 @@ export type ComparedField = (typeof COMPARED_FIELDS)[number];
 // extraction 模块的输出：从一份文档（SI 或 BL）里抽出来的字段
 export type ExtractedDocumentFields = Partial<Record<ComparedField, string>>;
 
+// extraction 模块对"这份文档实际是什么"的判断（OTHER = 明显不是 SI/BL，如商业发票/装箱单/产地证）
+export type DocumentType = "SI" | "BL" | "OTHER" | "UNKNOWN";
+
+// extraction 模块的完整输出
+export interface ExtractDocumentResult {
+  document_type: DocumentType;
+  fields: ExtractedDocumentFields;
+  /** 字段主要靠"规则解析"还是"LLM 兜底"得出，用于排查与统计 */
+  extracted_by: "rules" | "llm";
+}
+
 // comparison 模块的输出，同时也是最终要交给官方评分系统的那份结果的"单条"格式
 // （最终提交文件是 { [email_id]: EmailVerificationResult } 这样一个大对象，
 //  见 data/sample/sample_submission.json）

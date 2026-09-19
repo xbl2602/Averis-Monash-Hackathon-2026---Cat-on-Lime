@@ -45,13 +45,16 @@
 3. **跨模块传递的数据，格式只能用 `lib/shared/types.ts` 里定义好的类型**，不能自己在某个模块里临时发明一个新字段名，然后口头告诉队友"记得用这个格式"——口头约定就是典型的"就近乱接线"，必须是代码里真的 import 那个类型，不是各自抄一遍。
 4. **同一件事的"标准答案"只能在一个地方定义**。比如"要比对哪7个字段"这件事，只在 `lib/shared/types.ts` 的 `COMPARED_FIELDS` 里出现一次，其他地方都是引用它，不能每个模块自己再写一份字段名列表——写两份，以后改一个忘了改另一个，两边就会对不上，出现很难查的bug。
 
-## 现在缺的一块：编排层（pipeline）
+## 编排层（pipeline）：已就位
 
-三个模块目前是各自独立、能单独测试的（分类能单独测、抽取能单独测、比对能单独测），但**还没有一个"从头跑到尾、产出最终提交文件"的地方**。这是接下来要补上的：
+`lib/shared/pipeline.ts` 是**唯一**知道"先分类、再抽取、最后比对"这个顺序的地方：
 
-- 建议新增 `lib/shared/pipeline.ts`，作为**唯一**知道"先分类、再抽取、最后比对"这个顺序的地方：读一封邮件 → 调用 classification → 如果是 `BL_COMPARISON` 就调用 extraction 两次（SI一次、BL一次）→ 调用 comparison → 组装成 `EmailVerificationResult`。
-- 网页、REST API、MCP 如果要"跑一遍完整流程"，都应该调用这一个 pipeline 函数，不要在别的地方各自重新拼一遍这个顺序逻辑——不然以后流程顺序要调整，得改好几个地方，又是前面说的"标准答案写了两份"的老问题。
-- 最终生成 `submission.json`（交给官方评分）这个功能，也应该基于这个 pipeline，对 `data/sample` 里所有邮件跑一遍、收集结果。**这一步是"批量处理"，必须用 `lib/shared/concurrency.ts` 的 `mapWithConcurrencyLimit` 包一层**（见 CLAUDE.md「高并发与数据同步/冲突处理」），不能一封一封排队跑（慢），也不能对几十封邮件同时发起几十个LLM调用（容易被限流）；某一封邮件处理出错，要被单独记录下来，不能让其他邮件的结果也一起丢失。
+- `runEmailPipeline`：跑一封邮件 → 组装成 `EmailVerificationResult`，并负责 4 种"拿不准"的判定（缺附件 / 类型不对 / 读不了 / 字段缺失）
+- `runBatchPipeline`：批量处理，用 `mapWithConcurrencyLimit` 限量并发；单封失败单独记录，不拖垮整批
+- `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据（内容没变、引擎版本没变就不重算）
+
+网页、REST API、MCP 要"跑一封/一整箱"都应该调用这里，不要在别处重新拼顺序逻辑。
+引擎是混合模式（规则优先，拿不准/有矛盾才调模型），所有模型调用走 `lib/shared/llm-cache.ts` 的内容指纹缓存；本地全量评测用 `npm run evaluate`（对照 ground_truth 自测，官方已澄清允许）。
 
 ## 数据的"读/写"边界
 
@@ -59,7 +62,7 @@
 |---|---|---|
 | `data/sample/`（官方样例邮件） | 所有模块 | 任何代码都不应该修改它——这是官方给的原始数据，改了就对不上了 |
 | `lib/shared/types.ts`（字段/格式定义） | 所有模块 | 改动前必须先跟操作者确认，这是"公共区"，改错了三个模块都受影响 |
-| Supabase（还没建表） | 以后需要保存"处理过的结果""人工确认记录"时才用 | 目前项目里还没有任何真实表结构，不要提前建一堆用不到的表。**以后建表时**：涉及邮件结果的表要以 `email_id` 做唯一约束，写入统一用 `upsert`（不要"先查存不存在再insert"，并发下会出重复行，见 CLAUDE.md「高并发与数据同步/冲突处理」）；涉及人工能编辑的表要留 `updated_at` 字段，方便以后做基本的"被别人改过"提示 |
+| Supabase（`raw_emails` 原始层 / `parsed_attachments` 文字层 / `verification_results` 结果层，另有内部缓存 `llm_call_cache`） | 前三张表对所有模块、UI、预览开放读（RLS 公开只读）；`llm_call_cache` 只有服务端能读写 | `raw_emails`、`parsed_attachments` 只由本地导入脚本 `npm run import:data` 增量写（按指纹跳过没变的内容；upsert 冲突键 `email_id` / `email_id,file_path`）；`verification_results` 等流水线跑通后按 `email_id` upsert 写。不要在别的代码里零散写这些表；表结构和指纹规则见 SHARED_INTERFACES.md「数据库存储层」 |
 | 环境变量 | 只用来配置"怎么连外部服务"（LLM key、Supabase地址） | 不要把业务数据（邮件内容、比对结果）塞进环境变量里，那是配置，不是数据 |
 
 ## 为什么要这么严格

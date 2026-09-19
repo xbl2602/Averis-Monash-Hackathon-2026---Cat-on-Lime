@@ -251,3 +251,15 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   现场评委临时换一封邮件测试）。因此：**允许**写一个本地评估脚本，拿pipeline的输出
   跟 `ground_truth.json` 逐条比对算准确率，帮助改进真实逻辑；**不允许**任何直接把
   `ground_truth.json` 里的值写进最终提交文件的做法。
+
+### 决策 22：引擎定为"规则优先 + Jev 判断 + LLM 兜底"的混合模式，引入内容指纹缓存与全量评测脚本
+
+- **背景**：操作者要求尽量用"显式处理"（规则/关键词）避免消耗额度，有矛盾才用 Jev；Jev 官方最佳实践也支持"一次调用问完所有问题"（speculative fan-out，长材料只发一次）。
+- **决策**：
+  1. 分类：高精度模板签名优先（`classification/logic/rules.ts`），拿不准才交给 Jev（一次调用、choice 题）。
+  2. 抽取：标签规则解析（`extraction/logic/label-parser.ts`，含提单 "To the Order of" 等全部版式变体），缺字段才用文本 LLM 兜底（prompt 明确"找不到填 null、占位符填 null"）。
+  3. 比对：规范化（大小写/空白/标点/数字格式，`comparison/logic/canonical.ts`）后精确比；"文字字段对不上"的候选差异交给 Jev（一次调用、noul 题）复核；数字字段不进 Jev（实测 Jev 会把 "5 x 20'GP" vs "6 x 20'GP" 判成一样）。
+  4. Jev 比对阈值定为 **0.6**：用样例数据校准（0.5 会漏 1 条真实差异；0.55~0.8 区间 0 漏报 0 误报；真实差异最高 0.52、真实一致最低 0.88）。
+  5. 缓存：`llm_call_cache` 表，键=sha256(用途+版本+provider+模型+实际发送内容)，写入用 upsert，存完整响应；没配 service key 时自动降级为不缓存。
+  6. 增量：`verification_results.input_hash` + `PIPELINE_LOGIC_VERSION` 决定整封是否跳过；`LLM_CACHE_VERSION` 决定缓存是否失效。改引擎逻辑时必须手动 +1，见 SHARED_INTERFACES.md「编排层与混合引擎」。
+- **验证结果（2026-09-20 首次全量评测，对照 `ground_truth.json`）**：分类 macro-F1 100%；端到端 520/520 完全一致；缺陷字段 TP=72 / FP=0 / FN=0；20 个 NEEDS_REVIEW 的 review_reason 20/20。本轮模型调用：比对 37 次 Jev（命中缓存后新增 0 条）、抽取兜底 0 次（规则全覆盖）；未配 Anthropic key 时兜底自动降级，不影响规则路径结果。

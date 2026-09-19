@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { extractFields } from "../logic";
 import { readSampleAttachmentText } from "@/lib/shared/inbox";
+import { extractFields } from "../logic";
 
 export const extractionMcpTool = {
   name: "extract_document_fields",
   description:
-    "从一份 SI（Shipping Instruction）或 BL（Bill of Lading）文档文本里抽取 shipper/consignee/notify_party/port_of_loading/port_of_discharge/container_count/gross_weight_kg 这7个字段",
+    "从一份 SI（Shipping Instruction）或 BL（Bill of Lading）文档文本里抽取 shipper/consignee/notify_party/port_of_loading/port_of_discharge/container_count/gross_weight_kg 这7个字段，并判断文档类型（OTHER = 不是 SI/BL，如发票/装箱单）",
   inputSchema: {
     attachment_path: z
       .string()

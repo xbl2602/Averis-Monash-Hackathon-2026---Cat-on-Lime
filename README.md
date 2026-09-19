@@ -21,6 +21,29 @@ npm run dev
 
 打开 http://localhost:3000 。没有配置任何 LLM/Supabase key 也能跑起来看界面，但涉及真实调用的功能会报错，报错信息会说明缺了哪个环境变量。
 
+## 导入样例数据到 Supabase（本地跑，支持增量）
+
+数据库分三层：`raw_emails`（原始层，邮件原样）、`parsed_attachments`（文字层，附件解析出的文字 + 扁平化文本）、`verification_results`（结果层，先留位子）；另有 `llm_call_cache`（模型调用缓存，内部用）。前两层用导入脚本填充：
+
+```bash
+npm run import:data:dry   # 先干跑一遍：只解析 data/sample、打印统计，不写库、不需要 key
+npm run import:data       # 增量导入（需要 .env.local 里填了 SUPABASE_SERVICE_ROLE_KEY）
+```
+
+每行都带内容指纹（`content_hash`）：重跑时**内容没变的行直接跳过**，只有变化的才会更新，所以随便跑、不怕重复。扫描件/损坏的 PDF 会标成 `unreadable` 先搁置，以后再处理（到时候重跑脚本即可自动补上）。
+
+## 本地评测（对照官方 ground_truth 自测）
+
+```bash
+npm run evaluate              # 全量跑 520 封：增量跳过没变的邮件，对照 ground_truth 出分数，并写入 verification_results
+npm run evaluate -- --force   # 强制重算
+npm run evaluate -- --limit=50  # 只跑前 50 封（调试）
+npm run evaluate -- --no-write  # 只算分，不写库
+```
+
+ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最终提交文件。
+当前成绩（2026-09-20）：分类 macro-F1 100%、端到端 520/520、缺陷字段 100%/100%/100%。
+
 ## Docker 部署
 
 ```bash
@@ -58,10 +81,14 @@ docker compose up --build
   /shared          跨模块共享的类型定义和工具函数
   /llm             多LLM统一调用层
 /data/sample       官方提供的样例邮件数据（参赛者安全版，不含答案）
+/scripts           本地工具脚本（导入样例数据到 Supabase 等，不参与线上运行）
 ```
 
 完整的架构规范和约束见 [CLAUDE.md](CLAUDE.md)。
 
 ## 当前状态
 
-核心骨架已经搭好（三个模块的 Web UI / REST API / MCP tool定义都能跑通，但业务逻辑还是占位实现，永远返回固定的假数据）。三人认领模块后，把各自 `logic/` 文件夹里的占位函数换成真实逻辑即可，其他层（api/mcp/ui）大概率不用大改。
+- 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
+- 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
+- MCP server 还没接上真正的协议握手（现在只能列出工具清单）；整箱流水线的 REST API / MCP 工具也还没做（单模块接口已有）
+- LLM key：本地缺 `ANTHROPIC_API_KEY`（抽取兜底/Claude provider 用；没配时自动降级、不影响规则路径）；Vercel 后台的 key 也还没填

@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "import:data": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs",
+    "import:data:dry": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs --dry-run",
+    "evaluate": "tsx scripts/evaluate.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.57",
@@ -16,9 +19,12 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/supabase-js": "^2.116.0",
     "ai": "^7.0.106",
+    "mammoth": "^1.12.3",
     "next": "^16.3.5",
+    "pdf-parse": "^2.4.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "read-excel-file": "^9.3.10",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -28,6 +34,7 @@
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }
 }

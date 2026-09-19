@@ -1,23 +1,31 @@
 import {
   callJev,
   callLLM,
+  isJevAvailable,
   type JevQuestion,
   type LLMProvider,
 } from "@/lib/llm";
+import { callWithCache } from "@/lib/shared/llm-cache";
 import type { InboxEmail, EmailCategory } from "@/lib/shared/types";
+import { classifyByRules } from "./rules";
 
 export interface ClassifyEmailInput {
   email: InboxEmail;
-  /** 用哪个模型分类。默认 claude（demo 兜底）；传 "jev" 时走结构化决策，带置信度 */
+  /** 规则拿不准时用哪个文本模型兜底（Jev 可用时优先 Jev）。默认 claude */
   provider?: LLMProvider;
 }
 
 export interface ClassifyEmailResult {
   category: EmailCategory;
-  /** 0~1 的置信度；只有 Jev 这种结构化模型能给，文本 LLM 路径为 null */
+  /** 0~1 的置信度；只有 Jev 这种结构化模型能给，文本 LLM / 规则路径为 null */
   confidence: number | null;
   /** 置信度低于阈值时为 true，提示这封邮件需要人工确认（对应题目第④条） */
   needs_review: boolean;
+}
+
+export interface HybridClassificationResult extends ClassifyEmailResult {
+  /** 这次结果是谁给出的：规则 / Jev / 文本LLM */
+  engine: "rules" | "jev" | "llm";
 }
 
 const CATEGORIES: EmailCategory[] = [
@@ -40,6 +48,10 @@ const CATEGORY_DEFINITIONS: Record<EmailCategory, string> = {
 // 低于这个置信度就标记为需要人工介入，不再盲目相信自动分类结果
 const JEV_CONFIDENCE_THRESHOLD = 0.6;
 
+/**
+ * 单一入口：显式按 provider 调用（给 REST/MCP/界面用）。
+ * 批量流水线请用 classifyEmailHybrid（规则优先，省调用）。
+ */
 export async function classifyEmail(
   input: ClassifyEmailInput
 ): Promise<ClassifyEmailResult> {
@@ -50,6 +62,27 @@ export async function classifyEmail(
   return classifyWithTextLLM(provider, input.email);
 }
 
+/**
+ * 混合分类（流水线默认）：高精度规则 → 拿不准交给 Jev → 没有 Jev 时文本 LLM 兜底。
+ * 规则在样例数据上 518/520 直接判对，只剩 2 封需要 Jev。
+ */
+export async function classifyEmailHybrid(
+  input: ClassifyEmailInput
+): Promise<HybridClassificationResult> {
+  const ruled = classifyByRules({ subject: input.email.subject, body: input.email.body });
+  if (ruled) {
+    return { category: ruled.category, confidence: null, needs_review: false, engine: "rules" };
+  }
+
+  if (isJevAvailable()) {
+    const jev = await classifyWithJev(input.email);
+    return { ...jev, engine: "jev" };
+  }
+
+  const llm = await classifyWithTextLLM(input.provider ?? "claude", input.email);
+  return { ...llm, engine: "llm" };
+}
+
 async function classifyWithJev(email: InboxEmail): Promise<ClassifyEmailResult> {
   const questions: Record<string, JevQuestion> = {
     category: {
@@ -58,13 +91,17 @@ async function classifyWithJev(email: InboxEmail): Promise<ClassifyEmailResult> 
       criteria: CATEGORY_DEFINITIONS,
     },
   };
+  const state = { from: email.from, subject: email.subject, body: email.body };
 
-  const { answers } = await callJev(
-    { from: email.from, subject: email.subject, body: email.body },
-    questions
-  );
+  const { value } = await callWithCache({
+    purpose: "classification",
+    provider: "jev",
+    model: process.env.JEV_MODEL || "jev-latest",
+    request: { state, questions },
+    execute: () => callJev(state, questions),
+  });
 
-  const answer = answers.category;
+  const answer = value.answers.category;
   if (!answer || answer.type !== "choice") {
     throw new Error("Jev 返回的分类结果格式异常：缺少 category choice 答案");
   }
@@ -84,9 +121,7 @@ async function classifyWithTextLLM(
     (c) => `- ${c}: ${CATEGORY_DEFINITIONS[c]}`
   ).join("\n");
 
-  const text = await callLLM(
-    provider,
-    `请判断下面这封航运邮件属于哪一类，只回答类别代号本身，不要解释、不要加标点或其它文字。
+  const prompt = `请判断下面这封航运邮件属于哪一类，只回答类别代号本身，不要解释、不要加标点或其它文字。
 
 可选类别：
 ${definitions}
@@ -95,8 +130,15 @@ ${definitions}
 From: ${email.from}
 Subject: ${email.subject}
 Body:
-${email.body}`
-  );
+${email.body}`;
+
+  const { value: text } = await callWithCache({
+    purpose: "classification_llm",
+    provider,
+    model: provider,
+    request: { prompt },
+    execute: () => callLLM(provider, prompt),
+  });
 
   const category = CATEGORIES.find((c) => text.toUpperCase().includes(c));
   if (!category) {

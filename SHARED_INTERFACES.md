@@ -57,7 +57,17 @@ const COMPARED_FIELDS = [
 type ExtractedDocumentFields = Partial<Record<typeof COMPARED_FIELDS[number], string>>;
 ```
 
-一个 `BL_COMPARISON` 邮件需要抽取两次：一次对 SI 附件，一次对 BL 附件，各自得到一个 `ExtractedDocumentFields`。
+`extractFields()` 返回的是完整结果（2026-09-20 起 REST/MCP 的返回格式同步变化）：
+
+```ts
+interface ExtractDocumentResult {
+  document_type: "SI" | "BL" | "OTHER" | "UNKNOWN";  // OTHER = 明显不是 SI/BL（如发票/装箱单/产地证）
+  fields: ExtractedDocumentFields;                    // 只包含真的抽到的字段；占位符(TBA/____MT)不算抽到
+  extracted_by: "rules" | "llm";                      // 规则解析还是 LLM 兜底（规则优先，缺字段才兜底）
+}
+```
+
+一个 `BL_COMPARISON` 邮件需要抽取两次：一次对 SI 附件，一次对 BL 附件，各自得到一个 `ExtractDocumentResult`。
 
 ## comparison 模块的输出
 
@@ -75,6 +85,43 @@ interface EmailVerificationResult {
 ```
 
 **这个 `EmailVerificationResult` 就是最终要交的东西**——把每封邮件的这个结果，按 `{ [email_id]: EmailVerificationResult }` 拼成一个大对象，格式必须和官方给的 `data/sample/sample_submission.json` 完全一致（每个 email_id 都要有）。
+
+## 编排层与混合引擎（pipeline）
+
+`lib/shared/pipeline.ts` 是唯一拼"分类 → 抽取 → 比对"顺序的地方：
+
+- `runEmailPipeline`：单封邮件 → `EmailVerificationResult`，同时负责 4 种"拿不准"判定（missing_attachment / wrong_doc_type / unreadable / missing_value）
+- `runBatchPipeline`：批量（限量并发、单封失败隔离）
+- `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据
+
+引擎是混合模式（省调用、稳结果）：分类规则优先（拿不准才 Jev）；抽取标签规则优先（缺字段才 LLM 兜底）；比对规范化精确比 + 文字字段候选差异交 Jev 复核（阈值 0.6，校准过程见 DECISION_LOG 决策 22），数字字段不进 Jev。
+
+模型调用都走 `lib/shared/llm-cache.ts`（`llm_call_cache` 表的"内容指纹"缓存；没配 service key 时自动降级为不缓存）。**改规则/prompt/阈值后：bump `PIPELINE_LOGIC_VERSION`（让旧结果重算）；prompt 有实质变化再 bump `LLM_CACHE_VERSION`（让旧缓存失效）。**
+
+本地评测：`npm run evaluate`（对照 ground_truth 自测 + 增量写入 verification_results；`--force` 强制重算，`--limit=N` 调试，`--no-write` 只算分）。
+
+## 数据库存储层（Supabase）
+
+四张表，命名规则：**看名字就知道装什么、属于流水线哪一层**。前两张由导入脚本 `scripts/import-sample-data.mjs`（`npm run import:data`，支持增量）填充；第三张等流水线写入；第四张是模型调用的内部缓存。
+
+| 表 | 层 | 装什么 | 谁写 |
+|---|---|---|---|
+| `raw_emails` | 原始层 | `email_id` / `from_address`（对应邮件里的 `from`）/ `subject` / `body` / `normalized_body` / `attachment_paths` / `content_hash` | 导入脚本（upsert，冲突键 `email_id`） |
+| `parsed_attachments` | 文字层 | `email_id` + `file_path` 为主键；`file_format`（txt/pdf/xlsx/docx/unsupported）；`parse_status`（ok/unreadable）；`parse_error`；`parsed_text`（解析出的文字）；`normalized_text`（扁平化文本）；`content_hash` | 导入脚本（upsert，冲突键 `email_id,file_path`） |
+| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` | 流水线（以后，upsert，冲突键 `email_id`） |
+| `llm_call_cache` | 调用缓存 | `cache_key`（指纹）/ `purpose` / `provider` / `model` / `request_payload` / `response_payload` / `last_used_at` | 服务端缓存层（upsert，不对外开放） |
+
+**指纹（`*_hash`）统一算法**：sha256(该行要存的全部内容做 JSON 序列化)。作用：
+
+- `raw_emails.content_hash` / `parsed_attachments.content_hash`：增量导入时内容没变就跳过
+- `verification_results.input_hash` + `logic_version`：增量跑分时输入没变、引擎版本没变就跳过
+- `llm_call_cache.cache_key`：模型调用级缓存键（含用途+版本+模型+实际发送内容），输入没变就不重复调用
+
+约定：
+
+- 写入一律 **upsert**（不要"先查存不存在再插"）；`updated_at` 由数据库触发器自动刷新，写入方不用手动设置
+- 权限：前三张表"所有人可读（RLS 只开放 select）、只有 service role 能写"；`llm_call_cache` 完全对外关闭（只有 service role 能读写）
+- 扁平化统一用 [`lib/shared/normalize.ts`](lib/shared/normalize.ts) 的 `normalizeText`，不要在别处再写一份
 
 ## 环境变量约定
 

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractFields } from "../logic";
+import { isLLMProvider } from "@/lib/llm";
 import { readSampleAttachmentText } from "@/lib/shared/inbox";
+import { extractFields } from "../logic";
 
-// POST { "attachment_path": "attachments/email_004_SI.txt", "documentType": "SI" }
+// POST { "attachment_path": "attachments/email_004_SI.txt", "documentType": "SI", "provider": "claude"(可选) }
 export async function POST(req: NextRequest) {
-  let body: { attachment_path?: string; documentType?: "SI" | "BL" };
+  let body: { attachment_path?: string; documentType?: "SI" | "BL"; provider?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
     const result = await extractFields({
       documentText,
       documentType: body.documentType,
+      provider: isLLMProvider(body.provider) ? body.provider : undefined,
     });
     return NextResponse.json(result);
   } catch (err) {
