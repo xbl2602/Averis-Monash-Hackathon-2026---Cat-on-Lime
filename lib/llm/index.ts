@@ -9,6 +9,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
 import { generateText, type LanguageModel } from "ai";
+import { isJevAvailable } from "./jev";
 
 // provider 的唯一权威清单，类型和运行时校验都从这里派生，不要另起一份
 export const LLM_PROVIDER_IDS = [
@@ -45,6 +46,31 @@ function isRunningOnVercel(): boolean {
 // Vercel 服务器访问不到操作者自己电脑上的 LM Studio）
 export function isLocalLLMAvailable(): boolean {
   return !isRunningOnVercel();
+}
+
+/**
+ * 这个 provider 现在能不能用（key 配没配齐）。
+ *
+ * 各 provider 对应的环境变量名在这里写死一份，和 .env.example 保持一致；
+ * 环境变量在进程启动后不会变，所以这里直接读、不做缓存（规范禁止模块级可变状态）。
+ * 说明：LM Studio 不需要 apiKey，只要在本地/Docker 环境就算就绪；
+ *       Jev 用 isJevAvailable()（TYPESAFE_API_KEY），避免两处各写一份判断。
+ */
+export function isProviderConfigured(provider: LLMProvider): boolean {
+  switch (provider) {
+    case "claude":
+      return Boolean(process.env.ANTHROPIC_API_KEY);
+    case "openai":
+      return Boolean(process.env.OPENAI_API_KEY);
+    case "deepseek":
+      return Boolean(process.env.DEEPSEEK_API_KEY);
+    case "gemini":
+      return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+    case "lmstudio":
+      return isLocalLLMAvailable();
+    case "jev":
+      return isJevAvailable();
+  }
 }
 
 function getModel(provider: LLMProvider): LanguageModel {
