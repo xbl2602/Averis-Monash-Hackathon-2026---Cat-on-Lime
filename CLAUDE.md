@@ -182,10 +182,16 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 5. 其余4个 LLM provider 的切换支持（DeepSeek / ChatGPT / Gemini / LM Studio）——真的时间不够，先把接口/开关做出来，某个provider调不通也比完全没做强，在文档里如实说明
 6. 多语言插件（比如把 extraction 拆成独立 Python 服务）——如果时间紧，先用 JS 实现同样的功能，"独立服务"这一步可以放到决赛阶段再做
 
-## 各功能模块负责人（占位，待3人认领）
+## 团队分工（已确认，不是按模块分，是按层分）
 
-- `classification`（邮件分类）：**待认领**
-- `extraction`（字段抽取）：**待认领**
-- `comparison`（比对+人工确认）：**待认领**
+跟前面"架构约束"那节举例的"每人认领一个feature模块"不一样——团队实际分工是**按技术层分**，不是按 `classification`/`extraction`/`comparison` 三个模块分给三个人：
 
-（建议今天团队内部按三块认领，认领后把人名填进上面这行，方便队友的 AI session 知道改哪个文件夹要跟谁确认）
+- **操作者（负责人）**：**全部后端功能**——`classification` / `extraction` / `comparison` 三个模块的 `logic/`、`api/`、`mcp/`，加上 `/app/core`、`/lib/shared`、`/lib/llm` 这些公共区，全部由操作者一个人（通过AI编程工具）负责
+- **队友A**：**UI/UX**——三个模块各自的 `ui/` 文件夹，加上全局的布局/导航（`app/layout.tsx`、`app/page.tsx`、`app/core/nav.tsx`、`app/globals.css`）
+- **队友B**：**README、slide、演示材料等**——不碰代码，负责文档和演示相关的产出
+
+这个分工方式跟已经定好的 `logic/api/mcp/ui` 分层架构天然契合：操作者只改 `logic/api/mcp`，队友A只改 `ui/`，两人几乎不会碰到同一个文件，冲突概率比"按模块分"更低。**给AI的提醒**：
+
+1. 操作者这边的AI在写后端代码时，不要顺手改 `ui/` 文件夹里的东西（哪怕看着能顺手改），UI 由队友A的AI负责
+2. `app/features/*/ui/` 调用同模块的 `api/` 时，返回的数据格式要跟 `SHARED_INTERFACES.md` 里写的一致——这是操作者和队友A之间唯一需要对齐的"接口"，操作者这边改了 `api/` 返回格式，要记得同步更新 `SHARED_INTERFACES.md`，队友A的AI才知道要跟着调整
+3. `README.md` 目前由队友B主笔（叙述性内容、演示相关），但涉及"怎么装依赖""环境变量填什么""部署步骤"这类会随后端改动而变的技术细节，操作者这边改了以后应该主动同步更新，不要指望队友B自己猜对最新状态
