@@ -10,7 +10,22 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
 import { generateText, type LanguageModel } from "ai";
 
-export type LLMProvider = "claude" | "openai" | "deepseek" | "gemini" | "lmstudio";
+// provider 的唯一权威清单，类型和运行时校验都从这里派生，不要另起一份
+export const LLM_PROVIDER_IDS = [
+  "claude",
+  "openai",
+  "deepseek",
+  "gemini",
+  "lmstudio",
+  "jev",
+] as const;
+
+export type LLMProvider = (typeof LLM_PROVIDER_IDS)[number];
+
+// 校验任意输入是不是合法的 provider（API/MCP 路由解析请求时用）
+export function isLLMProvider(value: unknown): value is LLMProvider {
+  return typeof value === "string" && (LLM_PROVIDER_IDS as readonly string[]).includes(value);
+}
 
 export const LLM_PROVIDERS: { id: LLMProvider; label: string; cloudOnly: boolean }[] = [
   { id: "claude", label: "Claude (Anthropic)", cloudOnly: false },
@@ -18,6 +33,7 @@ export const LLM_PROVIDERS: { id: LLMProvider; label: string; cloudOnly: boolean
   { id: "deepseek", label: "DeepSeek", cloudOnly: false },
   { id: "gemini", label: "Gemini (Google)", cloudOnly: false },
   { id: "lmstudio", label: "本地 LM Studio", cloudOnly: true }, // cloudOnly=true 这个命名有点反直觉：意思是"只能在非云端环境用"，见下面 isLocalLLMAvailable
+  { id: "jev", label: "Jev (TypeSafe 结构化决策)", cloudOnly: false }, // 只能做结构化判断，不支持文本生成，见 lib/llm/jev.ts
 ];
 
 // 判断当前是不是跑在 Vercel 云端——Vercel 会自动设置这个环境变量
@@ -57,6 +73,11 @@ function getModel(provider: LLMProvider): LanguageModel {
         apiKey: "lm-studio",
         baseURL: process.env.LM_STUDIO_BASE_URL || "http://localhost:1234/v1",
       })("local-model");
+    case "jev":
+      // Jev 是结构化决策模型，不走文本生成这条路，主动给出可读的错误而不是让 SDK 报奇怪的类型错
+      throw new Error(
+        "Jev 只能做结构化决策（分类/比对），不支持文本生成/抽取。请改用 lib/llm 的 callJev()，或换一个文本 LLM provider。"
+      );
   }
 }
 
@@ -77,3 +98,17 @@ export async function callLLM(
   });
   return text;
 }
+
+// Jev（TypeSafe System One）适配层：和 callLLM 是并列的两条能力，不是同一个东西。
+// 需要"让模型在固定选项里做判断"时用 callJev；需要"写出一段文字"时用 callLLM。
+export {
+  callJev,
+  isJevAvailable,
+  type JevAnswer,
+  type JevChoiceAnswer,
+  type JevNoulAnswer,
+  type JevQuestion,
+  type JevResponse,
+  type JevScoreAnswer,
+  type JevState,
+} from "./jev";

@@ -22,9 +22,22 @@ interface InboxEmail {
 
 ```ts
 type EmailCategory = "BL_COMPARISON" | "SI_REQUEST" | "INVOICE_QUERY" | "GENERAL" | "SPAM";
+
+interface ClassifyEmailResult {
+  category: EmailCategory;
+  confidence: number | null;   // 0~1；只有 Jev 能给出，文本 LLM 路径为 null
+  needs_review: boolean;       // 分类置信度偏低时 true，提示人工确认
+}
 ```
 
 只有 `BL_COMPARISON` 类的邮件才需要走后面的 extraction + comparison 流程。
+
+## 用哪个模型（provider）
+
+三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`，缺省 `claude`。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
+
+- `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；误用时 `callLLM("jev", ...)` 会抛出可读的错误。
+- 该参数只在 `api` / `mcp` 层解析、传给 `logic`；`logic` 里的函数签名是 `{ ..., provider?: LLMProvider }`，默认值由 logic 自己兜底，UI 不传也能正常工作。
 
 ## extraction 模块的输出
 
@@ -69,7 +82,9 @@ interface EmailVerificationResult {
 
 ## LLM 调用约定
 
-所有模块都通过 [`lib/llm/index.ts`](lib/llm/index.ts) 导出的 `callLLM(provider, prompt, options)` 调用 LLM，不要在 feature 模块内部直接 import 具体某个 LLM 的 SDK。可用的 `provider` 值：`"claude" | "openai" | "deepseek" | "gemini" | "lmstudio"`。
+所有模块都通过 [`lib/llm/index.ts`](lib/llm/index.ts) 导出的 `callLLM(provider, prompt, options)` 调用 LLM，不要在 feature 模块内部直接 import 具体某个 LLM 的 SDK。可用的 `provider` 值见上面的"用哪个模型（provider）"。
+
+**Jev 是例外**：它不生成文本，走 `lib/llm` 导出的另一个函数 `callJev(state, questions)`（实现在 [`lib/llm/jev.ts`](lib/llm/jev.ts)），输入一组 typed question（`noul` 是/否概率 / `choice` 选项 / `score` 打分），返回带 `confidence` 的结构化答案。环境变量是 `TYPESAFE_API_KEY`（选填 `JEV_MODEL`，默认 `jev-latest`），见 [`.env.example`](.env.example)。
 
 ## MCP tool 约定
 

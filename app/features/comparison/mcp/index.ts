@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { compareDocuments } from "../logic";
+import { LLM_PROVIDER_IDS, type LLMProvider } from "@/lib/llm";
 
 const fieldsSchema = z
   .object({
@@ -20,8 +21,20 @@ export const comparisonMcpTool = {
   inputSchema: {
     si: fieldsSchema,
     bl: fieldsSchema,
+    provider: z
+      .enum(LLM_PROVIDER_IDS)
+      .optional()
+      .describe("用哪个模型，缺省 claude（逐字符精确比较）；选 jev 可容忍格式差异"),
   },
-  handler: async ({ si, bl }: { si: Record<string, string>; bl: Record<string, string> }) => {
-    return compareDocuments({ si, bl });
+  handler: async ({
+    si,
+    bl,
+    provider,
+  }: {
+    si: Record<string, string>;
+    bl: Record<string, string>;
+    provider?: LLMProvider;
+  }) => {
+    return compareDocuments({ si, bl, provider });
   },
 };
