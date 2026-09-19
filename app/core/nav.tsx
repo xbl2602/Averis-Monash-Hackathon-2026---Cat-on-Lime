@@ -5,6 +5,7 @@ const FEATURES = [
   { href: "/features/classification", label: "邮件分类" },
   { href: "/features/extraction", label: "字段抽取" },
   { href: "/features/comparison", label: "比对确认" },
+  { href: "/features/jev-lab", label: "Jev 验证" },
 ];
 
 export function Nav() {
