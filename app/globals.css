@@ -1,18 +1,121 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* 品牌色板：靛紫系，呼应航运"单证核验"里那种严谨但不呆板的调性 */
+  --color-paper: #faf9fc;
+  --color-veil: #f1eefa;
+  --color-indigo: #5b4fe8;
+  --color-indigo-dark: #4638c7;
+  --color-royal: #241454;
+  --color-royal-deep: #150a30;
+  --color-ink: #120e24;
+  --color-ink-soft: #1c1633;
+  --color-halo: #b7a9f7;
+  --color-whisper: #c9c2e8;
+  --color-hairline: #e4e0f2;
+  --color-hairline-dark: rgba(183, 169, 247, 0.16);
+  --color-mint: #34d3a4;
+  --color-amber: #f5b447;
+
+  --font-sans: var(--font-jakarta), "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --animate-drift-a: drift 22s ease-in-out infinite;
+  --animate-drift-b: drift 26s ease-in-out infinite;
+  --animate-drift-c: drift 19s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.7s ease-out both;
+  --animate-marquee: marquee 28s linear infinite;
+  --animate-pulse-glow: pulse-glow 3.2s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: var(--color-paper);
+  --foreground: var(--color-ink);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-indigo);
+  color: white;
+}
+
+/* 装饰性渐变光晕，用在 hero / 深色区块背景里，纯 CSS，不依赖任何动画库 */
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(4%, -6%) scale(1.08);
+  }
+  66% {
+    transform: translate(-5%, 5%) scale(0.94);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, var(--color-indigo), var(--color-halo) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.grid-fade-mask {
+  mask-image: linear-gradient(to bottom, black, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  [class*="animate-"] {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }
