@@ -17,7 +17,7 @@
 - **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
 - **功能模块划分**：`classification` / `extraction` / `comparison` 三个 feature，各自负责人见文末"各功能模块负责人"。
 - **正式 Vercel 项目是 `hackathonaveris`，不是 `hackathon-demo`**：账号下一度同时存在两个 Vercel 项目——`hackathon-demo`（最早建的，没连 GitHub，不会自动更新，已停用，不用管它）和 `hackathonaveris`（正确连了 GitHub 仓库 `xbl2602/Hackathon` 的 `main` 分支，`git push` 会自动触发重新部署）。**以 `hackathonaveris` 为准**。线上demo地址：`https://hackathonaveris.vercel.app`，SSO保护默认关闭，不登录也能直接打开。
-- **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**尚未完成**：`SUPABASE_SERVICE_ROLE_KEY` 和各家 LLM 的 API key（Claude/OpenAI/DeepSeek/Gemini）在 Vercel 环境变量里还是空的——这几个是私密key，需要团队自己去申请/去 Supabase 后台拿，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key。
+- **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**线上验收（2026-09-20）**：云端 MCP 握手、结果查询/导出、Jev 分类、Gemini 分类都已实测可用。**还没填**：`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`（云端选这几个 provider 会报缺 key 的可读错误，选 Jev/Gemini 可用）——这几个是私密key，需要团队自己去申请，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key；`SUPABASE_SERVICE_ROLE_KEY` 只在本地导入/评测时用，线上只读功能不需要。
 
 ## 产品形态要求（硬性，初赛截止前必须做到）
 
