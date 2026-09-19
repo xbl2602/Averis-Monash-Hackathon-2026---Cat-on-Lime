@@ -61,7 +61,8 @@ function getModel(provider: LLMProvider): LanguageModel {
         baseURL: "https://api.deepseek.com/v1",
       })("deepseek-chat");
     case "gemini":
-      return google("gemini-2.0-flash");
+      // gemini-2.0-flash 已被 Google 下线，API 返回的错误里明确建议改用 gemini-3.6-flash
+      return google("gemini-3.6-flash");
     case "lmstudio":
       if (!isLocalLLMAvailable()) {
         throw new Error(
