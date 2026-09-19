@@ -133,6 +133,9 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
 - **记录这条的原因**：这是一个操作者知情后主动做出的决定，不是被忽略或遗漏——
   写代码时不会读取/参考 `ground_truth.json` 的内容，但仓库本身的处置是操作者的选择，
   这里如实记录当时的判断依据，供以后需要时回溯。
+- **后续更新（见决策21）**：官方后来在 Discord 官方公告里澄清，这份文件是特意给
+  参赛者用来自我评估用的，README 写"ORGANIZERS"只是没更新的旧说法——之前"完全不用"
+  的判断已经不成立，改成了"能用于自测，不能用于直接拼答案"，具体见决策21。
 
 ### 决策 15：官方真实数据格式比开幕式听写稿更精确，已改用官方原始 schema
 
@@ -226,3 +229,25 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   操作者改了 `api/` 返回格式要记得同步更新；`README.md` 里"怎么装依赖/环境变量/
   部署步骤"这类技术细节会随后端改动而变，队友B主笔叙述性内容，但这类技术细节
   操作者这边改了要主动去同步，不能指望队友B自己猜对最新状态。
+
+### 决策 21：官方Discord公告澄清 `ground_truth.json` 是特意给参赛者自测用的——更新决策14的判断
+
+- **官方公告原文（操作者转述，@everyone 消息）**："the docker zip files in the info pack
+  ground truth is for you to evaluate your models to be better ya. The readme part is
+  just that we didnt update it long time ago. No need to worry about the content of
+  us should not release to the participants. The whole content it is meant for you
+  all to check your own work"——翻译大意：资料包里docker压缩包中的 ground truth，
+  是特意给参赛者拿来自我评估模型效果用的，README里写着"不该发给参赛者"只是很久
+  没更新的旧说法，不用担心，整份内容就是让参赛者拿来检查自己做得怎么样的。
+- **对决策14的更新**：决策14当时基于"这份文件标注ORGANIZERS专用、疑似误发"的判断，
+  定了"写代码时完全不读取/不参考这份文件内容"的自我约束。官方这条公告直接推翻了
+  "误发"这个前提——所以这条自我约束**不再适用于"用于自测"这个场景**。
+- **新的判断（保留的边界）**：官方说的是"评估模型、检查自己的工作"，不是"允许直接
+  用这份文件的内容拼最终提交的 submission.json"。这两者性质不同：前者是拿真实答案
+  当"期末模拟卷"检验pipeline准不准，是良性使用；后者是绕开真实的分类/抽取/比对逻辑、
+  直接抄答案交上去，会导致"提交结果很漂亮，但系统本身其实不会处理没见过的邮件"，
+  既违背比赛"做一个真正能用的系统"的本意，也在评分标准里 Working Core Prototype /
+  Technical Feasibility 这些看"真实技术能力"的大头分数上有很高的翻车风险（比如决赛
+  现场评委临时换一封邮件测试）。因此：**允许**写一个本地评估脚本，拿pipeline的输出
+  跟 `ground_truth.json` 逐条比对算准确率，帮助改进真实逻辑；**不允许**任何直接把
+  `ground_truth.json` 里的值写进最终提交文件的做法。
