@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Averis x Monash Hackathon 2026 - Shipping Documents Verification",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -290,3 +290,31 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   data/sample 1544 个文件进入上述 4 个路由；对真实 520 条数据跑通 REST（列表筛选/排序/分组、
   统计、冲突 66 组、4 种导出、submission 520 条完整）和 MCP 客户端（握手 + 7 tools + 调用）。
 - **验证结果（2026-09-20 首次全量评测，对照 `ground_truth.json`）**：分类 macro-F1 100%；端到端 520/520 完全一致；缺陷字段 TP=72 / FP=0 / FN=0；20 个 NEEDS_REVIEW 的 review_reason 20/20。本轮模型调用：比对 37 次 Jev（命中缓存后新增 0 条）、抽取兜底 0 次（规则全覆盖）；未配 Anthropic key 时兜底自动降级，不影响规则路径结果。
+
+### 决策 24：整箱批量入口（REST + MCP）落地；顺带修掉两个服务端 PDF 相关的根因 bug
+
+- **背景**：上一轮盘点里"还没做"的第一项——`runBatchPipeline` 只有本地 `npm run evaluate`
+  用，云端/外部程序/AI agent 都触发不了整箱处理。操作者要求做成 REST + MCP，且重点是保证云端能跑。
+- **决策**：
+  1. 新建 `app/features/pipeline/`（logic/api/mcp）：`POST /features/pipeline/api` +
+     MCP tool `run_batch`，共用一套 logic，不重复实现引擎；GET 同地址返回接口用法说明。
+  2. 会写库的工具与只读工具区分：MCP 注解支持 per-tool 声明，`run_batch` 标
+     `readOnlyHint:false`，其余 tool 维持只读默认。
+  3. 参数：`email_ids` / `limit`（默认 50，1~520）/ `force` / `dry_run` / `provider` /
+     `concurrency`（1~8）；Vercel 函数上限 60s，用 `limit` 分片，响应给 `remaining`。
+     `dry_run` 不需要 service key（云端没配 service key 时也能预览），正式写库缺 key 返回 503。
+  4. 结果表读写抽到 `lib/shared/verification-store.ts`，`evaluate` 和批量入口共用；失败邮件也写
+     一行 `processing_status='failed'` + `error_message`（增量重跑时自动重试，不再只写成功行）。
+  5. 样例邮件+附件解析抽到 `lib/shared/sample-inputs.ts`，**结果按 inbox 顺序返回**——
+     `mapWithConcurrencyLimit` 的完成顺序会让"limit=前 N 封"每次挑到不同的邮件，破坏可复现性。
+- **顺带修的两个真 bug（都是服务端 PDF）**：
+  1. extraction 的 REST/MCP 一直用 `readSampleAttachmentText` 按 UTF-8 读附件 → PDF/xlsx/docx
+     只能得到乱码/空结果（以前只测过 txt 所以没暴露）。统一改走 `readSampleAttachmentParsed`
+     （按格式解析）；读不出文字时 REST 返回 422、MCP 返回可读错误。
+  2. Next 打包器（Turbopack）会把 `pdf.mjs` 打进 server bundle 但不带运行时查找的
+     `pdf.worker.mjs`，导致 Next 服务端解析 PDF 全部失败（实测报
+     `Cannot find module .../pdf.worker.mjs`），批量入口会把 10 封 PDF 邮件误标 unreadable。
+     修复：`next.config.mjs` 加 `serverExternalPackages: ['pdf-parse','pdfjs-dist']`。
+- **验证**：tsc + 生产构建通过；本地 `next start` 与 Docker 镜像里 PDF/XLSX/DOCX 解析与抽取正常；
+  tsx 与 Next 两个运行时算出的 `input_hash` 一致（API 增量跑 520/520 全跳过）；REST 的
+  400 / 503 / dry_run / force / 失败行留痕都实测过；全量评测仍 520/520。

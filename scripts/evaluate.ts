@@ -13,7 +13,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractAttachmentText } from "../lib/shared/attachment-text";
 import {
   computeInputHash,
   PIPELINE_LOGIC_VERSION,
@@ -21,7 +20,13 @@ import {
   type PipelineEmailInput,
   type PipelineOutcome,
 } from "../lib/shared/pipeline";
+import { loadSamplePipelineInputs } from "../lib/shared/sample-inputs";
 import { getSupabaseServiceClient, isSupabaseServiceAvailable } from "../lib/shared/supabase";
+import {
+  buildSuccessRow,
+  loadStoredVerificationRows,
+  upsertVerificationRows,
+} from "../lib/shared/verification-store";
 import type { EmailCategory, EmailVerificationResult } from "../lib/shared/types";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,17 +47,6 @@ const LIMIT = (() => {
   return arg ? Number(arg.split("=")[1]) : Number.POSITIVE_INFINITY;
 })();
 
-interface StoredRow {
-  email_id: string;
-  category: EmailCategory;
-  comparison_status: EmailVerificationResult["status"];
-  review_reason: EmailVerificationResult["review_reason"];
-  defect_fields: string[];
-  has_defect: boolean;
-  input_hash: string | null;
-  logic_version: string | null;
-}
-
 async function main() {
   await loadEnvLocal();
 
@@ -60,34 +54,14 @@ async function main() {
   const emailFiles = (await readdir(path.join(SAMPLE_DIR, "inbox"))).filter((f) => f.endsWith(".json")).sort();
   console.log(`样例邮件：${emailFiles.length} 封`);
 
-  const inputs: PipelineEmailInput[] = [];
-  for (const file of emailFiles.slice(0, LIMIT === Number.POSITIVE_INFINITY ? undefined : LIMIT)) {
-    const email = JSON.parse(await readFile(path.join(SAMPLE_DIR, "inbox", file), "utf-8"));
-    const attachments = [];
-    for (const attachmentPath of email.attachments as string[]) {
-      const filename = path.basename(attachmentPath);
-      const buffer = await readFile(path.join(SAMPLE_DIR, attachmentPath));
-      const parsed = await extractAttachmentText(filename, buffer);
-      attachments.push({
-        path: attachmentPath,
-        parseStatus: parsed.status,
-        text: parsed.text,
-      });
-    }
-    inputs.push({ email, attachments });
-  }
+  const inputs = await loadSamplePipelineInputs(
+    undefined,
+    Number.isFinite(LIMIT) ? LIMIT : undefined
+  );
 
-  // 增量：读已有结果，指纹+版本都没变的直接复用
-  const existing = new Map<string, StoredRow>();
-  if (isSupabaseServiceAvailable() && !FORCE) {
-    const supabase = getSupabaseServiceClient();
-    const { data, error } = await supabase
-      .from("verification_results")
-      .select("email_id,category,comparison_status,review_reason,defect_fields,has_defect,input_hash,logic_version")
-      .limit(5000);
-    if (error) throw new Error(`读取 verification_results 失败：${error.message}`);
-    for (const row of (data ?? []) as StoredRow[]) existing.set(row.email_id, row);
-  }
+  // 增量：读已有结果，指纹+版本都没变、且上次成功的直接复用
+  const existing =
+    !FORCE && isSupabaseServiceAvailable() ? await loadStoredVerificationRows() : new Map();
 
   const hashByEmail = new Map<string, string>();
   const toRun: PipelineEmailInput[] = [];
@@ -96,7 +70,14 @@ async function main() {
     const hash = computeInputHash(input);
     hashByEmail.set(input.email.email_id, hash);
     const row = existing.get(input.email.email_id);
-    if (row && row.input_hash === hash && row.logic_version === PIPELINE_LOGIC_VERSION) {
+    if (
+      row &&
+      row.processing_status === "ok" &&
+      row.input_hash === hash &&
+      row.logic_version === PIPELINE_LOGIC_VERSION &&
+      row.category &&
+      row.comparison_status
+    ) {
       reused.push({
         email_id: input.email.email_id,
         result: {
@@ -104,7 +85,7 @@ async function main() {
           status: row.comparison_status,
           review_reason: row.review_reason,
           defect_fields: row.defect_fields as EmailVerificationResult["defect_fields"],
-          has_defect: row.has_defect,
+          has_defect: row.has_defect ?? false,
         },
         hash,
       });
@@ -251,32 +232,10 @@ async function writeResults(
   succeeded: { input: PipelineEmailInput; outcome: PipelineOutcome }[],
   hashByEmail: Map<string, string>
 ) {
-  const supabase = getSupabaseServiceClient();
-  const rows = succeeded.map(({ input, outcome }) => ({
-    email_id: input.email.email_id,
-    category: outcome.result.category,
-    comparison_status: outcome.result.status,
-    review_reason: outcome.result.review_reason,
-    defect_fields: outcome.result.defect_fields,
-    has_defect: outcome.result.has_defect,
-    extracted_si: outcome.extracted.si,
-    extracted_bl: outcome.extracted.bl,
-    model_provider: [
-      outcome.meta.classifier,
-      outcome.meta.extractor.si ?? "-",
-      outcome.meta.extractor.bl ?? "-",
-      outcome.meta.comparer ?? "-",
-    ].join("/"),
-    input_hash: hashByEmail.get(input.email.email_id) ?? computeInputHash(input),
-    logic_version: PIPELINE_LOGIC_VERSION,
-  }));
-
-  const BATCH = 100;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const { error } = await supabase.from("verification_results").upsert(batch, { onConflict: "email_id" });
-    if (error) throw new Error(`写入 verification_results 第 ${i + 1}~${i + batch.length} 行失败：${error.message}`);
-  }
+  const rows = succeeded.map(({ input, outcome }) =>
+    buildSuccessRow(input, outcome, hashByEmail.get(input.email.email_id) ?? computeInputHash(input))
+  );
+  await upsertVerificationRows(rows);
   console.log(`已写入 verification_results：${rows.length} 行（upsert，含 input_hash / logic_version）`);
 }
 

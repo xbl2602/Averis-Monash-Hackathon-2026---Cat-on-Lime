@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLLMProvider } from "@/lib/llm";
-import { readSampleAttachmentText } from "@/lib/shared/inbox";
+import { readSampleAttachmentParsed } from "@/lib/shared/sample-inputs";
 import { extractFields } from "../logic";
 
 // POST { "attachment_path": "attachments/email_004_SI.txt", "documentType": "SI", "provider": "claude"(可选) }
@@ -20,9 +20,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const documentText = await readSampleAttachmentText(body.attachment_path);
+    const parsed = await readSampleAttachmentParsed(body.attachment_path);
+    if (parsed.status !== "ok") {
+      return NextResponse.json(
+        { error: `附件 ${body.attachment_path} 读不出文字（${parsed.error ?? "未知原因"}）` },
+        { status: 422 }
+      );
+    }
     const result = await extractFields({
-      documentText,
+      documentText: parsed.text,
       documentType: body.documentType,
       provider: isLLMProvider(body.provider) ? body.provider : undefined,
     });

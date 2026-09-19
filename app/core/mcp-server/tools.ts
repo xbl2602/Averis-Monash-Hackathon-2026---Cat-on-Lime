@@ -3,6 +3,7 @@ import { classificationMcpTool } from "@/app/features/classification/mcp";
 import { extractionMcpTool } from "@/app/features/extraction/mcp";
 import { comparisonMcpTool } from "@/app/features/comparison/mcp";
 import { resultsMcpTools } from "@/app/features/results/mcp";
+import { pipelineMcpTool } from "@/app/features/pipeline/mcp";
 
 /**
  * 汇总各个 feature 模块暴露的 MCP tool 定义。
@@ -18,6 +19,16 @@ export interface McpToolDefinition {
   /** zod raw shape：每个字段一个 zod schema，由 MCP SDK 转成 JSON Schema */
   inputSchema: Record<string, z.ZodType>;
   /**
+   * MCP 工具注解。缺省按只读处理；会写库的工具（如 run_batch）必须自己声明
+   * readOnlyHint: false，别让 AI client 误以为它只是查询。
+   */
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  /**
    * 参数由 MCP SDK 用 inputSchema 校验后传进来；这里用 any 是唯一的"动态边界"，
    * 各 feature 自己的 handler 参数仍然是具体类型。
    */
@@ -29,5 +40,6 @@ export const mcpTools: McpToolDefinition[] = [
   classificationMcpTool,
   extractionMcpTool,
   comparisonMcpTool,
+  pipelineMcpTool,
   ...resultsMcpTools,
 ];

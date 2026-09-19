@@ -1,7 +1,8 @@
 # 用 Next.js "standalone" 输出模式打包，产物小、依赖已经打包好。
 # 用法见 README.md "Docker 部署"部分。
+# 基础镜像用 Node 22：AI SDK v7 要求 node >= 22（Vercel 默认也是 22）。
 
-FROM node:20-slim AS base
+FROM node:22-slim AS base
 
 FROM base AS deps
 WORKDIR /app

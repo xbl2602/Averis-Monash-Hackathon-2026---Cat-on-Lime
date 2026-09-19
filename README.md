@@ -8,7 +8,7 @@ Averis x Monash Hackathon 2026 —— 航运单证核验。团队协作规则见
 
 ## 环境要求
 
-- Node.js 20+（[nodejs.org](https://nodejs.org) 下载安装即可，安装时自带 npm）
+- Node.js 22+（[nodejs.org](https://nodejs.org) 下载安装即可，安装时自带 npm；AI SDK v7 要求 Node 22 以上，Vercel/Docker 也都是 22）
 - 如果要用 Docker 部署：[Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 ## 本地开发
@@ -56,6 +56,17 @@ ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最�
 | `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致 + 需要人工确认），带两边字段值 |
 | `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt` |
 
+整箱批量入口（`POST /features/pipeline/api`，会写结果表）：
+不传参数 = 全量增量跑（跳过没变的），`limit` 控制单次几封，`dry_run: true` 只算不写：
+
+```bash
+curl -X POST http://localhost:3000/features/pipeline/api \
+  -H "Content-Type: application/json" \
+  -d '{"email_ids":["email_004","email_059"],"dry_run":true}'
+```
+
+格式见 [SHARED_INTERFACES.md](SHARED_INTERFACES.md)「pipeline 模块（批量入口）」。
+
 MCP 端点（Streamable HTTP，无状态）：
 
 ```
@@ -63,8 +74,9 @@ MCP 端点（Streamable HTTP，无状态）：
 线上：https://hackathonaveris.vercel.app/core/mcp-server
 ```
 
-共 7 个 tool：`classify_email` / `extract_document_fields` / `compare_documents` /
-`list_results` / `get_stats` / `list_conflicts` / `export_results`。Claude Desktop 等
+共 8 个 tool：只读的 `classify_email` / `extract_document_fields` / `compare_documents` /
+`list_results` / `get_stats` / `list_conflicts` / `export_results`，以及会写库的
+`run_batch`（就是上面的整箱批量入口，建议先 `dry_run: true` 预览）。Claude Desktop 等
 MCP client 直接把这个地址填成远程 MCP server 即可（GET/DELETE 返回 405 是正常的，
 无状态模式只接受 POST）。
 
@@ -135,7 +147,8 @@ docker compose up --build
 
 - 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
 - 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 只读视图 `verification_overview` + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
-- 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（7 个 tool，地址见上文）
-- 部署验证：MCP 握手 + 7 个 tool + `get_stats`、结果查询/导出、`extract_document_fields`、Jev/Gemini 分类，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
-- 还没做：把"整箱流水线"（`runBatchPipeline`）包成 REST API / MCP tool（现在单封处理走三个模块各自的接口；跑批走本地 `npm run evaluate`）
+- 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（8 个 tool，地址见上文）
+- 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
+- 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
+- 已修的两个服务端 bug：① extraction 的 REST/MCP 之前把 PDF 按 UTF-8 直接读（现在统一走格式解析）；② Next 打包器会丢 `pdf.worker.mjs` 导致服务端 PDF 解析失败（已把 `pdf-parse`/`pdfjs-dist` 声明为 `serverExternalPackages`）
 - LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用，Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）

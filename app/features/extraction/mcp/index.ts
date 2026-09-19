@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { readSampleAttachmentText } from "@/lib/shared/inbox";
+import { readSampleAttachmentParsed } from "@/lib/shared/sample-inputs";
 import { extractFields } from "../logic";
 
 export const extractionMcpTool = {
@@ -19,7 +19,13 @@ export const extractionMcpTool = {
     attachment_path: string;
     documentType: "SI" | "BL";
   }) => {
-    const documentText = await readSampleAttachmentText(attachment_path);
-    return extractFields({ documentText, documentType });
+    // 按文件格式解析（PDF/xlsx/docx 不能按 UTF-8 直接读，那样只有乱码）
+    const parsed = await readSampleAttachmentParsed(attachment_path);
+    if (parsed.status !== "ok") {
+      throw new Error(
+        `附件 ${attachment_path} 读不出文字（${parsed.error ?? "未知原因"}），无法抽取字段`
+      );
+    }
+    return extractFields({ documentText: parsed.text, documentType });
   },
 };

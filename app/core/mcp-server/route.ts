@@ -15,6 +15,8 @@ import { mcpTools, type McpToolDefinition } from "./tools";
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// run_batch 这类工具可能跑几十秒：Vercel Hobby 函数上限 60s（本地/Docker 无影响）
+export const maxDuration = 60;
 
 const SERVER_INFO = { name: "shipping-doc-verifier", version: "0.3.0" };
 
@@ -52,7 +54,8 @@ function createMcpServer(): McpServer {
       {
         description: tool.description,
         inputSchema: tool.inputSchema,
-        annotations: { readOnlyHint: true, openWorldHint: false },
+        // 工具自己声明注解；没声明的按只读处理（见 tools.ts 约定）
+        annotations: tool.annotations ?? { readOnlyHint: true, openWorldHint: false },
       },
       async (args) => runTool(tool, args)
     );

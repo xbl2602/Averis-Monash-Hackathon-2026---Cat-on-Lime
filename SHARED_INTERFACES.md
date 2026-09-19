@@ -69,6 +69,8 @@ interface ExtractDocumentResult {
 
 一个 `BL_COMPARISON` 邮件需要抽取两次：一次对 SI 附件，一次对 BL 附件，各自得到一个 `ExtractDocumentResult`。
 
+单文档接口的 `attachment_path` 会**按文件格式解析**（txt/pdf/xlsx/docx 都能读，统一走 `lib/shared/sample-inputs.ts` 的 `readSampleAttachmentParsed`，不要直接按 UTF-8 读附件）；读不出文字时 REST 返回 422、MCP 返回可读错误，不会给出一个假装成功的空结果。
+
 ## comparison 模块的输出
 
 ```ts
@@ -108,7 +110,7 @@ interface EmailVerificationResult {
 |---|---|---|---|
 | `raw_emails` | 原始层 | `email_id` / `from_address`（对应邮件里的 `from`）/ `subject` / `body` / `normalized_body` / `attachment_paths` / `content_hash` | 导入脚本（upsert，冲突键 `email_id`） |
 | `parsed_attachments` | 文字层 | `email_id` + `file_path` 为主键；`file_format`（txt/pdf/xlsx/docx/unsupported）；`parse_status`（ok/unreadable）；`parse_error`；`parsed_text`（解析出的文字）；`normalized_text`（扁平化文本）；`content_hash` | 导入脚本（upsert，冲突键 `email_id,file_path`） |
-| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `defect_count`（生成列，自动等于 `defect_fields` 的个数）/ `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` / `processing_status`（ok / failed）/ `error_message` | 本地评测 `npm run evaluate`（upsert，冲突键 `email_id`）。单封处理失败时写库方应写 `processing_status='failed'` + `error_message`（当前 evaluate 只写成功行，失败的行暂时不会出现在结果表里） |
+| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `defect_count`（生成列，自动等于 `defect_fields` 的个数）/ `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` / `processing_status`（ok / failed）/ `error_message` | 本地评测 `npm run evaluate`、批量入口（`POST /features/pipeline/api` / MCP `run_batch`）：upsert，冲突键 `email_id`；处理失败的邮件也写一行（`processing_status='failed'` + `error_message`），下次重跑会自动重试 |
 | `llm_call_cache` | 调用缓存 | `cache_key`（指纹）/ `purpose` / `provider` / `model` / `request_payload` / `response_payload` / `last_used_at` | 服务端缓存层（upsert，不对外开放） |
 
 **指纹（`*_hash`）统一算法**：sha256(该行要存的全部内容做 JSON 序列化)。作用：
@@ -208,6 +210,49 @@ interface StatsResponse {
 
 MCP 传输方式是无状态 Streamable HTTP + JSON 响应（GET/DELETE 返回 405）。本地开发用
 `http://localhost:3000/core/mcp-server`，线上用 `https://hackathonaveris.vercel.app/core/mcp-server`。
+
+## pipeline 模块（批量入口）
+
+`app/features/pipeline/` 是"整箱流水线"的入口：调用 `lib/shared/pipeline.ts` 的
+`runBatchPipeline` 把样例邮件按"分类→抽取→比对"跑一遍，并 upsert 进 `verification_results`。
+它是**会写库**的模块（和只读的 results 模块分开），引擎逻辑一行都不重复实现。
+
+### REST：`POST /features/pipeline/api`
+
+请求体（JSON，全部可选）：
+
+| 字段 | 说明 |
+|---|---|
+| `email_ids` | 只跑这几封（数组；不传 = 全部 520 封）；不存在的 id 返回 400 |
+| `limit` | 单次最多跑几封，1~520，默认 50；剩余数量在响应的 `remaining` 里（Vercel 函数上限 60s，大批量分几次调） |
+| `force` | true = 忽略增量指纹强制重算，默认 false |
+| `dry_run` | true = 只算不写库（不需要 service key），默认 false |
+| `provider` | 文本兜底模型，默认 claude；不能用 jev（返回 400） |
+| `concurrency` | 同时最多处理几封，1~8，默认 4 |
+
+响应（`RunBatchSummary`）：
+
+```ts
+interface RunBatchSummary {
+  total_emails: number; selected: number; skipped: number; ran: number;
+  succeeded: number; failed: number; wrote: number; remaining: number;
+  dry_run: boolean; logic_version: string; duration_ms: number;
+  failures: { email_id: string; error: string }[];   // 最多列 20 条
+}
+```
+
+增量规则：结果表里已有该邮件、`processing_status='ok'`、`input_hash` 和 `logic_version`
+都一致的，直接跳过（`skipped`）；上次是 failed 的会自动重跑。写入用 upsert（冲突键
+`email_id`），成功的行写 `processing_status='ok'`，失败的行也写
+`processing_status='failed'` + `error_message`（不挡其他邮件）。
+
+错误：参数错 400；需要写库但缺 `SUPABASE_SERVICE_ROLE_KEY` 时 503（提示可改用 `dry_run`）；
+其余 500。GET 同一个地址返回接口用法说明。
+
+### MCP tool：`run_batch`
+
+参数与 REST 请求体一一对应（snake_case 相同）；注解是 `readOnlyHint: false`
+（与查询类 tool 区分），结果就是上面的 `RunBatchSummary`。
 
 ## 环境变量约定
 

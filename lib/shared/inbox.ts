@@ -33,3 +33,9 @@ export async function readSampleAttachmentText(attachmentPath: string): Promise<
   const filePath = path.join(SAMPLE_DATA_DIR, attachmentPath);
   return readFile(filePath, "utf-8");
 }
+
+// 附件原始内容（pdf/xlsx/docx 需要 Buffer 交给各自的解析器，不能按文本读）
+export async function readSampleAttachmentBuffer(attachmentPath: string): Promise<Buffer> {
+  const filePath = path.join(SAMPLE_DATA_DIR, attachmentPath);
+  return readFile(filePath);
+}
