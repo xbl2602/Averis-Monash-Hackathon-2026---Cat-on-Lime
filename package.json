@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "import:data": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs",
     "import:data:dry": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs --dry-run",
     "evaluate": "tsx scripts/evaluate.ts",
