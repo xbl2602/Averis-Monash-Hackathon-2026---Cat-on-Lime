@@ -10,7 +10,8 @@
     "lint": "next lint",
     "import:data": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs",
     "import:data:dry": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs --dry-run",
-    "evaluate": "tsx scripts/evaluate.ts"
+    "evaluate": "tsx scripts/evaluate.ts",
+    "mcp:smoke": "node scripts/mcp-smoke.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.57",

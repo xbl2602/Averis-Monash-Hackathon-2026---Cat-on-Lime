@@ -21,11 +21,24 @@ export function canonicalFieldValue(field: ComparedField, value: string): string
     case "consignee":
     case "notify_party": {
       const name = normalized.split("|")[0].replace(/[\s:;]+$/g, "");
-      return name.replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+      const noPunct = name.replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+      return truncateAtNameSuffix(noPunct);
     }
     default:
       return normalized;
   }
+}
+
+// docx 版式会把"公司名+地址"连成一串（如 "KTP CO., LTDKTP BLDG., 36..."），
+// 用"公司名以法律后缀结尾"的常识把后面的地址截掉，避免纯格式差异被送去 Jev 甚至误判。
+// 实测：email_107 的 notify_party（连串 vs 干净）因此不再需要模型判断。
+const NAME_SUFFIX =
+  /(pte\.?\s*ltd\.?|sdn\.?\s*bhd\.?|co\.?,?\s*ltd\.?|limited|ltd\.?|llc|gmbh|fze|inc\.?|company)/i;
+
+function truncateAtNameSuffix(value: string): string {
+  const match = value.match(NAME_SUFFIX);
+  if (!match || match.index === undefined || match.index > 60) return value;
+  return value.slice(0, match.index + match[0].length);
 }
 
 // 数字类字段（规范化后不同就是不同，不进 Jev——Jev 不擅长数字比较）

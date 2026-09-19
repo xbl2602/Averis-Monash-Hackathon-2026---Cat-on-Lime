@@ -38,10 +38,10 @@ export interface HybridCompareResult extends CompareDocumentsResult {
   engine: "rules" | "rules+jev";
 }
 
-// Jev 对每个字段返回"两边是否一致"的概率，低于这个值就算不一致。
-// 0.6 是用样例数据校准出来的：0.5 会漏掉一封（真实差异 0.52），0.55~0.8 之间 0 漏报 0 误报
-// （真实差异最高 0.52，真实一致最低 0.88，中间是安全带）。改动前先重跑阈值校准。
-const JEV_MISMATCH_THRESHOLD = 0.6;
+// Jev 对每个字段返回"两边是否一致"的概率，低于这个值就算不一致（与分类的置信度阈值统一为 0.85，偏保守）。
+// 样例数据实测：0.85 仍然 0 漏报 0 误报（真实差异最高 0.52、真实一致最低 0.88）；再往上（0.9）会开始误报，
+// 所以 0.85 是上限值，不要随意上调。改动前先重跑阈值校准（scripts/evaluate.ts + DECISION_LOG 决策 22）。
+const JEV_MISMATCH_THRESHOLD = 0.85;
 
 export async function compareDocuments(
   input: CompareDocumentsInput

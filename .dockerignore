@@ -1,0 +1,21 @@
+# Docker 构建上下文排除项：不进镜像的东西。
+# 真实的 key 通过 docker compose 的 env_file（.env）在运行时注入，绝不能打进镜像。
+
+node_modules
+.next
+.git
+.vercel
+.opencode
+
+# 环境变量文件（只保留 .env.example 供参考）
+.env
+.env.*
+!.env.example
+
+# 官方资料包（体积大，且含 organizer 版数据，只用于本地评测，不进镜像）
+*Problem Statement*
+
+# 杂项
+npm-debug.log*
+*.tsbuildinfo
+.DS_Store

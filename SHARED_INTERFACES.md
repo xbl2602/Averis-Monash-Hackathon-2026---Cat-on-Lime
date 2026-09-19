@@ -100,32 +100,6 @@ interface EmailVerificationResult {
 
 本地评测：`npm run evaluate`（对照 ground_truth 自测 + 增量写入 verification_results；`--force` 强制重算，`--limit=N` 调试，`--no-write` 只算分）。
 
-## results 模块（结果查询 / 统计 / 冲突 / 导出）
-
-`app/features/results/` 是**只读的结果层**：从 Supabase 的 `raw_emails` + `verification_results` 读已经跑出来的结果，给 Web UI / 外部程序 / MCP client 用。它不跑流水线、不写库；写库只有 `npm run import:data`（原始层/文字层）和 `npm run evaluate`（结果层，以后加批量入口时也走同一个 upsert 约定）。
-
-### REST API（都是 GET）
-
-| 端点 | 作用 | 主要参数 |
-|---|---|---|
-| `/features/results/api` | 结果列表（含未处理的邮件） | `category` `status` `processing` `has_defect` `provider` `q` `sort_by` `order` `group_by` `limit`(≤200) `offset` |
-| `/features/results/api/stats` | 统计汇总（总数/已处理/失败/分类分布/状态分布/字段频次） | 无 |
-| `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致或需人工确认，带两边取值） | `status`（缺省 `MISMATCH,NEEDS_REVIEW`）、`q`、`sort_by`、`order`、`limit`、`offset` |
-| `/features/results/api/export` | 下载文件（Save as），带 `Content-Disposition` 等下载头 | `scope=results\|conflicts\|stats\|submission`、`format=json\|md\|txt`（`submission` 只支持 json），其余筛选参数同对应列表 |
-
-参数取值：`category` = `EMAIL_CATEGORIES`；`status` = `COMPARISON_STATUSES`；`processing` = `processed\|pending\|failed`；`sort_by`、`group_by` 的可用值见 `app/features/results/logic/types.ts`（REST 与 MCP 共用同一套校验，非法值返回 400）。逗号分隔可以传多个（如 `?status=MISMATCH,NEEDS_REVIEW`）。
-
-出错时统一返回 `{ "error": "可读的中文说明" }`：参数错 = 400，数据库不可用/没配环境变量 = 503，其余 = 500（见 `app/features/results/api/params.ts`）。列表/冲突的响应结构见 `logic/types.ts` 的 `ResultList` / `ConflictList`（`items` 每行是一条 `ResultRow` / `ConflictPair`）。
-
-### MCP tools（只读）
-
-| tool | 作用 | 参数 |
-|---|---|---|
-| `list_results` | 结果列表 | 同 REST 列表参数（不含 `has_defect` 之外的变化） |
-| `get_stats` | 统计汇总 | 无 |
-| `list_conflicts` | 冲突文件对 | 同 REST conflicts |
-| `export_results` | 导出文件内容 | `scope` / `format` + 筛选参数；返回 `content[0].text` 是文件内容，文件名在 `_meta.filename` |
-
 ## 数据库存储层（Supabase）
 
 四张表，命名规则：**看名字就知道装什么、属于流水线哪一层**。前两张由导入脚本 `scripts/import-sample-data.mjs`（`npm run import:data`，支持增量）填充；第三张由评测/流水线（`npm run evaluate`，以后加批量入口）按 `email_id` upsert 写入；第四张是模型调用的内部缓存。

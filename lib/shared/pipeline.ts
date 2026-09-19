@@ -24,7 +24,7 @@ import {
 } from "@/lib/shared/types";
 
 // 引擎逻辑（规则/提示词/判定策略）有实质改动时手动 +1：让旧结果和旧缓存失效
-export const PIPELINE_LOGIC_VERSION = "v2-2026-09-20";
+export const PIPELINE_LOGIC_VERSION = "v4-2026-09-20";
 
 export interface PipelineAttachment {
   path: string;

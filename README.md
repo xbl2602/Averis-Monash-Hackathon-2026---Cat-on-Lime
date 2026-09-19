@@ -68,6 +68,21 @@ MCP 端点（Streamable HTTP，无状态）：
 MCP client 直接把这个地址填成远程 MCP server 即可（GET/DELETE 返回 405 是正常的，
 无状态模式只接受 POST）。
 
+本地和线上是**同一份代码、同一条路径** `/core/mcp-server`，区别只在主机地址和环境变量
+（本地读 `.env.local` / Docker 的 `.env`，线上读 Vercel 的 Environment Variables）。
+验证握手用同一个脚本，只换地址：
+
+```bash
+# 本地（先 npm run dev / npm start，或 Docker 跑在 3000 端口）
+npm run mcp:smoke
+
+# 线上 Vercel 部署
+npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
+```
+
+脚本会依次做 initialize → notifications/initialized → tools/list → 真实调用 `get_stats`。
+线上 `get_stats` 能不能出数据取决于 Vercel 的 Supabase 环境变量，握手本身不受影响。
+
 ## Docker 部署
 
 ```bash
@@ -76,6 +91,10 @@ docker compose up --build
 ```
 
 打开 http://localhost:3000 。
+
+`.dockerignore` 会把 `node_modules` / `.next` / 真实 key（`.env*`）和官方资料包排除在构建上下文外，
+真实的 key 只在运行时通过 `docker compose` 的 `env_file` 注入镜像。镜像已实际构建并启动验证过
+（含 MCP 握手，见上文"验证握手"）。
 
 ## 生产部署（Vercel）
 
@@ -117,5 +136,6 @@ docker compose up --build
 - 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
 - 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 只读视图 `verification_overview` + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
 - 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（7 个 tool，地址见上文）
+- 部署验证：MCP 握手 + 7 个 tool + `get_stats` 真实数据，已在本地 `next start` 和 Docker 镜像上实测通过；线上 Vercel 部署后可用 `npm run mcp:smoke -- <线上地址>` 复验
 - 还没做：把"整箱流水线"（`runBatchPipeline`）包成 REST API / MCP tool（现在单封处理走三个模块各自的接口；跑批走本地 `npm run evaluate`）
 - LLM key：本地缺 `ANTHROPIC_API_KEY`（抽取兜底/Claude provider 用；没配时自动降级、不影响规则路径）；Vercel 后台的 key 也还没填
