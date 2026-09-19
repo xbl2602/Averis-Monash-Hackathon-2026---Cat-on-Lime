@@ -112,7 +112,7 @@ docker compose up --build
 
 仓库连到 Vercel 后，push 到 `main` 会自动部署。需要在 Vercel 项目的 Environment Variables 里，把 `.env.example` 里列的变量都配置一遍（`LM_STUDIO_BASE_URL` 除外，云端用不到，见下文）。
 
-**线上 demo 地址**：https://hackathonaveris.vercel.app （已连 GitHub `main` 分支，push 会自动重新部署。Supabase 读权限、Jev、Gemini 已配好并实测可用；Claude/OpenAI/DeepSeek 的 key 还没填，见 CLAUDE.md「项目状态」）
+**线上 demo 地址**：https://hackathonaveris.vercel.app （已连 GitHub `main` 分支，push 会自动重新部署。Supabase 读权限 + service key、Jev、Gemini 都已配好并实测可用，整箱批量也能在线上真写库；Claude/OpenAI/DeepSeek 的 key 还没填，见 CLAUDE.md「项目状态」）
 
 ## 环境变量说明
 
@@ -151,4 +151,4 @@ docker compose up --build
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：① extraction 的 REST/MCP 之前把 PDF 按 UTF-8 直接读（现在统一走格式解析）；② Next 打包器会丢 `pdf.worker.mjs` 导致服务端 PDF 解析失败（已把 `pdf-parse`/`pdfjs-dist` 声明为 `serverExternalPackages`）
-- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用，Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）
+- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库），Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）
