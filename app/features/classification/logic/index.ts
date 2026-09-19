@@ -6,7 +6,7 @@ import {
   type LLMProvider,
 } from "@/lib/llm";
 import { callWithCache } from "@/lib/shared/llm-cache";
-import type { InboxEmail, EmailCategory } from "@/lib/shared/types";
+import { EMAIL_CATEGORIES, type InboxEmail, type EmailCategory } from "@/lib/shared/types";
 import { classifyByRules } from "./rules";
 
 export interface ClassifyEmailInput {
@@ -28,13 +28,8 @@ export interface HybridClassificationResult extends ClassifyEmailResult {
   engine: "rules" | "jev" | "llm";
 }
 
-const CATEGORIES: EmailCategory[] = [
-  "BL_COMPARISON",
-  "SI_REQUEST",
-  "INVOICE_QUERY",
-  "GENERAL",
-  "SPAM",
-];
+// 类别清单的唯一来源是 lib/shared/types.ts 的 EMAIL_CATEGORIES，这里只是本地别名
+const CATEGORIES: readonly EmailCategory[] = EMAIL_CATEGORIES;
 
 // 每个类别的含义——既给 Jev 当 choice 的判据，也给文本 LLM 当 prompt 说明
 const CATEGORY_DEFINITIONS: Record<EmailCategory, string> = {
@@ -45,8 +40,8 @@ const CATEGORY_DEFINITIONS: Record<EmailCategory, string> = {
   SPAM: "广告、钓鱼或与航运业务无关的垃圾邮件",
 };
 
-// 低于这个置信度就标记为需要人工介入，不再盲目相信自动分类结果
-const JEV_CONFIDENCE_THRESHOLD = 0.6;
+// 低于这个置信度就标记为需要人工介入（0.85 是操作者定的保守值：宁可多提示人工复核，也不放过去）
+const JEV_CONFIDENCE_THRESHOLD = 0.85;
 
 /**
  * 单一入口：显式按 provider 调用（给 REST/MCP/界面用）。

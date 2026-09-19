@@ -94,21 +94,47 @@ interface EmailVerificationResult {
 - `runBatchPipeline`：批量（限量并发、单封失败隔离）
 - `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据
 
-引擎是混合模式（省调用、稳结果）：分类规则优先（拿不准才 Jev）；抽取标签规则优先（缺字段才 LLM 兜底）；比对规范化精确比 + 文字字段候选差异交 Jev 复核（阈值 0.6，校准过程见 DECISION_LOG 决策 22），数字字段不进 Jev。
+引擎是混合模式（省调用、稳结果）：分类规则优先（拿不准才 Jev，置信度 < 0.85 标人工复核）；抽取标签规则优先（缺字段才 LLM 兜底）；比对规范化精确比 + 文字字段候选差异交 Jev 复核（noul < 0.85 判为不一致，校准过程见 DECISION_LOG 决策 22），数字字段不进 Jev。
 
 模型调用都走 `lib/shared/llm-cache.ts`（`llm_call_cache` 表的"内容指纹"缓存；没配 service key 时自动降级为不缓存）。**改规则/prompt/阈值后：bump `PIPELINE_LOGIC_VERSION`（让旧结果重算）；prompt 有实质变化再 bump `LLM_CACHE_VERSION`（让旧缓存失效）。**
 
 本地评测：`npm run evaluate`（对照 ground_truth 自测 + 增量写入 verification_results；`--force` 强制重算，`--limit=N` 调试，`--no-write` 只算分）。
 
+## results 模块（结果查询 / 统计 / 冲突 / 导出）
+
+`app/features/results/` 是**只读的结果层**：从 Supabase 的 `raw_emails` + `verification_results` 读已经跑出来的结果，给 Web UI / 外部程序 / MCP client 用。它不跑流水线、不写库；写库只有 `npm run import:data`（原始层/文字层）和 `npm run evaluate`（结果层，以后加批量入口时也走同一个 upsert 约定）。
+
+### REST API（都是 GET）
+
+| 端点 | 作用 | 主要参数 |
+|---|---|---|
+| `/features/results/api` | 结果列表（含未处理的邮件） | `category` `status` `processing` `has_defect` `provider` `q` `sort_by` `order` `group_by` `limit`(≤200) `offset` |
+| `/features/results/api/stats` | 统计汇总（总数/已处理/失败/分类分布/状态分布/字段频次） | 无 |
+| `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致或需人工确认，带两边取值） | `status`（缺省 `MISMATCH,NEEDS_REVIEW`）、`q`、`sort_by`、`order`、`limit`、`offset` |
+| `/features/results/api/export` | 下载文件（Save as），带 `Content-Disposition` 等下载头 | `scope=results\|conflicts\|stats\|submission`、`format=json\|md\|txt`（`submission` 只支持 json），其余筛选参数同对应列表 |
+
+参数取值：`category` = `EMAIL_CATEGORIES`；`status` = `COMPARISON_STATUSES`；`processing` = `processed\|pending\|failed`；`sort_by`、`group_by` 的可用值见 `app/features/results/logic/types.ts`（REST 与 MCP 共用同一套校验，非法值返回 400）。逗号分隔可以传多个（如 `?status=MISMATCH,NEEDS_REVIEW`）。
+
+出错时统一返回 `{ "error": "可读的中文说明" }`：参数错 = 400，数据库不可用/没配环境变量 = 503，其余 = 500（见 `app/features/results/api/params.ts`）。列表/冲突的响应结构见 `logic/types.ts` 的 `ResultList` / `ConflictList`（`items` 每行是一条 `ResultRow` / `ConflictPair`）。
+
+### MCP tools（只读）
+
+| tool | 作用 | 参数 |
+|---|---|---|
+| `list_results` | 结果列表 | 同 REST 列表参数（不含 `has_defect` 之外的变化） |
+| `get_stats` | 统计汇总 | 无 |
+| `list_conflicts` | 冲突文件对 | 同 REST conflicts |
+| `export_results` | 导出文件内容 | `scope` / `format` + 筛选参数；返回 `content[0].text` 是文件内容，文件名在 `_meta.filename` |
+
 ## 数据库存储层（Supabase）
 
-四张表，命名规则：**看名字就知道装什么、属于流水线哪一层**。前两张由导入脚本 `scripts/import-sample-data.mjs`（`npm run import:data`，支持增量）填充；第三张等流水线写入；第四张是模型调用的内部缓存。
+四张表，命名规则：**看名字就知道装什么、属于流水线哪一层**。前两张由导入脚本 `scripts/import-sample-data.mjs`（`npm run import:data`，支持增量）填充；第三张由评测/流水线（`npm run evaluate`，以后加批量入口）按 `email_id` upsert 写入；第四张是模型调用的内部缓存。
 
 | 表 | 层 | 装什么 | 谁写 |
 |---|---|---|---|
 | `raw_emails` | 原始层 | `email_id` / `from_address`（对应邮件里的 `from`）/ `subject` / `body` / `normalized_body` / `attachment_paths` / `content_hash` | 导入脚本（upsert，冲突键 `email_id`） |
 | `parsed_attachments` | 文字层 | `email_id` + `file_path` 为主键；`file_format`（txt/pdf/xlsx/docx/unsupported）；`parse_status`（ok/unreadable）；`parse_error`；`parsed_text`（解析出的文字）；`normalized_text`（扁平化文本）；`content_hash` | 导入脚本（upsert，冲突键 `email_id,file_path`） |
-| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` | 流水线（以后，upsert，冲突键 `email_id`） |
+| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `defect_count`（生成列，自动等于 `defect_fields` 的个数）/ `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` / `processing_status`（ok / failed）/ `error_message` | 本地评测 `npm run evaluate`（upsert，冲突键 `email_id`）。单封处理失败时写库方应写 `processing_status='failed'` + `error_message`（当前 evaluate 只写成功行，失败的行暂时不会出现在结果表里） |
 | `llm_call_cache` | 调用缓存 | `cache_key`（指纹）/ `purpose` / `provider` / `model` / `request_payload` / `response_payload` / `last_used_at` | 服务端缓存层（upsert，不对外开放） |
 
 **指纹（`*_hash`）统一算法**：sha256(该行要存的全部内容做 JSON 序列化)。作用：
@@ -123,6 +149,92 @@ interface EmailVerificationResult {
 - 权限：前三张表"所有人可读（RLS 只开放 select）、只有 service role 能写"；`llm_call_cache` 完全对外关闭（只有 service role 能读写）
 - 扁平化统一用 [`lib/shared/normalize.ts`](lib/shared/normalize.ts) 的 `normalizeText`，不要在别处再写一份
 
+### 结果查询视图 `verification_overview`
+
+`results` 模块不直接拼 `raw_emails` + `verification_results`，而是只读一个数据库视图：
+
+- 每封原始邮件一行，左连接结果行；未处理的邮件 `processing_status='pending'`、`processed=false`
+- 视图设了 `security_invoker = true`（底层 RLS 照常生效），只开放 select
+- 为什么用视图：PostgREST 的内嵌（embedded）排序实测**不会影响父行顺序**，内嵌筛选还要求 `!inner` 才不返回多余父行；扁平视图可以让筛选/排序/分页/统计稳定工作，也避免每个查询各写一套连接逻辑
+
+## results 模块（结果查询 / 统计 / 冲突对 / 导出）
+
+只读模块，给 Web UI、其他程序、AI agent 用；三种入口共用同一套 `logic/` 实现（不重复造轮子）。
+数据来源只有 `verification_overview` 视图，不写任何表。
+
+### REST 接口（全部 GET，只读）
+
+| 路径 | 作用 | 主要参数 |
+|---|---|---|
+| `/features/results/api` | 按需求查结果列表（含未处理邮件）：邮件信息 + 分类 + 比对结果 + 抽取字段 | `category` `status` `processing` `has_defect` `provider` `q` `sort_by` `order` `group_by` `limit` `offset` |
+| `/features/results/api/stats` | 统计汇总 | 无 |
+| `/features/results/api/conflicts` | 冲突文件对（默认 MISMATCH + NEEDS_REVIEW） | `status` `q` `sort_by` `order` `limit` `offset` |
+| `/features/results/api/export` | Save as：返回带 `Content-Disposition` 的文件内容 | `scope` `format` + 上面的筛选参数 |
+
+- 多值参数用逗号分隔（`status=MISMATCH,NEEDS_REVIEW`）或同名参数重复；`limit` 默认 50、最大 200
+- `sort_by` 白名单：`email_id` / `category` / `comparison_status` / `defect_count` / `updated_at`；`order` 缺省：按 `email_id` 升序、其余降序
+- `group_by=category|comparison_status` 时返回 `groups`（对筛选后的全集计数，不是只算当前页）
+- 参数不合法返回 400（中文错误信息）；Supabase 未配置/连不上返回 503
+
+响应格式（列表）：
+
+```ts
+interface ResultListResponse {
+  total: number; limit: number; offset: number;
+  sortBy: "email_id" | "category" | "comparison_status" | "defect_count" | "updated_at";
+  order: "asc" | "desc";
+  groupBy: "category" | "comparison_status" | null;
+  groups: { key: string; count: number }[] | null;
+  items: {
+    email_id: string; from: string; subject: string; attachment_paths: string[];
+    category: EmailCategory | null;                 // 未处理时为 null
+    comparison_status: ComparisonStatus | null;
+    review_reason: ReviewReason | null;
+    defect_fields: string[]; defect_count: number; has_defect: boolean;
+    processing_status: "ok" | "failed" | "pending"; // pending = 还没处理
+    error_message: string | null; model_provider: string | null; logic_version: string | null;
+    updated_at: string | null;
+    extracted_si: Record<string, string> | null;
+    extracted_bl: Record<string, string> | null;
+  }[];
+}
+```
+
+统计响应（`get_stats`）：
+
+```ts
+interface StatsResponse {
+  total_emails: number; processed: number; pending: number; failed: number;
+  mismatch: number; needs_review: number;
+  by_category: Record<string, number>;   // 5 个类别 + NOT_PROCESSED
+  by_status: Record<string, number>;     // OK / MISMATCH / NEEDS_REVIEW + NOT_PROCESSED
+  defect_field_frequency: { field: string; count: number }[];
+  providers: Record<string, number>;     // model_provider 的分布
+  last_updated_at: string | null;
+}
+```
+
+冲突对响应：`{ total, limit, offset, sortBy, order, items }`，其中每条 item 是
+`{ email_id, from, subject, si_file, bl_file, other_files, status, review_reason, defect_fields, defect_count, si_values, bl_values, updated_at }`。
+
+### 导出（Save as）
+
+- `scope`：`results`（当前筛选的结果列表）/ `conflicts`（冲突文件对）/ `stats`（统计汇总）/ `submission`（官方提交纯 JSON：`{ email_id: EmailVerificationResult }`，只允许 `format=json`）
+- `format`：`json` | `md` | `txt`（json 是结构化数据，md/txt 是给人看的报告，含统计摘要 + 明细）
+- 文件名在响应头 `Content-Disposition`；`scope=submission` 时用 `X-Export-Incomplete` 提示是否覆盖了全部 520 封（有失败行或条数不足时为 true）
+
+### MCP tool（端点 `POST /core/mcp-server`）
+
+| tool | 对应 REST |
+|---|---|
+| `list_results` | `/features/results/api` |
+| `get_stats` | `/features/results/api/stats` |
+| `list_conflicts` | `/features/results/api/conflicts` |
+| `export_results` | `/features/results/api/export`（`content[0].text` 就是文件内容，文件名等元信息在工具结果的 `_meta` 里） |
+
+MCP 传输方式是无状态 Streamable HTTP + JSON 响应（GET/DELETE 返回 405）。本地开发用
+`http://localhost:3000/core/mcp-server`，线上用 `https://hackathonaveris.vercel.app/core/mcp-server`。
+
 ## 环境变量约定
 
 见 [`.env.example`](.env.example)，新增需要的环境变量时同步更新那个文件（不要把真实 key 提交进 git）。
@@ -135,7 +247,7 @@ interface EmailVerificationResult {
 
 ## MCP tool 约定
 
-每个 feature 的 `mcp/index.ts` 导出一个 `{ name, description, inputSchema, handler }` 形状的对象，由 `app/core/mcp-server/tools.ts` 统一汇总注册，不要自己在别的地方重复注册。
+每个 feature 的 `mcp/index.ts` 导出 `{ name, description, inputSchema, handler }` 形状的对象，由 `app/core/mcp-server/tools.ts` 统一汇总注册（一个模块可以导出多个，用数组，如 `resultsMcpTools`），不要自己在别的地方重复注册。handler 返回普通对象时由汇总层转成 JSON 文本；需要返回文件内容/MCP 原生结果时，可以直接返回 `{ content: [...], _meta }`。
 
 ## 批量处理并发约定
 

@@ -258,8 +258,35 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
 - **决策**：
   1. 分类：高精度模板签名优先（`classification/logic/rules.ts`），拿不准才交给 Jev（一次调用、choice 题）。
   2. 抽取：标签规则解析（`extraction/logic/label-parser.ts`，含提单 "To the Order of" 等全部版式变体），缺字段才用文本 LLM 兜底（prompt 明确"找不到填 null、占位符填 null"）。
-  3. 比对：规范化（大小写/空白/标点/数字格式，`comparison/logic/canonical.ts`）后精确比；"文字字段对不上"的候选差异交给 Jev（一次调用、noul 题）复核；数字字段不进 Jev（实测 Jev 会把 "5 x 20'GP" vs "6 x 20'GP" 判成一样）。
-  4. Jev 比对阈值定为 **0.6**：用样例数据校准（0.5 会漏 1 条真实差异；0.55~0.8 区间 0 漏报 0 误报；真实差异最高 0.52、真实一致最低 0.88）。
+  3. 比对：规范化（大小写/空白/标点/数字格式，`comparison/logic/canonical.ts`）后精确比；"文字字段对不上"的候选差异交给 Jev（一次调用、noul 题）复核；数字字段不进 Jev（实测 Jev 会把 "5 x 20'GP" vs "6 x 20'GP" 判成一样）。公司名与地址连成一串的版式（docx 常见）会先按"法律后缀（LTD/LLC/FZE…）"截断再比，纯格式差异不进 Jev。
+  4. Jev 判定阈值统一为 **0.85**（操作者定的保守值）：分类置信度 < 0.85 → 标记人工复核；比对 noul < 0.85 → 判为不一致。用样例数据校准过：0.85 仍 0 漏报 0 误报（真实差异最高 0.52、真实一致最低 0.88），但再往上（如 0.9）会开始误报，**0.85 是上限，不要随意上调**。
   5. 缓存：`llm_call_cache` 表，键=sha256(用途+版本+provider+模型+实际发送内容)，写入用 upsert，存完整响应；没配 service key 时自动降级为不缓存。
   6. 增量：`verification_results.input_hash` + `PIPELINE_LOGIC_VERSION` 决定整封是否跳过；`LLM_CACHE_VERSION` 决定缓存是否失效。改引擎逻辑时必须手动 +1，见 SHARED_INTERFACES.md「编排层与混合引擎」。
+
+### 决策 23：新增 results 模块（查询/统计/冲突对/导出），REST 与 MCP 共用一套逻辑；MCP 接上真实握手
+
+- **背景**：操作者需要 5 件事都能被 MCP 和 GUI 用：①按分类查邮件 ②排序/自定义展示 ③统计
+  （总数/失败数/各分类数）④冲突文件对 ⑤Save as（json/md/txt）。硬性要求是不在 MCP、
+  REST、GUI 之间重复造轮子。当时 `verification_results` 已有 520 条真实结果（决策22写入）。
+- **决策**：
+  1. 新建 `app/features/results/`（logic/api/mcp，不做 ui，界面归队友A）；REST 和 MCP 都只调
+     `logic/`，导出序列化只有一套；接口契约写进 SHARED_INTERFACES.md「results 模块」。
+  2. 查询只读**数据库视图** `verification_overview`（`raw_emails` 左连接 `verification_results`，
+     `security_invoker=true`）。原因：实测 PostgREST 的内嵌排序不影响父行顺序、内嵌筛选必须
+     `!inner` 才不返回多余父行——扁平视图让筛选/排序/分页/统计稳定，不各自拼连接。
+  3. `verification_results` 加 3 列：`processing_status`（ok/failed）、`error_message`、
+     `defect_count`（生成列，自动等于 defect_fields 个数，用于排序/统计）。单封失败时由写库方
+     标 failed（目前 `evaluate` 只写成功行，失败的行暂不落库）。
+  4. 冲突文件对 = MISMATCH + NEEDS_REVIEW（操作者选的），带 SI/BL 路径和两边字段值。
+  5. 导出 = `scope`（results/conflicts/stats/submission）× `format`（json/md/txt）；
+     `submission` 只允许 json、导出官方纯格式，`X-Export-Incomplete` 提示是否覆盖全部邮件。
+  6. MCP 用 Streamable HTTP 无状态 + JSON 模式（每请求新建 server/transport，Vercel 友好）；
+     新增 4 个 tool，共 7 个；`app/core/mcp-server/route.ts` 不再是占位。
+  7. 顺手修 Vercel 打包：`next.config.mjs` 加 `outputFileTracingIncludes`，把 `data/sample`
+     打进 4 个运行时会用 fs 读样例数据的路由（否则线上 classify/extract/MCP 读不到文件）。
+  8. 单一来源：类别/状态/原因的运行时清单收进 `lib/shared/types.ts`（类型从数组派生），
+     `classification/logic` 改为引用，避免第二份清单。
+- **验证**：tsc 通过；Turbopack 和 webpack 两种生产构建都通过；抽查打包清单确认
+  data/sample 1544 个文件进入上述 4 个路由；对真实 520 条数据跑通 REST（列表筛选/排序/分组、
+  统计、冲突 66 组、4 种导出、submission 520 条完整）和 MCP 客户端（握手 + 7 tools + 调用）。
 - **验证结果（2026-09-20 首次全量评测，对照 `ground_truth.json`）**：分类 macro-F1 100%；端到端 520/520 完全一致；缺陷字段 TP=72 / FP=0 / FN=0；20 个 NEEDS_REVIEW 的 review_reason 20/20。本轮模型调用：比对 37 次 Jev（命中缓存后新增 0 条）、抽取兜底 0 次（规则全覆盖）；未配 Anthropic key 时兜底自动降级，不影响规则路径结果。

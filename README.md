@@ -23,7 +23,7 @@ npm run dev
 
 ## 导入样例数据到 Supabase（本地跑，支持增量）
 
-数据库分三层：`raw_emails`（原始层，邮件原样）、`parsed_attachments`（文字层，附件解析出的文字 + 扁平化文本）、`verification_results`（结果层，先留位子）；另有 `llm_call_cache`（模型调用缓存，内部用）。前两层用导入脚本填充：
+数据库分三层：`raw_emails`（原始层，邮件原样）、`parsed_attachments`（文字层，附件解析出的文字 + 扁平化文本）、`verification_results`（结果层）；另有一个只读视图 `verification_overview`（结果查询用）和内部缓存 `llm_call_cache`。前两层用导入脚本填充：
 
 ```bash
 npm run import:data:dry   # 先干跑一遍：只解析 data/sample、打印统计，不写库、不需要 key
@@ -43,6 +43,30 @@ npm run evaluate -- --no-write  # 只算分，不写库
 
 ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最终提交文件。
 当前成绩（2026-09-20）：分类 macro-F1 100%、端到端 520/520、缺陷字段 100%/100%/100%。
+
+## REST API 与 MCP Server
+
+查询/统计/冲突对/导出（`app/features/results/`，只读）统一从这里访问，接口格式见
+[SHARED_INTERFACES.md](SHARED_INTERFACES.md)「results 模块」：
+
+| REST（GET） | 作用 |
+|---|---|
+| `/features/results/api` | 按分类/状态/处理情况查结果列表（含未处理邮件），支持排序、分组、分页 |
+| `/features/results/api/stats` | 总数 / 已处理 / 未处理 / 失败 / 分类分布 / 状态分布 / 差异字段频次 |
+| `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致 + 需要人工确认），带两边字段值 |
+| `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt` |
+
+MCP 端点（Streamable HTTP，无状态）：
+
+```
+本地：http://localhost:3000/core/mcp-server
+线上：https://hackathonaveris.vercel.app/core/mcp-server
+```
+
+共 7 个 tool：`classify_email` / `extract_document_fields` / `compare_documents` /
+`list_results` / `get_stats` / `list_conflicts` / `export_results`。Claude Desktop 等
+MCP client 直接把这个地址填成远程 MCP server 即可（GET/DELETE 返回 405 是正常的，
+无状态模式只接受 POST）。
 
 ## Docker 部署
 
@@ -76,6 +100,8 @@ docker compose up --build
     /classification  邮件分类模块
     /extraction      字段抽取模块
     /comparison      比对+人工确认模块
+    /results         结果查询/统计/冲突对/导出（只读，REST + MCP 共用一套 logic）
+    /jev-lab         Jev 结构化决策验证页
     每个模块内部分 logic/（业务逻辑）api/（HTTP接口）mcp/（MCP tool定义）ui/（网页组件）
 /lib
   /shared          跨模块共享的类型定义和工具函数
@@ -89,6 +115,7 @@ docker compose up --build
 ## 当前状态
 
 - 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
-- 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
-- MCP server 还没接上真正的协议握手（现在只能列出工具清单）；整箱流水线的 REST API / MCP 工具也还没做（单模块接口已有）
+- 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 只读视图 `verification_overview` + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
+- 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（7 个 tool，地址见上文）
+- 还没做：把"整箱流水线"（`runBatchPipeline`）包成 REST API / MCP tool（现在单封处理走三个模块各自的接口；跑批走本地 `npm run evaluate`）
 - LLM key：本地缺 `ANTHROPIC_API_KEY`（抽取兜底/Claude provider 用；没配时自动降级、不影响规则路径）；Vercel 后台的 key 也还没填

@@ -56,13 +56,29 @@
 网页、REST API、MCP 要"跑一封/一整箱"都应该调用这里，不要在别处重新拼顺序逻辑。
 引擎是混合模式（规则优先，拿不准/有矛盾才调模型），所有模型调用走 `lib/shared/llm-cache.ts` 的内容指纹缓存；本地全量评测用 `npm run evaluate`（对照 ground_truth 自测，官方已澄清允许）。
 
+## 结果查询（results 模块）：只读分支
+
+`app/features/results/` 是这条管道的**只读出口**，不参与生产：按分类/状态/处理情况查结果、
+排序分组、统计、列冲突文件对、导出（json/md/txt/官方提交格式）。它和网页、REST、MCP 的关系：
+
+```
+verification_results（结果层）
+        │  只读（通过 verification_overview 视图）
+        ▼
+[results 模块 logic] ── 同一套实现 ──┬── REST /features/results/api/*
+                                     └── MCP tools（list_results / get_stats / list_conflicts / export_results）
+```
+
+规则：results 模块**只读**，不写任何表；别的模块也不要自己去查 `verification_overview`
+或拼相同的查询——要数据就走 results 的 logic（接口格式见 SHARED_INTERFACES.md）。
+
 ## 数据的"读/写"边界
 
 | 数据 | 谁能读 | 谁能写 |
 |---|---|---|
 | `data/sample/`（官方样例邮件） | 所有模块 | 任何代码都不应该修改它——这是官方给的原始数据，改了就对不上了 |
 | `lib/shared/types.ts`（字段/格式定义） | 所有模块 | 改动前必须先跟操作者确认，这是"公共区"，改错了三个模块都受影响 |
-| Supabase（`raw_emails` 原始层 / `parsed_attachments` 文字层 / `verification_results` 结果层，另有内部缓存 `llm_call_cache`） | 前三张表对所有模块、UI、预览开放读（RLS 公开只读）；`llm_call_cache` 只有服务端能读写 | `raw_emails`、`parsed_attachments` 只由本地导入脚本 `npm run import:data` 增量写（按指纹跳过没变的内容；upsert 冲突键 `email_id` / `email_id,file_path`）；`verification_results` 等流水线跑通后按 `email_id` upsert 写。不要在别的代码里零散写这些表；表结构和指纹规则见 SHARED_INTERFACES.md「数据库存储层」 |
+| Supabase（`raw_emails` 原始层 / `parsed_attachments` 文字层 / `verification_results` 结果层 / 只读视图 `verification_overview`，另有内部缓存 `llm_call_cache`） | 前三张表和视图对所有模块、UI、预览开放读（RLS 公开只读）；结果查询统一走 `verification_overview` 视图（results 模块实现），不要各自拼两张表；`llm_call_cache` 只有服务端能读写 | `raw_emails`、`parsed_attachments` 只由本地导入脚本 `npm run import:data` 增量写（按指纹跳过没变的内容；upsert 冲突键 `email_id` / `email_id,file_path`）；`verification_results` 由本地评测 `npm run evaluate` 按 `email_id` upsert 写（单封失败标 `processing_status='failed'`）。不要在别的代码里零散写这些表；表结构和指纹规则见 SHARED_INTERFACES.md「数据库存储层」 |
 | 环境变量 | 只用来配置"怎么连外部服务"（LLM key、Supabase地址） | 不要把业务数据（邮件内容、比对结果）塞进环境变量里，那是配置，不是数据 |
 
 ## 为什么要这么严格

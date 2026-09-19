@@ -13,23 +13,30 @@ export interface InboxEmail {
   attachments: string[]; // 例如 "attachments/email_004_SI.txt"
 }
 
-// classification 模块的输出
-export type EmailCategory =
-  | "BL_COMPARISON"
-  | "SI_REQUEST"
-  | "INVOICE_QUERY"
-  | "GENERAL"
-  | "SPAM";
+// classification 模块的输出。
+// 注意：运行时清单和类型都定义在这里（唯一来源），筛选/校验/下拉选项都从这里派生，
+// 不要在别的模块再写一份类别清单（见 DATA_FLOW.md 数据流规则第 4 条）。
+export const EMAIL_CATEGORIES = [
+  "BL_COMPARISON",
+  "SI_REQUEST",
+  "INVOICE_QUERY",
+  "GENERAL",
+  "SPAM",
+] as const;
+export type EmailCategory = (typeof EMAIL_CATEGORIES)[number];
 
-// comparison 模块的输出状态
-export type ComparisonStatus = "OK" | "MISMATCH" | "NEEDS_REVIEW";
+// comparison 模块的输出状态（运行时清单同样以这里为唯一来源）
+export const COMPARISON_STATUSES = ["OK", "MISMATCH", "NEEDS_REVIEW"] as const;
+export type ComparisonStatus = (typeof COMPARISON_STATUSES)[number];
 
 // 拿不准的原因（status 是 NEEDS_REVIEW 时必须给一个）
-export type ReviewReason =
-  | "wrong_doc_type"
-  | "missing_attachment"
-  | "unreadable"
-  | "missing_value";
+export const REVIEW_REASONS = [
+  "wrong_doc_type",
+  "missing_attachment",
+  "unreadable",
+  "missing_value",
+] as const;
+export type ReviewReason = (typeof REVIEW_REASONS)[number];
 
 // 官方要求比对的 7 个字段，SI 和 BL 上这几个字段的叫法可能不一样，
 // extraction 模块要负责"按含义对齐"，不是按原文字段名对齐
