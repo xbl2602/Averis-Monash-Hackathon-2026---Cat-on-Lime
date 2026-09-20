@@ -4,7 +4,7 @@
  * 分层：api/ 只解析请求，逻辑在这里；LLM 调用层未来通过这里的 resolveConfigValue 取值。
  * 并发约定：写入用 upsert（key 唯一），带 update 时间戳；不做"先查再写"。
  */
-import { getSupabaseServiceClient, isSupabaseServiceAvailable } from "./supabase";
+import { getSupabaseServiceClientAsync, isSupabaseServiceAvailable } from "./supabase";
 import { decryptSecret, encryptSecret, maskSecret } from "./crypto";
 
 export type ConfigCategory = "llm" | "pipeline" | "storage" | "mail" | "general";
@@ -59,7 +59,7 @@ export function isConfigStoreAvailable(): boolean {
 }
 
 export async function listConfigViews(category?: ConfigCategory): Promise<ConfigItemView[]> {
-  const client = getSupabaseServiceClient();
+  const client = await getSupabaseServiceClientAsync();
   let query = client.from("app_config").select("key, category, value, is_secret, updated_at");
   if (category) query = query.eq("category", category);
   const { data, error } = await query;
@@ -79,11 +79,12 @@ export async function listConfigViews(category?: ConfigCategory): Promise<Config
       const fallback = envValue || CONFIG_DEFAULTS[key];
 
       if (row) {
+        const isSecret = row.is_secret || Boolean(ENV_FALLBACK[key]);
         return {
           key,
           category: row.category,
-          value: row.is_secret && typeof row.value === "string" ? maskDecrypted(row.value) : row.value,
-          is_secret: row.is_secret,
+          value: isSecret && typeof row.value === "string" ? maskDecrypted(row.value) : row.value,
+          is_secret: isSecret,
           has_value: row.value !== null && row.value !== "",
           source: "db" as const,
           updated_at: row.updated_at,
@@ -134,7 +135,7 @@ export interface ConfigUpdate {
  * - upsert，并发安全
  */
 export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: number; skipped: string[] }> {
-  const client = getSupabaseServiceClient();
+  const client = await getSupabaseServiceClientAsync();
   const rows: ConfigItemRow[] = [];
   const skipped: string[] = [];
 
@@ -188,7 +189,7 @@ export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: 
 export async function resolveConfigValue(key: string): Promise<unknown> {
   const envName = ENV_FALLBACK[key];
   try {
-    const client = getSupabaseServiceClient();
+    const client = await getSupabaseServiceClientAsync();
     const { data } = await client.from("app_config").select("value, is_secret").eq("key", key).maybeSingle();
     if (data) {
       const row = data as { value: unknown; is_secret: boolean };

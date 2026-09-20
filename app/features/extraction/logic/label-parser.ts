@@ -125,7 +125,7 @@ function collectFollowingLines(
   return parts.join(" ");
 }
 
-// 明显不是 SI/BL 的文档（样例里的 wrong_doc_type 陷阱：商业发票/装箱单/产地证）
-export function isLikelyOtherDocument(text: string): boolean {
-  return /(commercial invoice|packing list|certificate of origin)/i.test(text);
-}
+// 明显不是 SI/BL 的文档（样例里的 wrong_doc_type 陷阱：商业发票/装箱单/产地证）。
+// 实现已挪到 lib/shared/document-identify.ts：import 模块识别上传文档时用的是同一份规则，
+// 这里 re-export 保持现有调用方（extraction 内部）不变。
+export { isLikelyOtherDocument } from "@/lib/shared/document-identify";

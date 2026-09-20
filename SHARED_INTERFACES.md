@@ -254,9 +254,74 @@ interface RunBatchSummary {
 参数与 REST 请求体一一对应（snake_case 相同）；注解是 `readOnlyHint: false`
 （与查询类 tool 区分），结果就是上面的 `RunBatchSummary`。
 
+## config 模块（运行时配置中心，第二阶段）
+
+`app/features/config/`：GUI 可调的运行时配置。**数据库有值 > 环境变量 > 代码默认值**；
+敏感值（API key 等）用 AES-256-GCM 加密存储（[`lib/shared/crypto.ts`](lib/shared/crypto.ts)），
+接口**永不回显明文**，只回掩码（如 `sk-ant-…f3a2`）+ `has_value`。
+
+### REST
+
+| 路径 | 作用 | 保护 |
+|---|---|---|
+| `GET /features/config/api` | 读全部配置（`?category=llm|pipeline|storage|mail|general` 过滤） | 开放 |
+| `PUT /features/config/api` | 批量写：`{ updates: [{ key, value }] }`（value=null 删除该行，回到 env/默认） | 需 `x-admin-token` |
+| `POST /features/config/api/test` | 测试连接：`{ target }` → `{ ok, detail }` | 需 `x-admin-token` |
+
+读响应每项形如 `{ key, category, value, is_secret, has_value, source: "db"|"env"|"default"|"unset", updated_at }`。
+配置项清单和环境变量对应关系见 [PHASE2_SPEC.md](PHASE2_SPEC.md) 第 3.2 节。
+
+### 写保护（所有第二阶段写接口共用）
+
+请求头 `x-admin-token: <ADMIN_TOKEN>`；`ADMIN_TOKEN` 未配置时**拒绝所有写操作**（安全默认）。
+读取接口全部开放（裁判/访客自由查看）。实现见 [`lib/shared/admin-guard.ts`](lib/shared/admin-guard.ts)。
+
+## mail 模块（Gmail / 多 Supabase 项目，第二阶段占位）
+
+`app/features/mail/`：**本阶段是预留接口，不做真实 OAuth 链路**（见 PHASE2_SPEC 第 0 节）。
+
+| 路径 | 作用 | 保护 |
+|---|---|---|
+| `GET /features/mail/api/gmail` | Gmail 连接状态（token 列只折算成 `has_access_token` 布尔） | 开放 |
+| `POST /features/mail/api/gmail/connect` | 发起连接 → `{ status: "not_implemented", message, redirect_uri }` | 需 token |
+| `POST /features/mail/api/gmail/disconnect` | 清 token、置 `disconnected` | 需 token |
+| `GET /features/mail/api/supabase-projects` | 列出配置的项目（service_key 只回掩码） | 开放 |
+| `POST /features/mail/api/supabase-projects` | 新增/更新项目（service_key 加密存） | 需 token |
+| `POST /features/mail/api/supabase-projects/activate` | 切换启用项目（同一时间只有一个 `is_active`） | 需 token |
+
+Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > 环境变量**——写库类代码请用
+[`lib/shared/supabase.ts`](lib/shared/supabase.ts) 的 `getSupabaseServiceClientAsync()`（每次现解析现建，
+不缓存）；解析管理表本身固定用 env 引导客户端，避免自依赖。现有 `results` / `pipeline` 的写路径
+仍走 env 项目（已知限制，升级它们时改用 async 版本即可）。
+
+## import 模块（手动上传文档，第二阶段）
+
+`app/features/import/`：单件/多选/文件夹上传（GUI 侧用 `webkitdirectory` 拿文件列表、**按 3MB/批**
+切开逐个请求）。原文件存 Storage bucket `uploads`（private，路径 `documents/<hash前2位>/<hash>/<文件名>`），
+元数据+解析文本落 `uploaded_documents`。
+
+| 路径 | 作用 | 保护 |
+|---|---|---|
+| `POST /features/import/api/upload` | `{ files: [{ name, mime?, data_base64 }], batch_id? }`；逐文件校验（扩展名→魔数→大小→哈希去重→解析→识别）；单文件失败不影响其他；整批 >3MB 返回 413 | 需 token |
+| `GET /features/import/api/documents` | 列表（`?review_status=&detected_type=&limit=&offset=`；`extracted_text` 只回 500 字符预览） | 开放 |
+| `GET /features/import/api/documents/[id]` | 单文档详情（含 `extracted_text` 全文） | 开放 |
+| `PUT /features/import/api/documents` | 人工归类：`{ id, detected_type }` + 置 `filed`（支持 `expected_updated_at`，过期 409） | 需 token |
+
+上传结果 `items[]`：`status` = `stored` / `duplicate`（内容哈希已存在，不重复解析）/ `rejected`（原因可读）；
+`detected_type` = `SI` / `BL` / `OTHER` / `UNKNOWN`（**按内容识别，不信任文件名**；
+`UNKNOWN` 进 `review_status=pending` 等人工归类）。识别规则见 [`lib/shared/document-identify.ts`](lib/shared/document-identify.ts)。
+
+### MCP tool（第二阶段新增）
+
+`sync_gmail`（占位，返回 not_implemented）、`list_uploaded_documents`、`classify_uploaded_document`（写库）。
+加上原有的 8 个，现在共 11 个 tool。
+
 ## 环境变量约定
 
 见 [`.env.example`](.env.example)，新增需要的环境变量时同步更新那个文件（不要把真实 key 提交进 git）。
+第二阶段新增两个：
+- `ENCRYPTION_MASTER_KEY`：敏感配置的 AES-256-GCM 主密钥（32 字节 base64）；缺失时敏感字段拒绝写入
+- `ADMIN_TOKEN`：config/import/mail 写操作的口令（`x-admin-token` 请求头）；未配置时写操作全部被拒绝
 
 ## LLM 调用约定
 

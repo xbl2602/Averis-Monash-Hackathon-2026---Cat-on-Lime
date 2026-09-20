@@ -4,6 +4,8 @@ import { extractionMcpTool } from "@/app/features/extraction/mcp";
 import { comparisonMcpTool } from "@/app/features/comparison/mcp";
 import { resultsMcpTools } from "@/app/features/results/mcp";
 import { pipelineMcpTool } from "@/app/features/pipeline/mcp";
+import { mailMcpTools } from "@/app/features/mail/mcp";
+import { importMcpTools } from "@/app/features/import/mcp";
 
 /**
  * 汇总各个 feature 模块暴露的 MCP tool 定义。
@@ -42,4 +44,6 @@ export const mcpTools: McpToolDefinition[] = [
   comparisonMcpTool,
   pipelineMcpTool,
   ...resultsMcpTools,
+  ...mailMcpTools,
+  ...importMcpTools,
 ];
