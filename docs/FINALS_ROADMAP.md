@@ -82,6 +82,22 @@
 | B4 | DCSA eBL 3.0 字段映射导出 | 2~3h | Roadmap 素材；**不能宣称"已集成"** |
 | B5 | `.eml` / `.msg` 解析 | 4~6h | 防决赛给真实 Outlook 样本（场景 B 兜底） |
 | B6 | 多语言/港口别名归一（UN/LOCODE） | 2~4h | 差异化加分；官方实测集以英文为主，别挤占主流程 |
+| B7 | 本地决策模型 Laya 适配（**只留接口，见 4.3.1**） | 文档 0.5h / 实现 1.5~2 天 | 评估结论：暂不实现；扩展点已记录，将来做是"加文件"不是"改架构" |
+
+### 4.3.1 本地决策模型 Laya：评估结论与预留接口
+
+**结论：这次不做，只记录接口位置。**
+
+- 动机"本地跑、省 API 消耗"不成立：规则优先设计让样批 520 封只产生 ≈50 次 LLM 调用（Jev 计价 $0.042/1M tokens，整批成本≈几分钱）；且分类规则已覆盖 520/520，兜底调用本就极少。
+- 它是**非生成式决策模型**（`choice`/`score`/`noul` 三类打分类问题，一次前向 ~33ms、永不生成文本），**做不了抽取**（字段抽取的"本地省 API"已由 LM Studio provider 覆盖）。零样本在自定义决策上接近随机（官方自述 0.362 acc，随机 0.318、多数类 0.461），需在自有数据上微调 + 温度校准才可信——当前团队最低性价比项。
+- 事实档案：Apache 2.0，三 checkpoint（英文 421M ctx512 / multilingual 322M ctx1024 / typed-decisions），`pip install laya`，CPU 可跑；链接见 §7。
+- **同类别参照物是 Jev**：`lib/llm/index.ts:27-40` 已把"文本生成类 provider"（`TEXT_PROVIDER_IDS`）与决策模型分开，注释明确 Jev 是"结构化决策模型、不生成文本"。Laya 若接入，照 `lib/llm/jev.ts` 的样式走：
+  1. 新增 `lib/llm/laya.ts`：HTTP 调本地 Python 服务（`pip install laya` + FastAPI 包装，只暴露 choice/noul）；
+  2. `lib/llm/index.ts` 增加 provider 位（建议 id `laya`；非 Vercel 可用，语义同 lmstudio 的 `cloudOnly`），`isProviderConfigured` 用 `LAYA_BASE_URL` 是否配置 + `isLocalLLMAvailable()` 判断，Vercel 上给可读 503；
+  3. `app/features/classification/logic/index.ts` 增加 `engine: "laya"` 分支（现有 rules/jev/llm/degraded）；
+  4. `docker-compose.yml` 增加独立 service（默认不启用的 profile），主 Docker 镜像不受影响；
+  5. `.env.example` 增加 `LAYA_BASE_URL` 注释项；不碰 `ui/`、不碰现有 5 个 provider 的对外契约。
+- **为什么不在代码里放占位 stub**：`AGENTS.md` 禁止"为还不存在的假设性需求预先设计接口"、禁止为假设需求加死代码；"留接口"落在本文档——接入点、命名、门控条件写死记清楚，将来实施时是"加文件"而不是"改架构"。
 
 ### 4.4 C 档：明确不要做
 
@@ -108,4 +124,5 @@
 - 决赛评分细则（官方 Google Doc，Technology Integration 标注 provisional）：https://docs.google.com/document/d/1S-bLf45JOabMl1QUDgl4F6NTwuwD7UKbhPKh74sqaRo/edit
 - 日程（Participant Infopack）：初赛截止 9/22 12:00pm；10 强筛选 9/23 12:00pm；公布 9/24；**决赛路演 9/26**（Monash University Malaysia）
 - 官方题目包内：`data_v2/generate.py`（`--seed`）、`data_v2/README.md`（"Change the seed for a fresh draw"）、`server/scoring.py`（50/30/20 权重与 reliability 诊断）、`edgecases.py`（`BLANK_TOKENS`）、`shipment.py`（缺陷注入）、`pools.py`（标签/实体池）
+- Laya 模型评估来源：https://huggingface.co/convaiinnovations/laya （子 checkpoint：`laya-multilingual` / `laya-typed-decisions`）
 - 本仓库对应实现：`app/features/extraction/logic/label-parser.ts:47`、`app/features/extraction/logic/index.ts:118`、`lib/shared/pipeline.ts`、`scripts/evaluate.ts:32-40`、`app/features/results/logic/stats.ts`、`app/features/results/logic/export/json.ts`、`app/features/mail/logic/gmail.ts`（占位）
