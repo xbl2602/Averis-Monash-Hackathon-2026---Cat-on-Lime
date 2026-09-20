@@ -131,8 +131,56 @@
 
 1. **周二提交前 2~3 小时做最终部署验证**：手机浏览器 + 无痕窗口各开一次线上 demo，把 Web / REST API / MCP 三个入口都点一遍
 2. **云端 provider key**：目前 Vercel 上只有 **Gemini / Jev** 可用；若想让评委现场切换 Claude / ChatGPT / DeepSeek，需要提前把对应 key 填进 Vercel 环境变量（**改完必须 redeploy**）
-3. **仓库可见性**：确认 GitHub 仓库对评委可见（演示里要求 public；当前可见性需核实）
+3. **仓库可见性**：已核验——GitHub 仓库对未登录访客可见（public，匿名访问 HTTP 200），无需处理
 4. **提交人**：Google Form 全队只需一人提交——提前定好谁交，交之前逐项核对必交材料（5 分钟内视频、可公开访问的 demo 链接、GitHub 仓库、slides/文档）
 5. **去听 Workshop 2（9/21 晚 7 点）**：Averis 亲讲 + 题目 Q&A，没 slides 只有录播，别错过提问机会
 6. 本地 LM Studio 只在本机 / 本地部署模式可用，这是架构限制不是 bug；线上 demo 用云端 provider（已在 AGENTS.md 说明）
 7. 遇到部署报错不要慌：Vercel 会列出完整错误清单；且构建失败时线上旧版本仍可访问，不会"整站打不开"
+
+---
+
+## 11. 适配性分析：适用 / 注意 / 已踩雷 / 可扩展
+
+站在我们项目现状（Next.js 全栈 + Vercel + Supabase，细节见 README 与 AGENTS.md）把 workshop 内容逐条对表。
+
+### 11.1 逐条对表
+
+| Workshop 建议 | 我们的现状 | 判定 |
+|---|---|---|
+| Deploy early、push 自动部署 | `hackathonaveris` 连了 GitHub `main`，push 即自动重新部署 | ✅ 已满足 |
+| 公网 HTTPS、评委直接打开 | Vercel 自带 HTTPS，SSO 已关，不登录可访问 | ✅ 已满足 |
+| 不要交 localhost 链接 | README 首屏就是线上 demo 地址；localhost 只出现在本地跑法说明里 | ✅ 已满足 |
+| 密钥不进 git | `.env.local` 已被 `.gitignore` 忽略（用 `git check-ignore` 核验过），`.env.example` 只放占位值 | ✅ 已满足 |
+| 前端不硬编码密钥 | 所有 LLM key 只在服务端 `lib/llm` 读取，浏览器拿不到 | ✅ 已满足 |
+| 环境变量改了要 redeploy | 已列入下方待办第 2 条；团队加 key 时记住这一步 | ⚠️ 流程提醒 |
+| 刷新 404 要加 `vercel.json` | Next.js App Router 在 Vercel 上由框架处理路由 | ➖ 不适用 |
+| Mixed content（HTTPS 调 HTTP） | 前端调的是同域 `/features/*/api`，天然同协议 | ➖ 不适用 |
+| Node 版本要锁 | `package.json` 已写 `engines: node >=22` | ✅ 已满足 |
+| 手机 + 无痕窗口实测 | 响应式是硬性要求；提交前实测见待办第 1 条 | ⚠️ 待执行 |
+| 仓库要对评委可见 | 已核验匿名访客可访问（HTTP 200，public） | ✅ 已满足 |
+| 提交只需一名成员填表 | 见待办第 4 条，需提前指定提交人 | ⚠️ 待执行 |
+| 用 GCP $300 / 免费额度 | Gemini 已接入；要稳定调优可挂 GCP 额度 | 🔓 可选增强 |
+
+### 11.2 适用但要注意（我们特有的点，workshop 没展开）
+
+1. **Serverless 函数有时长上限，批量任务不能"一个请求跑到底"**：Vercel Hobby 函数上限 60 秒（我们的 `pipeline` / `upload` / `mcp-server` 路由已标 `maxDuration = 60`，其余 30 秒）。批量处理用的是"分块 + 轮询 + 有上限并发 + 单条失败隔离"，这是云托管里最实际的坑。
+2. **无服务器实例之间不共享内存**：模块级变量不能当状态/缓存（跨请求状态已统一放 Supabase，进程内只留请求生命周期内的局部变量）。
+3. **新增/更换 key 后必须 redeploy**：云端没 key 的 provider（目前 Claude / ChatGPT / DeepSeek）会返回可读错误而不是崩溃；要给评委演示切换，需先补 key 再重新部署。
+4. **云端不能用本地 LM Studio**：环境判断会给出可读提示；演示时主动说明这是架构限制，避免评委误以为功能坏了。
+5. **免费层有隐性额度**：Vercel / Supabase 免费层够 demo 用；批量演示已被限制单次封顶，别连续刷太猛。
+6. **构建 warning ≠ 失败**：与演示里一样的现象，以"部署成功 + Web/REST/MCP 三个入口冒烟通过"为准。
+
+### 11.3 已经踩过的雷（复盘，均已修复）
+
+1. **Vercel 双项目混用**：最早建的 `hackathon-demo` 没连 GitHub、不会自动更新（已停用），正式项目 `hackathonaveris` 才连了 `main`——正是 workshop 强调"连仓库、自动部署"对应的坑，我们踩过并已纠正。
+2. **文档与运行时的默认值漂移**：文档一度写默认 Claude、运行时实际 Gemini——已全仓库对齐（workshop 说"以平台实际为准"，文档同理）。
+3. **错误路径不体面**：Jev 返回非 JSON 时曾退化成笼统 500、附件解析失败曾回显解析器原文——已修复为统一可读文案（原始细节只进服务端日志）。
+4. **文档搬家后链接失效**：团队文档统一移入 `docs/` 时根目录引用一度失效——已全量修正并核验（AGENTS / CLAUDE / README 与 docs 内互链）。
+
+### 11.4 可扩展方向（对齐 workshop 的架构建议）
+
+1. **后端拆分到 Cloud Run / Render**：如果决赛要把 extraction 换成 Python（PDF/OCR 生态更成熟），按 AGENTS.md 的插件约定做成独立 HTTP 服务，前端留 Vercel、后端放 Cloud Run——正好就是 workshop 推荐的架构，目录结构已为此预留。
+2. **数据库**：已用 Supabase，与 workshop 推荐一致；未来换 Postgres 只是连接串变更。
+3. **备选 LLM**：xAI Grok 免费层、GCP 额度下的 Gemini，都能通过现有 OpenAI 兼容适配层接入，只加配置不改架构。
+4. **自定义域名**：可选加分项；HTTPS 已由 Vercel 满足，不急。
+5. **日志/监控**：Vercel 后台可直接看函数日志（我们所有上游细节都打在 `console.warn`），后续可接外部监控，属决赛增强项。
