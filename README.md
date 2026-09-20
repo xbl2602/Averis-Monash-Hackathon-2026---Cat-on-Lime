@@ -1,6 +1,6 @@
 # Shipping Doc Verifier
 
-Averis x Monash Hackathon 2026 —— 航运单证核验。团队协作规则见 [CLAUDE.md](CLAUDE.md)，人类看的分工手册见 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，模块间接口约定见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)，数据流规划见 [DATA_FLOW.md](docs/DATA_FLOW.md)，核心决策记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)。
+Averis x Monash Hackathon 2026 —— 航运单证核验。团队协作规则见 [CLAUDE.md](CLAUDE.md)，人类看的分工手册见 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，模块间接口约定见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)，数据流规划见 [DATA_FLOW.md](docs/DATA_FLOW.md)，核心决策记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)，决赛冲刺手册（评分口径+缺口+执行顺序）见 [FINALS_ROADMAP.md](docs/FINALS_ROADMAP.md)。
 
 ## 这个项目做什么
 
