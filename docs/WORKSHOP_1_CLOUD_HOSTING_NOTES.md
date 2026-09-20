@@ -143,15 +143,18 @@
 
 站在我们项目现状（Next.js 全栈 + Vercel + Supabase，细节见 README 与 AGENTS.md）把 workshop 内容逐条对表。
 
+> 本节所有判定均基于 **2026-09-20 对线上 demo（hackathonaveris 匿名访问 + 真实 provider 调用）和仓库状态的实测/核验**，不是照抄建议的理想状态。
+
 ### 11.1 逐条对表
 
 | Workshop 建议 | 我们的现状 | 判定 |
 |---|---|---|
 | Deploy early、push 自动部署 | `hackathonaveris` 连了 GitHub `main`，push 即自动重新部署 | ✅ 已满足 |
-| 公网 HTTPS、评委直接打开 | Vercel 自带 HTTPS，SSO 已关，不登录可访问 | ✅ 已满足 |
+| 公网 HTTPS、评委直接打开 | Vercel 自带 HTTPS，SSO 已关；2026-09-20 实测匿名访问首页 HTTP 200 | ✅ 已满足 |
 | 不要交 localhost 链接 | README 首屏就是线上 demo 地址；localhost 只出现在本地跑法说明里 | ✅ 已满足 |
 | 密钥不进 git | `.env.local` 已被 `.gitignore` 忽略（用 `git check-ignore` 核验过），`.env.example` 只放占位值 | ✅ 已满足 |
-| 前端不硬编码密钥 | 所有 LLM key 只在服务端 `lib/llm` 读取，浏览器拿不到 | ✅ 已满足 |
+| 前端不硬编码密钥 | 所有 LLM key 只在服务端 `lib/llm` 读取；仓库核查：`NEXT_PUBLIC_` 仅用于 Supabase 公开地址/anon key | ✅ 已满足 |
+| 出错时给能看懂的信息 | 2026-09-20 线上实测：gemini 正常 200；缺 key 的 claude / openai / deepseek 和云端不可用的 lmstudio 均返回可读中文 503，不崩 | ✅ 已满足 |
 | 环境变量改了要 redeploy | 已列入下方待办第 2 条；团队加 key 时记住这一步 | ⚠️ 流程提醒 |
 | 刷新 404 要加 `vercel.json` | Next.js App Router 在 Vercel 上由框架处理路由 | ➖ 不适用 |
 | Mixed content（HTTPS 调 HTTP） | 前端调的是同域 `/features/*/api`，天然同协议 | ➖ 不适用 |
@@ -159,14 +162,14 @@
 | 手机 + 无痕窗口实测 | 响应式是硬性要求；提交前实测见待办第 1 条 | ⚠️ 待执行 |
 | 仓库要对评委可见 | 已核验匿名访客可访问（HTTP 200，public） | ✅ 已满足 |
 | 提交只需一名成员填表 | 见待办第 4 条，需提前指定提交人 | ⚠️ 待执行 |
-| 用 GCP $300 / 免费额度 | Gemini 已接入；要稳定调优可挂 GCP 额度 | 🔓 可选增强 |
+| 用 GCP $300 / 免费额度 | 线上实测 gemini 与 jev 分类均可用（匿名调用 200）；要稳定调优可挂 GCP 额度 | 🔓 可选增强 |
 
 ### 11.2 适用但要注意（我们特有的点，workshop 没展开）
 
 1. **Serverless 函数有时长上限，批量任务不能"一个请求跑到底"**：Vercel Hobby 函数上限 60 秒（我们的 `pipeline` / `upload` / `mcp-server` 路由已标 `maxDuration = 60`，其余 30 秒）。批量处理用的是"分块 + 轮询 + 有上限并发 + 单条失败隔离"，这是云托管里最实际的坑。
 2. **无服务器实例之间不共享内存**：模块级变量不能当状态/缓存（跨请求状态已统一放 Supabase，进程内只留请求生命周期内的局部变量）。
-3. **新增/更换 key 后必须 redeploy**：云端没 key 的 provider（目前 Claude / ChatGPT / DeepSeek）会返回可读错误而不是崩溃；要给评委演示切换，需先补 key 再重新部署。
-4. **云端不能用本地 LM Studio**：环境判断会给出可读提示；演示时主动说明这是架构限制，避免评委误以为功能坏了。
+3. **新增/更换 key 后必须 redeploy**：2026-09-20 实测，云端没 key 的 claude / openai / deepseek 都会返回 503 + 可读中文（点名缺 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`），不会崩；要给评委演示切换，需先补 key 再重新部署。
+4. **云端不能用本地 LM Studio**：2026-09-20 实测返回 503 + 可读提示"只能在本地/Docker 部署模式下使用"；演示时主动说明这是架构限制，避免评委误以为功能坏了。
 5. **免费层有隐性额度**：Vercel / Supabase 免费层够 demo 用；批量演示已被限制单次封顶，别连续刷太猛。
 6. **构建 warning ≠ 失败**：与演示里一样的现象，以"部署成功 + Web/REST/MCP 三个入口冒烟通过"为准。
 
