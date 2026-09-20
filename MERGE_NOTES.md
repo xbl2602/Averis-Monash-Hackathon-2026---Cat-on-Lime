@@ -28,6 +28,32 @@ REST + MCP 都已上线**。新增能力清单：
 **队友B（写 README/演示材料）需要知道的**：上面这些能力在 README 里有更详细的说明和 curl 示例，
 "当前状态"一节的数据可以直接引用；官方 ground_truth 只用于自测、不进提交、演示时不要展示对照答案。
 
+## 第二阶段新增（config / mail / import）——动手前先读这些文档（2026-09-20 晚更新）
+
+后端后来又加了第二阶段三个模块，**队友A / 队友B 的本地分支看不到这些，动手前先读文档、不要靠猜**：
+
+| 模块 | 是什么 | 界面归谁 |
+|---|---|---|
+| **config** | 配置中心：15 项运行时配置（LLM 优先级、阈值、各 API key、并发/上传限制），敏感值加密存储、读开放/写口令 | 配置页 → 队友A（待做） |
+| **mail** | 占位接口：Gmail 连接状态、多 Supabase 项目切换与停用恢复 | 设置页 → 队友A（待做） |
+| **import** | 文档上传：单件/多选/文件夹、原文件存 Supabase Storage、按内容识别 SI/BL、人工归类 | 上传页 → 队友A（待做） |
+
+**要看什么、看哪里（按角色）——这就是"必读清单"**：
+
+| 谁 | 必读文档 | 具体看哪几节 |
+|---|---|---|
+| 队友A（做配置页/上传页） | `SHARED_INTERFACES.md` | 「config 模块」「mail 模块」「import 模块」三节（接口路径、参数、返回格式） |
+| 队友A（做配置页/上传页） | `SHARED_INTERFACES.md` | 「写保护（所有第二阶段写接口共用）」小节——**GUI 写数据用 Server Action 或服务端注入 token，别让 token 进浏览器** |
+| 队友A（做配置页/上传页） | `PHASE2_SPEC.md` | 第 1 节（安全模型：读开放/写口令）、第 2 节（加密方案）、第 8 节（验收清单） |
+| 队友B（README/演示材料） | `README.md` | "当前状态"里第二阶段条目（可直接引用） |
+| 队友B（README/演示材料） | `PHASE2_SPEC.md` | 第 8 节验收清单（哪些能力已验收、哪些是占位） |
+| 所有人 | 本文件 | 本节 + 下方【注意事项】 |
+
+**已经准备好、不需要你们做的**：
+- 4 张新表 + `uploads` bucket 已建好（RLS 已启用）；线上环境变量 `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已由后端配好（2026-09-20），**不用自己申请**
+- MCP tool 从 8 个 → **11 个**（新增 `sync_gmail`、`list_uploaded_documents`、`classify_uploaded_document`）；原主流水线（分类→抽取→比对）无变化，评测仍 520/520
+- 写接口需要管理员口令（存在 Vercel 环境变量里，GUI 走服务端自动带上）；手动 curl 测试需要口令时找操作者
+
 ## 合并了什么（前端）
 
 **前端（队友A）**：`origin/FRONTEND-BY-WJ` 分支的 1 个提交（`0d703c5`），
@@ -121,6 +147,8 @@ REST + MCP 都已上线**。新增能力清单：
 
 ## TODO
 
+- [x] 第二阶段后端（config / mail / import）：完成并验收（2026-09-20）；线上环境变量 `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已配好
+- [ ] 队友A：做配置页（config）与上传页（import）——接口已就绪，先读上面「第二阶段必读清单」
 - [ ] 确定 `/features/verification` 页面由谁做：决定后把结论写到 SHARED_INTERFACES.md 或这里
 - [ ] 做 `/features/verification` 页面（接 `POST /features/pipeline/api`；需求方输入：跑哪几封、最多几封、用哪个 provider、要不要 dry_run；展示：本次成功/失败/剩余多少封）
 - [ ] 给 Claude / OpenAI / DeepSeek 申请 API key 并填到 Vercel（环境变量写 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`，见 .env.example）
