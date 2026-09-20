@@ -105,3 +105,14 @@
 
 - `X-Export-Invalid` / `X-Export-Invalid-Ids`：行内自相矛盾（如 MISMATCH 没有缺陷清单、NEEDS_REVIEW 缺原因）的 email_id；任一条时 `X-Export-Incomplete` 也为 true
 - 建议：`fetch + blob` 下载 submission 后检查头，`Invalid > 0` 显示红色告警（"提交文件有 N 条自相矛盾，请先修复/重跑"）；`Missing` / `Stale` 沿用原建议
+
+## 8. 落地页滚动叙事（2026-09-21，已实现，规格见 docs/LANDING_REDESIGN_PROMPT.md）
+
+首页 `/` 现在是"一张纸折成纸飞机、沿航线飞过 5 个场景"的滚动驱动页面（GSAP + Lenis + SVG，无 WebGL）。**只涉及前端文件**：`app/page.tsx`、`app/_components/scroll/`、`app/_components/landing/`、`app/globals.css`、`app/_components/marketing-nav.tsx`，没有碰任何 `logic/api/mcp`。
+
+- **演示保险开关（写进彩排手册）**：投影/演示机卡顿时，地址后加 `?motion=off`（如 `/?motion=off`）→ 变成普通竖排页面，内容一样、没有飞机和动画。系统开了"减少动态效果"、窄屏（<768px）也会自动走降级版本（窄屏保留右下角小飞机）。
+- **调飞行路线**：`/?debug=path` 会把飞机航线画成粉色虚线；航点在 `app/_components/scroll/flight-waypoints.ts`（视口比例坐标）。
+- **调场景时长**：`app/_components/scroll/scene-config.ts`（单位 vh，页面 CSS 高度和飞机时间线都读这一份，改一处即可）。
+- **主题**：滚动时页面 亮 → 黄昏 → 暗 → 亮，只在"访客没手动选过主题且系统是亮色"时生效；点右上角开关或系统是暗色，就整页固定该主题（手动选择永远优先）。
+- **文案**：所有落地页文案集中在 `app/_components/landing/content.ts`，场景只决定摆在哪，不改字。
+- **页面高度依赖 vh**：`.scene` 的高度 = (pin + 100)vh，改 `pin` 数值要和 `scene-config.ts` 同步（场景组件已直接读它）。

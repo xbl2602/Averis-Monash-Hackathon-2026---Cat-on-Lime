@@ -1,26 +1,18 @@
 import { Icon } from "../icon";
+import { REPORT } from "./content";
 
-// Illustrative sample: the "3 vs 4 containers" example from the use-case brief.
-const ROWS = [
-  { field: "Shipper", si: "Pacific Fine Paper Ltd", bl: "Pacific Fine Paper Ltd", ok: true },
-  { field: "Consignee", si: "Northwind Trading GmbH", bl: "Northwind Trading GmbH", ok: true },
-  { field: "Notify party", si: "Northwind Logistics", bl: "Northwind Logistics", ok: true },
-  { field: "Port of loading", si: "Singapore", bl: "SINGAPORE", ok: true },
-  { field: "Port of discharge", si: "Hamburg", bl: "Hamburg", ok: true },
-  { field: "Container count", si: "3", bl: "4", ok: false },
-  { field: "Gross weight (kg)", si: "22,000", bl: "22,000", ok: true },
-];
-
+/** The discrepancy report card (hero). The comparison scene builds its own animated version from the same REPORT data. */
 export function ReportPreview() {
   return (
     <div className="card overflow-hidden p-2 sm:p-3">
       <div className="flex items-center justify-between gap-3 px-3 pb-3 pt-2 sm:px-4">
         <div className="min-w-0">
-          <div className="eyebrow">Discrepancy report</div>
-          <div className="mt-1 truncate text-sm font-semibold">Please check draft BL for booking 4471</div>
+          <div className="eyebrow">{REPORT.eyebrow}</div>
+          <div className="mt-1 truncate text-sm font-semibold">{REPORT.subject}</div>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-bad-soft px-3 py-1 text-xs font-semibold text-bad">
-          <Icon name="alert" size={13} />1 mismatch
+          <Icon name="alert" size={13} />
+          {REPORT.badge}
         </span>
       </div>
 
@@ -35,7 +27,7 @@ export function ReportPreview() {
             </tr>
           </thead>
           <tbody>
-            {ROWS.map((r) => (
+            {REPORT.rows.map((r) => (
               <tr key={r.field} className={r.ok ? "border-t border-line" : "border-t border-line bg-bad-soft"}>
                 <td className="px-4 py-2.5 font-medium">{r.field}</td>
                 <td className="px-3 py-2.5 text-fg-muted">{r.si}</td>
@@ -57,9 +49,7 @@ export function ReportPreview() {
         <span>
           <strong className="text-bad">Flag:</strong> Container count — SI: 3 / BL: 4
         </span>
-        <span className="text-fg-faint">
-          Formatting differences like &ldquo;Singapore&rdquo; vs &ldquo;SINGAPORE&rdquo; are not flagged.
-        </span>
+        <span className="text-fg-faint">{REPORT.formattingNote}</span>
       </div>
     </div>
   );
