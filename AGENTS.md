@@ -7,7 +7,7 @@
 > - 两个文件只在同步说明块里各说明"自己是哪一个"，除此之外不得有任何内容差异。
 > - 原因：团队同时使用 Claude 体系和 Codex 体系两套工作流，两份规范一旦漂移，不同 AI 会读到互相矛盾的规则，协调直接失效。
 
-这份文件会被团队3人各自的 Claude Code（或其他遵循 CLAUDE.md 约定的 AI 编程工具）自动读取。它是**约束性执行规范**，不是背景介绍——下面每一条都要在写代码时真正遵守，不是"仅供参考"。人类看的分工/时间线手册在 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，开幕式题目详情在 [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md)，这些规则背后"当时为什么这么定"的记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)，数据该怎么在模块间流动的硬性规则见 [DATA_FLOW.md](docs/DATA_FLOW.md)（在 docs/ 目录下，写代码前也要看）。
+这份文件会被团队3人各自的 Claude Code（或其他遵循 CLAUDE.md 约定的 AI 编程工具）自动读取。它是**约束性执行规范**，不是背景介绍——下面每一条都要在写代码时真正遵守，不是"仅供参考"。人类看的分工/时间线手册在 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，开幕式题目详情在 [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md)，这些规则背后"当时为什么这么定"的记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)，每个判断点的选项/判定标准/模型输入契约见 [DECISION_SPEC.md](docs/DECISION_SPEC.md)，数据该怎么在模块间流动的硬性规则见 [DATA_FLOW.md](docs/DATA_FLOW.md)（在 docs/ 目录下，写代码前也要看）。
 
 背景：团队3人都没有编程背景，题目已于 2026-09-18 公布，提交截止 2026-09-22 12:00pm。
 

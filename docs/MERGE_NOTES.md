@@ -43,7 +43,7 @@ REST + MCP 都已上线**。新增能力清单：
 | 谁 | 必读文档 | 具体看哪几节 |
 |---|---|---|
 | 队友A（做配置页/上传页） | `SHARED_INTERFACES.md` | 「config 模块」「mail 模块」「import 模块」三节（接口路径、参数、返回格式） |
-| 队友A（做配置页/上传页） | `SHARED_INTERFACES.md` | 「写保护（所有第二阶段写接口共用）」小节——**GUI 写数据用 Server Action 或服务端注入 token，别让 token 进浏览器** |
+| 队友A（做配置页/上传页） | `SHARED_INTERFACES.md` | 「写保护（所有第二阶段写接口共用）」小节——**写入口推荐不做；要做就由操作者手动输入口令、服务端校验后带 token；禁止匿名可触发的自动注入** |
 | 队友A（做配置页/上传页） | `PHASE2_SPEC.md` | 第 1 节（安全模型：读开放/写口令）、第 2 节（加密方案）、第 8 节（验收清单） |
 | 队友B（README/演示材料） | `README.md` | "当前状态"里第二阶段条目（可直接引用） |
 | 队友B（README/演示材料） | `PHASE2_SPEC.md` | 第 8 节验收清单（哪些能力已验收、哪些是占位） |
@@ -52,7 +52,7 @@ REST + MCP 都已上线**。新增能力清单：
 **已经准备好、不需要你们做的**：
 - 4 张新表 + `uploads` bucket 已建好（RLS 已启用）；线上环境变量 `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已由后端配好（2026-09-20），**不用自己申请**
 - MCP tool 从 8 个 → **11 个**（新增 `sync_gmail`、`list_uploaded_documents`、`classify_uploaded_document`）；原主流水线（分类→抽取→比对）无变化，评测仍 520/520
-- 写接口需要管理员口令（存在 Vercel 环境变量里，GUI 走服务端自动带上）；手动 curl 测试需要口令时找操作者
+- 写接口需要管理员口令（存在 Vercel 环境变量里；GUI 推荐不做写入口，要做也必须由操作者手动输入口令，不允许匿名自动带 token）；手动 curl 测试需要口令时找操作者
 
 ## 合并了什么（前端）
 

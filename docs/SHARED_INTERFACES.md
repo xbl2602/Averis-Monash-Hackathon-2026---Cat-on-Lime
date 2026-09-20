@@ -316,7 +316,7 @@ REST 的 NextResponse 包装见 [`lib/shared/admin-guard.ts`](lib/shared/admin-g
 **写业务数据需要口令；LLM 调用结果缓存 `llm_call_cache` 会被匿名只读接口顺带写入**（缓存键含输入指纹，不能伪造他人结果）。
 
 **GUI 做写操作的两种允许路径**（token 不进浏览器）：
-1. Server Action / 服务端代码直接调本仓库的 logic 函数（如 `upsertConfig()`）——同一 app 内最省事，推荐
+1. Server Action / 服务端代码直接调本仓库的 logic 函数（如 `upsertConfig()`）——**调用前必须先完成口令校验**（如操作者手动输入、服务端用 `getWriteAccess` 校验通过，不允许因为"是页面内部调用"就跳过后门）；同一 app 内最省事，推荐
 2. 服务端 fetch REST 接口时注入 `process.env.ADMIN_TOKEN`——**仅在服务端已完成口令校验之后**（如操作者手动输入口令、服务端验证通过后的转发）
 
 **【禁止】** 创建"公网可触发、服务端自动注入 `ADMIN_TOKEN` 并转发写请求"的路由/代理/Server Action——那等于匿名可写库。
@@ -335,6 +335,7 @@ REST 的 NextResponse 包装见 [`lib/shared/admin-guard.ts`](lib/shared/admin-g
 | `GET /features/mail/api/supabase-projects` | 列出配置的项目（service_key 只回掩码） | 开放 |
 | `POST /features/mail/api/supabase-projects` | 新增/更新项目（service_key 加密存） | 需 token |
 | `POST /features/mail/api/supabase-projects/activate` | 切换启用项目（同一时间只有一个 `is_active`） | 需 token |
+| `POST /features/mail/api/supabase-projects/deactivate` | 停用当前启用项目（切换失败后的恢复通道） | 需 token |
 
 Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > 环境变量**——写库类代码请用
 [`lib/shared/supabase.ts`](lib/shared/supabase.ts) 的 `getSupabaseServiceClientAsync()`（每次现解析现建，

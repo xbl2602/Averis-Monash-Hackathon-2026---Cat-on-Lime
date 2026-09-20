@@ -22,13 +22,13 @@
 
 ### 建议尽快修（改动都很小）
 
-1. `lib/llm/jev.ts:132`：`response.json()` 在错误归一化 try 之外 → 超时/非法 JSON 会退化成 500；挪进 try（与分类/抽取其余调用口径一致）。
-2. `app/features/extraction/api/route.ts:65-69`：附件解析失败把解析器原文 `parsed.error` 回显给调用方 → 改为固定可读文案 + 服务端日志（与 MCP 侧统一）。
-3. `README.md:98`「dry_run / 匿名预览不写库、重跑才有完整体」与提交自检口径（:165 匿名重跑不累积）冲突 → 改成"写模式分批续跑才累积"。
-4. `README.md:80` 导出表：`submission` 导出只支持 json，表内补一句，避免评委传 md/txt 撞 400。
-5. `SHARED_INTERFACES.md` mail 节缺 `POST /features/mail/api/supabase-projects/deactivate`（路由已存在，是切换项目失败后的唯一退路）。
-6. `docs/PHASE2_SPEC.md:20` / `docs/MERGE_NOTES.md:46,55` 旧「服务端注入 token」措辞 → 与 SHARED_INTERFACES 统一为"仅在服务端校验口令后注入；禁止匿名可触发的自动注入转发"。
-7. `lib/shared/config-store.ts` 默认值展示仍含 claude（运行时默认已是 gemini）→ 展示对齐。
+1. ~~`lib/llm/jev.ts:132`：`response.json()` 在错误归一化 try 之外~~ **已修（2026-09-21）**：挪进 try，200 但响应体非法 JSON → `invalid_response`（502 归一化）。
+2. ~~`app/features/extraction/api/route.ts:65-69`：附件解析失败回显 `parsed.error` 原文~~ **已修（2026-09-21）**：REST 与 MCP 两侧都改为固定可读文案 + 服务端日志，不再透传解析器原文。
+3. `README.md:98`「dry_run / 匿名预览不写库、重跑才有完整体」与提交自检口径（:165 匿名重跑不累积）冲突 → 改成"写模式分批续跑才累积"。**已修（2026-09-21 文档一致性清理）**
+4. `README.md:80` 导出表：`submission` 导出只支持 json，表内补一句，避免评委传 md/txt 撞 400。**已修**
+5. `SHARED_INTERFACES.md` mail 节缺 `POST /features/mail/api/supabase-projects/deactivate`（路由已存在，是切换项目失败后的唯一退路）。**已修**
+6. `docs/PHASE2_SPEC.md:20` / `docs/MERGE_NOTES.md:46,55` 旧「服务端注入 token」措辞 → 与 SHARED_INTERFACES 统一为"仅在服务端校验口令后注入；禁止匿名可触发的自动注入转发"。**已修**
+7. `lib/shared/config-store.ts` 默认值展示仍含 claude（运行时默认已是 gemini）→ 展示对齐。**已修（同时同步 PHASE2_SPEC 默认值表）**
 
 ### 已接受 / 决赛再动
 

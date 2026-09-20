@@ -67,6 +67,8 @@ npm run evaluate -- --no-write  # 只算分，不写库
 ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最终提交文件。
 当前成绩（2026-09-20）：分类 macro-F1 100%、端到端 520/520、缺陷字段 100%/100%/100%。
 
+各判断点的选项与定义、程序/模型判定标准、模型输入（扁平化）契约，统一记录在 [DECISION_SPEC.md](docs/DECISION_SPEC.md)。
+
 ## REST API 与 MCP Server
 
 查询/统计/冲突对/导出（`app/features/results/`，只读）统一从这里访问，接口格式见
@@ -77,7 +79,7 @@ ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最�
 | `/features/results/api` | 按分类/状态/处理情况查结果列表（含未处理邮件），支持排序、分组、分页 |
 | `/features/results/api/stats` | 总数 / 已处理 / 未处理 / 失败 / 分类分布 / 状态分布 / 差异字段频次 |
 | `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致 + 需要人工确认），带两边字段值 |
-| `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt`；完整性看响应头 `X-Export-Incomplete` / `X-Export-Expected-Source`（submission 场景） |
+| `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt`（`scope=submission` 仅支持 json）；完整性看响应头 `X-Export-Incomplete` / `X-Export-Expected-Source`（submission 场景） |
 
 整箱批量入口（`POST /features/pipeline/api`，会写结果表）：
 不传参数 = 全量增量跑（跳过没变的），`limit` 控制单次几封，`dry_run: true` 只算不写：
@@ -95,7 +97,7 @@ curl -X POST http://localhost:3000/features/pipeline/api \
   -d '{"email_ids":["email_004","email_059"],"dry_run":false}'
 ```
 
-响应里的 `remaining` = 还没跑完的数量；`stopped_by_deadline=true` 表示这一轮被 30s deadline 截断，再调一次即可（写模式会跳过已经算好的）。**dry_run / 匿名预览不写库、重跑才有完整体**（模型结果走 `llm_call_cache` 复用）。
+响应里的 `remaining` = 还没跑完的数量；`stopped_by_deadline=true` 表示这一轮被 30s deadline 截断，再调一次即可（写模式会跳过已经算好的）。**dry_run / 匿名预览不写库、每次只预览前 20 封；要攒齐完整体必须用写模式（带口令）分批续跑**（模型结果走 `llm_call_cache` 复用）。
 
 单文档接口（分类/抽取/比对）GET 同一地址可以看用法，POST 示例：
 

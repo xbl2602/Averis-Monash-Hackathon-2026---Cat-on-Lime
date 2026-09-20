@@ -62,9 +62,9 @@ function isPlaintextKey(key: string): boolean {
 
 /** 代码默认值：数据库/env 都没有时界面显示"未配置"或默认 */
 export const CONFIG_DEFAULTS: Record<string, unknown> = {
-  "llm.provider_priority": ["rules", "jev", "claude"],
+  "llm.provider_priority": ["rules", "jev", "gemini"],
   "llm.jev.confidence_threshold": 0.85,
-  "llm.default_provider": "claude",
+  "llm.default_provider": "gemini",
   "pipeline.concurrency": 4,
   "pipeline.batch_limit": 50,
   "storage.upload_max_file_mb": 20,

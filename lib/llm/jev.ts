@@ -129,7 +129,16 @@ export async function callJev(
     });
   }
 
-  return (await response.json()) as JevResponse;
+  try {
+    return (await response.json()) as JevResponse;
+  } catch (err) {
+    // 200 但响应体不是合法 JSON（网关错误页/响应截断等）：与其它上游故障同样归一化，
+    // 原始信息只进服务端日志，不拼进 message、不返回给调用方
+    console.warn(
+      `[jev] 响应体不是合法 JSON（原始信息只进服务端日志）：${err instanceof Error ? err.message : String(err)}`
+    );
+    throw new UpstreamServiceError({ provider: "jev", status: 502, code: "invalid_response" });
+  }
 }
 
 // 给 UpstreamServiceError 用的稳定短代码（可安全回给客户端的部分）

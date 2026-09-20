@@ -17,7 +17,7 @@
 - 读接口：完全开放（和现有演示一致，裁判可自由查看）
 - 写接口（PUT/POST/DELETE）：需要请求头 `x-admin-token: <ADMIN_TOKEN>`。
   - 服务端在 `ADMIN_TOKEN` 未配置时**拒绝所有写操作**并返回可读错误（安全默认）
-  - GUI 由服务端页面渲染时注入（token 不出现在浏览器）
+  - GUI 的写操作：**推荐不做写入口**；若做，必须由操作者手动输入口令、经服务端校验后再放入 `x-admin-token`（见 SHARED_INTERFACES「写保护」）——**禁止**服务端对匿名可触发的请求自动注入 token
 - 敏感字段（API key、OAuth token、Supabase service key）：
   - 存储：AES-256-GCM 加密（见第 2 节）
   - 回显：只回掩码 `sk-ant-…f3a2` 和 `has_value: true`，**永不回明文**
@@ -50,9 +50,9 @@
 
 | key | 值示例 | 说明 |
 |---|---|---|
-| `llm.provider_priority` | `["rules","jev","claude"]` | 分类/比对引擎优先级链 |
+| `llm.provider_priority` | `["rules","jev","gemini"]` | 分类/比对引擎优先级链（展示项，运行时见 DECISION_SPEC） |
 | `llm.jev.confidence_threshold` | `0.85` | Jev 置信度低于此值触发人工介入 |
-| `llm.default_provider` | `"claude"` | 兜底文本模型 |
+| `llm.default_provider` | `"gemini"` | 兜底文本模型（运行时默认同为 gemini） |
 | `llm.anthropic_api_key` | 密文 | 对应 ANTHROPIC_API_KEY |
 | `llm.openai_api_key` | 密文 | 对应 OPENAI_API_KEY |
 | `llm.deepseek_api_key` | 密文 | 对应 DEEPSEEK_API_KEY |
@@ -81,7 +81,7 @@ POST /features/config/api/test                  测试连接：{ target: "claude
 ```json
 {
   "items": [
-    { "key": "llm.default_provider", "category": "llm", "value": "claude", "is_secret": false, "source": "db", "updated_at": "..." },
+    { "key": "llm.default_provider", "category": "llm", "value": "gemini", "is_secret": false, "source": "db", "updated_at": "..." },
     { "key": "llm.anthropic_api_key", "category": "llm", "value": "sk-ant-…f3a2", "is_secret": true, "has_value": true, "source": "env", "updated_at": null }
   ]
 }

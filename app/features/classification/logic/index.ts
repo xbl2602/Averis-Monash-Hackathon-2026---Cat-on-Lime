@@ -70,7 +70,7 @@ export async function classifyEmail(
 
 /**
  * 混合分类（流水线默认）：高精度规则 → 拿不准交给 Jev → 没有 Jev 时文本 LLM 兜底。
- * 规则在样例数据上 518/520 直接判对，只剩 2 封需要 Jev。
+ * 2026-09-20 全量强制重跑实测：520 封样例全部由规则直接判定（rules=520），Jev 只兜底规则判不了的新邮件。
  */
 export async function classifyEmailHybrid(
   input: ClassifyEmailInput
@@ -89,6 +89,21 @@ export async function classifyEmailHybrid(
   return { ...llm, engine: "llm" };
 }
 
+/**
+ * 模型输入的扁平化契约（见 docs/DECISION_SPEC.md §2.3/§2.4/§6）：
+ * 发给 Jev / 文本 LLM 的只有这 3 个单层字符串字段；
+ * 整个邮件对象、附件清单、元数据一律不出现在模型输入里。
+ */
+type FlatEmailInput = {
+  from: string;
+  subject: string;
+  body: string;
+};
+
+function buildFlatEmailInput(email: InboxEmail): FlatEmailInput {
+  return { from: email.from, subject: email.subject, body: email.body };
+}
+
 async function classifyWithJev(email: InboxEmail): Promise<ClassifyEmailResult> {
   const questions: Record<string, JevQuestion> = {
     category: {
@@ -97,7 +112,7 @@ async function classifyWithJev(email: InboxEmail): Promise<ClassifyEmailResult> 
       criteria: CATEGORY_DEFINITIONS,
     },
   };
-  const state = { from: email.from, subject: email.subject, body: email.body };
+  const state = buildFlatEmailInput(email);
 
   const { value } = await callWithCache({
     purpose: "classification",
@@ -126,6 +141,7 @@ async function classifyWithTextLLM(
   const definitions = CATEGORIES.map(
     (c) => `- ${c}: ${CATEGORY_DEFINITIONS[c]}`
   ).join("\n");
+  const flat = buildFlatEmailInput(email);
 
   const prompt = `请判断下面这封航运邮件属于哪一类，只回答类别代号本身，不要解释、不要加标点或其它文字。
 
@@ -133,10 +149,10 @@ async function classifyWithTextLLM(
 ${definitions}
 
 邮件：
-From: ${email.from}
-Subject: ${email.subject}
+From: ${flat.from}
+Subject: ${flat.subject}
 Body:
-${email.body}`;
+${flat.body}`;
 
   const { value: text } = await callWithCache({
     purpose: "classification_llm",

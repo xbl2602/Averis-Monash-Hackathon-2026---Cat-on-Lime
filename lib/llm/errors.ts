@@ -19,7 +19,7 @@ export interface UpstreamServiceErrorInfo {
   provider: string;
   /** 上游 HTTP 状态码；本地超时统一用 504 */
   status: number;
-  /** 稳定短代码：rate_limited / unauthorized / invalid_request / overloaded / timeout / network_error / http_error */
+  /** 稳定短代码：rate_limited / unauthorized / invalid_request / overloaded / timeout / network_error / invalid_response / http_error */
   code: string;
 }
 

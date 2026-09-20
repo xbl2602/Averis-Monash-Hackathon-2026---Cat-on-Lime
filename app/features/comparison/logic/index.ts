@@ -85,11 +85,7 @@ export async function compareDocumentsHybrid(input: {
     return buildResult(defect_fields, "rules");
   }
 
-  const state = textCandidates.map((field) => ({
-    field,
-    si_value: si[field],
-    bl_value: bl[field],
-  }));
+  const state = buildFlatFieldPairs(textCandidates, si, bl);
   const questions: Record<string, JevQuestion> = {};
   for (const field of textCandidates) {
     questions[field] = {
@@ -184,11 +180,7 @@ async function compareWithJev(
     };
   }
 
-  const state = comparableFields.map((field) => ({
-    field,
-    si_value: si[field] ?? null,
-    bl_value: bl[field] ?? null,
-  }));
+  const state = buildFlatFieldPairs(comparableFields, si, bl);
 
   const { value } = await callWithCache({
     purpose: "field_equivalence",
@@ -212,6 +204,29 @@ async function compareWithJev(
     has_defect: defect_fields.length > 0,
     review_reason: null,
   };
+}
+
+/**
+ * 模型输入的扁平化契约（见 docs/DECISION_SPEC.md §4.2/§6）：
+ * 发给 Jev 的只有"字段名 + SI 原值 + BL 原值"的单层数组；
+ * 不发整份单据对象、不发解析文本、不发规范化后的值。
+ */
+interface FlatFieldPair {
+  field: ComparedField;
+  si_value: string | null;
+  bl_value: string | null;
+}
+
+function buildFlatFieldPairs(
+  fields: ComparedField[],
+  si: ExtractedDocumentFields,
+  bl: ExtractedDocumentFields
+): FlatFieldPair[] {
+  return fields.map((field) => ({
+    field,
+    si_value: si[field] ?? null,
+    bl_value: bl[field] ?? null,
+  }));
 }
 
 function hasValue(value: string | undefined): boolean {

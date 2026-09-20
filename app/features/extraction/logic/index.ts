@@ -45,6 +45,11 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
   };
 }
 
+/**
+ * 模型输入的扁平化契约（见 docs/DECISION_SPEC.md §3.3/§6）：
+ * 只发 documentType（SI/BL）+ 单一纯文本文档内容；
+ * 文件名、附件路径、解析元数据一律不进模型输入。
+ */
 async function tryLlmExtraction(
   input: ExtractFieldsInput
 ): Promise<ExtractedDocumentFields | null> {

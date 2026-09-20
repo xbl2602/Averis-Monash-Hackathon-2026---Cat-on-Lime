@@ -63,8 +63,12 @@ export async function POST(req: NextRequest) {
   try {
     const parsed = await readSampleAttachmentParsed(body.attachment_path);
     if (parsed.status !== "ok") {
+      // 解析器原文只进服务端日志，不回传给调用方（错误文案可读但不透传上游/内部原文）
+      console.warn(
+        `[extraction] 附件 ${body.attachment_path} 解析失败（原始信息只进服务端日志）：${parsed.error ?? "未知原因"}`
+      );
       return NextResponse.json(
-        { error: `附件 ${body.attachment_path} 读不出文字（${parsed.error ?? "未知原因"}）` },
+        { error: `附件 ${body.attachment_path} 读不出文字（可能是扫描件或损坏文件），无法抽取字段` },
         { status: 422 }
       );
     }

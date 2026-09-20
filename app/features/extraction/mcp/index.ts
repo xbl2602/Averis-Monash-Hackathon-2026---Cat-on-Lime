@@ -37,9 +37,11 @@ export const extractionMcpTool = {
     // 按文件格式解析（PDF/xlsx/docx 不能按 UTF-8 直接读，那样只有乱码）
     const parsed = await readSampleAttachmentParsed(attachment_path);
     if (parsed.status !== "ok") {
-      throw new Error(
-        `附件 ${attachment_path} 读不出文字（${parsed.error ?? "未知原因"}），无法抽取字段`
+      // 解析器原文只进服务端日志，不回传给 MCP 调用方（与 REST 侧同口径）
+      console.warn(
+        `[extraction] 附件 ${attachment_path} 解析失败（原始信息只进服务端日志）：${parsed.error ?? "未知原因"}`
       );
+      throw new Error(`附件 ${attachment_path} 读不出文字（可能是扫描件或损坏文件），无法抽取字段`);
     }
     return extractFields({ documentText: parsed.text, documentType, provider });
   },
