@@ -1,13 +1,22 @@
 /**
  * 导出的唯一编排入口：按 scope 取数 → 按 format 序列化 → 返回文件内容。
  * HTTP 层只负责把 ExportDocument 变成带下载头的响应；MCP 层只负责把 content
- * 作为 text 返回（文件名放在 _meta），两边都不重新拼内容。
+ * 作为 text 返回（文件名/完整性元信息放在 _meta），两边都不重新拼内容。
+ *
+ * 完整性判定（2026-09-20 安全评审的 fail-closed 口径）：
+ * - 分母优先锚定"官方样例清单"（listSampleEmailIds，只 readdir、不解析 JSON）；
+ *   读不到清单时降级用数据库总数，并强制 incomplete=true（expectedSource=db-fallback）
+ * - 逐 key 求缺失集合；logic_version 与当前引擎版本不一致的结果行计入 stale
+ * - 注意：这里**直接**从 @/lib/shared/inbox / versions 取数，不经过 sample-inputs，
+ *   避免把附件解析依赖（mammoth/pdf-parse 等）拖进导出函数包（next.config 只带文件名清单）
  */
+import { listSampleEmailIds } from "@/lib/shared/inbox";
+import { PIPELINE_LOGIC_VERSION } from "@/lib/shared/versions";
 import type { ComparedField, EmailVerificationResult } from "@/lib/shared/types";
 import { listAllConflicts } from "../conflicts";
 import { listAllResults } from "../query";
 import { getStats } from "../stats";
-import type { ExportDocument, ExportFormat, ExportRequest, ResultQuery } from "../types";
+import type { ExportDocument, ExportFormat, ExportRequest, ResultQuery, StatsSummary } from "../types";
 import { toJson } from "./json";
 import { buildMarkdownReport } from "./markdown";
 import {
@@ -33,7 +42,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
   const stats = await getStats();
 
   if (request.scope === "submission") {
-    return buildSubmissionDocument(stats.total_emails, stats.failed, generatedAt);
+    return buildSubmissionDocument(stats, stats.failed, generatedAt);
   }
 
   const results = request.scope === "results" ? await listAllResults(request.query) : [];
@@ -64,6 +73,9 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
     scope: request.scope,
     itemCount,
     expectedTotal: null,
+    expectedSource: null,
+    missingIds: [],
+    staleIds: [],
     incomplete: false,
     content: serialize(request.format, data),
     generatedAt,
@@ -72,7 +84,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
 
 /** 官方提交格式：{ email_id: EmailVerificationResult }，不带任何包装字段 */
 async function buildSubmissionDocument(
-  expectedTotal: number,
+  stats: StatsSummary,
   failedCount: number,
   generatedAt: string
 ): Promise<ExportDocument> {
@@ -91,6 +103,27 @@ async function buildSubmissionDocument(
   }
 
   const itemCount = Object.keys(payload).length;
+  const expected = await resolveExpectedSampleIds(stats);
+
+  const present = new Set(Object.keys(payload));
+  const missingIds =
+    expected.source === "sample" ? expected.ids.filter((id) => !present.has(id)) : [];
+  // 只有"有合法结果"的行才算 stale：pending 行（没结果）算缺失、failed 行由 failedCount 覆盖
+  const staleIds = rows
+    .filter(
+      (row) =>
+        row.category !== null &&
+        row.comparison_status !== null &&
+        row.logic_version !== PIPELINE_LOGIC_VERSION
+    )
+    .map((row) => row.email_id);
+
+  const incomplete =
+    expected.source !== "sample" ||
+    itemCount !== expected.total ||
+    missingIds.length > 0 ||
+    staleIds.length > 0 ||
+    failedCount > 0;
 
   return {
     filename: "submission.json",
@@ -98,11 +131,37 @@ async function buildSubmissionDocument(
     format: "json",
     scope: "submission",
     itemCount,
-    expectedTotal,
-    incomplete: itemCount < expectedTotal || failedCount > 0,
+    expectedTotal: expected.total,
+    expectedSource: expected.source,
+    missingIds,
+    staleIds,
+    incomplete,
     content: toJson(payload),
     generatedAt,
   };
+}
+
+interface ExpectedSampleIds {
+  source: "sample" | "db-fallback";
+  total: number;
+  ids: string[];
+}
+
+/** 分母锚定官方样例清单；清单读不到/为空时降级数据库总数（fail-closed，见文件头注释） */
+async function resolveExpectedSampleIds(stats: StatsSummary): Promise<ExpectedSampleIds> {
+  try {
+    const ids = await listSampleEmailIds();
+    if (ids.length > 0) {
+      return { source: "sample", total: ids.length, ids };
+    }
+    console.warn("[results/export] 样例清单为空，降级用数据库总数（incomplete 强制为 true）");
+  } catch (err) {
+    console.warn(
+      "[results/export] 读取样例清单失败，降级用数据库总数（incomplete 强制为 true）：",
+      err instanceof Error ? err.message : err
+    );
+  }
+  return { source: "db-fallback", total: stats.total_emails, ids: [] };
 }
 
 function serialize(format: ExportFormat, data: ReportData): string {

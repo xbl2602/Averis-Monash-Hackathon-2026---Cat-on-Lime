@@ -7,14 +7,14 @@
 > - 两个文件只在同步说明块里各说明"自己是哪一个"，除此之外不得有任何内容差异。
 > - 原因：团队同时使用 Claude 体系和 Codex 体系两套工作流，两份规范一旦漂移，不同 AI 会读到互相矛盾的规则，协调直接失效。
 
-这份文件会被团队3人各自的 Claude Code（或其他遵循 CLAUDE.md 约定的 AI 编程工具）自动读取。它是**约束性执行规范**，不是背景介绍——下面每一条都要在写代码时真正遵守，不是"仅供参考"。人类看的分工/时间线手册在 [TEAM_HANDBOOK.md](TEAM_HANDBOOK.md)，开幕式题目详情在 [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md)，这些规则背后"当时为什么这么定"的记录见 [DECISION_LOG.md](DECISION_LOG.md)，数据该怎么在模块间流动的硬性规则见 [DATA_FLOW.md](DATA_FLOW.md)（跟本文件同级，写代码前也要看）。
+这份文件会被团队3人各自的 Claude Code（或其他遵循 CLAUDE.md 约定的 AI 编程工具）自动读取。它是**约束性执行规范**，不是背景介绍——下面每一条都要在写代码时真正遵守，不是"仅供参考"。人类看的分工/时间线手册在 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，开幕式题目详情在 [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md)，这些规则背后"当时为什么这么定"的记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)，数据该怎么在模块间流动的硬性规则见 [DATA_FLOW.md](docs/DATA_FLOW.md)（在 docs/ 目录下，写代码前也要看）。
 
 背景：团队3人都没有编程背景，题目已于 2026-09-18 公布，提交截止 2026-09-22 12:00pm。
 
 ## 项目状态
 
-- **题目（已确认）**：航运单证核验（Shipping Documents Verification）。系统要做到：① 分类邮件（SI/BL确认/发票询问/垃圾邮件）② 从正文/附件抽取字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI，标出差异 ④ 拿不准时提示需要人工介入。完整背景见 OPENING_CEREMONY_NOTES.md。
-- **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
+- **题目（已确认）**：航运单证核验（Shipping Documents Verification）。系统要做到：① 分类邮件（SI/BL确认/发票询问/垃圾邮件）② 从正文/附件抽取字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI，标出差异 ④ 拿不准时提示需要人工介入。完整背景见 docs/OPENING_CEREMONY_NOTES.md。
+- **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 docs/TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
 - **功能模块划分**：`classification` / `extraction` / `comparison` 三个 feature，各自负责人见文末"各功能模块负责人"。
 - **正式 Vercel 项目是 `hackathonaveris`，不是 `hackathon-demo`**：账号下一度同时存在两个 Vercel 项目——`hackathon-demo`（最早建的，没连 GitHub，不会自动更新，已停用，不用管它）和 `hackathonaveris`（正确连了 GitHub 仓库 `xbl2602/Hackathon` 的 `main` 分支，`git push` 会自动触发重新部署）。**以 `hackathonaveris` 为准**。线上demo地址：`https://hackathonaveris.vercel.app`，SSO保护默认关闭，不登录也能直接打开。
 - **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**线上验收（2026-09-20）**：云端 MCP 握手、结果查询/导出、Jev 分类、Gemini 分类都已实测可用。**还没填**：`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`（云端选这几个 provider 会报缺 key 的可读错误，选 Jev/Gemini 可用）——这几个是私密key，需要团队自己去申请，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key；`SUPABASE_SERVICE_ROLE_KEY` 线上批量写结果也要用（已配置并实测 `run_batch` 写库成功，本地导入/评测也用它）。
@@ -71,7 +71,7 @@
 - **DeepSeek 和 LM Studio 的本地服务都兼容 OpenAI 的接口协议**——不需要为它们单独写 provider，直接复用 OpenAI 兼容的调用方式，只是把 `baseURL` 和 `apiKey` 换成指向 DeepSeek 的地址 / 本地 LM Studio 的地址（LM Studio 默认在 `http://localhost:1234/v1` 起一个 OpenAI 兼容的本地服务）
 - 所有 LLM 调用统一走 `/lib/llm/` 这一层适配代码，各 feature 模块的 `logic/` 只调用这一层暴露出来的统一函数（比如 `callLLM(provider, prompt, options)`），不要在 feature 模块内部直接 import 某个具体 LLM 的 SDK
 - 界面/配置上只需要能"选择这次用哪个 provider"（环境变量或一个简单下拉框都行），不需要做智能路由、自动选性价比最优模型这类额外功能
-- **验收标准**：Claude 这一路必须稳定可用（作为 demo 兜底），其余4个 provider 只要求"能选、能切换、基本能跑通一次调用"，不要求每个都单独调优 prompt
+- **验收标准**：Gemini 这一路必须稳定可用（作为 demo 兜底），其余4个 provider 只要求"能选、能切换、基本能跑通一次调用"，不要求每个都单独调优 prompt
 
 ## 架构约束："一切皆插件"（模块隔离 + 多语言）
 
@@ -102,7 +102,7 @@
 /lib
   /shared              <- 真正需要跨模块共享的类型/工具函数，数量要尽量少
   /llm                 <- 多LLM统一适配层（见上面"多LLM支持"），所有模块通过这里调用LLM
-SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在这里
+docs/SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在这里
 ```
 
 **文件夹按"这是什么功能"命名，不按"归谁改"命名**——谁负责哪个模块记在下面"各功能模块负责人"里，这样以后重新分工也不用改文件夹名字。
@@ -110,7 +110,7 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 给 AI 的具体规则：
 
 1. **新功能 = 新建一个 `/app/features/<feature-name>/` 文件夹**，不要把新功能的代码散落插进已有的其他 feature 文件夹里
-2. **不要 import 其他 feature 文件夹内部的实现细节**（比如别人模块里的某个内部组件/内部函数）。如果确实需要用到别人模块提供的能力，先看 `SHARED_INTERFACES.md` 里有没有约定好的接口；没有的话，先提议在这个文件里加一条接口约定，而不是直接深入别人代码里拿东西
+2. **不要 import 其他 feature 文件夹内部的实现细节**（比如别人模块里的某个内部组件/内部函数）。如果确实需要用到别人模块提供的能力，先看 `docs/SHARED_INTERFACES.md` 里有没有约定好的接口；没有的话，先提议在这个文件里加一条接口约定，而不是直接深入别人代码里拿东西
 3. **`/app/core`、`/lib/shared`、`/lib/llm` 是所有人共用的"公共区"，改动前必须先跟操作者确认**，因为改错了会影响其他两人的模块
 4. 决赛阶段加新功能时，优先考虑"再加一个 feature 文件夹"，而不是大改已有 feature 的内部结构——这样能保住"决赛是初赛的延伸"这条规则要求的连续性
 5. 这是**轻量的文件夹隔离约定**，不是要做一个真正运行时动态加载/卸载的插件系统——不要主动去实现插件注册中心、动态 import、插件生命周期管理这类基础设施，那对4天零经验的场景是不必要的额外复杂度和出错点
@@ -131,7 +131,7 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 具体要求：
 
 1. **禁止在服务器代码里用"模块级可变变量"存状态**（比如在 `api/`、`mcp/`、`logic/` 的文件顶层定义一个会被多次请求共同读写的变量，当成缓存、计数器、临时存储用）。Vercel 这类无服务器平台，同一个项目随时可能有多个实例同时处理不同请求，模块顶层的变量不是"全项目共享一份"，靠它记录状态在并发下会读到脏数据或互相覆盖。**该有状态的地方只有两处**：一是每次请求内部的局部变量（用完即丢，天然安全），二是 Supabase 数据库（多个请求间真正需要共享、需要持久化的状态，必须落库，不能放内存里）。
-2. **批量处理（比如一次性把 `data/sample/` 里所有邮件跑一遍分类→抽取→比对）必须用"有上限的并发"，不能挑两个极端**：一个个排队做（几十封邮件跑下来太慢，demo体验差），或者一次性把所有邮件全部同时发出去调用LLM（容易触发 LLM API 的限流报错，也可能把 Supabase 的连接数打满）。要控制"同时最多处理几封"（比如同时处理3~5封），处理完一封再补一封上来。项目里已经提供了 `lib/shared/concurrency.ts` 的 `mapWithConcurrencyLimit` 工具函数，以后写批量处理的地方（比如 `lib/shared/pipeline.ts`，见 DATA_FLOW.md）应该直接用它，不要自己重新发明一套并发控制。
+2. **批量处理（比如一次性把 `data/sample/` 里所有邮件跑一遍分类→抽取→比对）必须用"有上限的并发"，不能挑两个极端**：一个个排队做（几十封邮件跑下来太慢，demo体验差），或者一次性把所有邮件全部同时发出去调用LLM（容易触发 LLM API 的限流报错，也可能把 Supabase 的连接数打满）。要控制"同时最多处理几封"（比如同时处理3~5封），处理完一封再补一封上来。项目里已经提供了 `lib/shared/concurrency.ts` 的 `mapWithConcurrencyLimit` 工具函数，以后写批量处理的地方（比如 `lib/shared/pipeline.ts`，见 docs/DATA_FLOW.md）应该直接用它，不要自己重新发明一套并发控制。
 3. **批量处理时，单条数据失败不能拖垮整批**：处理一批邮件时，其中一封因为LLM报错/文档解析失败而出错，不应该导致整批处理全部中断、什么结果都拿不到。要单独隔离每一条的失败（每条都有自己的 try/catch，出错记下这条的错误信息，其他条继续跑），最后能看到"这几条成功、这几条失败、失败原因是什么"，这也是"代码质量红线"里错误处理要求的延伸。
 4. **以后往 Supabase 写数据（比如保存比对结果、人工确认/复核记录），要用"upsert"（有就更新、没有就插入），不能用"先查一下这条存不存在、不存在再insert"这种先读后写的模式**——这种模式在两个请求几乎同时发生时（比如同一封邮件被处理了两次，或者两个人同时点了"重新生成结果"），会因为"读的时候还没有、都决定插入"而变成插入两条重复数据，或者互相踩踏。做法：给这类表一个能唯一确定"这是同一条数据"的字段（比如邮件相关的表用 `email_id` 做唯一约束），写入时统一用 Supabase 的 `upsert`，交给数据库保证唯一性，不要在代码这一层自己判断"存不存在"。
 5. **涉及"人工可以修改/复核系统结果"的数据（比如 comparison 模块以后要做的人工确认功能），表里要留一个 `updated_at` 字段**：如果两个人几乎同时打开同一条记录去修改，后保存的人不应该"悄悄地"把前一个人的修改完全覆盖掉而没人发现——现在不需要做一套完整的"冲突检测/合并"机制（对4天的demo来说是过度设计），但至少要留好这个字段，以后简单加一句"保存前比一下 `updated_at` 有没有变过，变过就提示'这条记录被别人改过，要不要覆盖'"就能做基本的冲突提示，不留这个字段以后就没法做。
@@ -150,7 +150,7 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 
 **遇到 bug 应该怎么做**：
 1. 先搞清楚报错/异常行为的**真正原因**——是哪个函数、哪一步的输入或逻辑不对，而不是只看报错发生的那一行
-2. 修复**产生问题的根源**，如果根源在别的模块或者上游数据结构上，要指出来，需要的话去改 `SHARED_INTERFACES.md` 里的约定，而不是在自己这一层硬吃掉别人传过来的错误数据
+2. 修复**产生问题的根源**，如果根源在别的模块或者上游数据结构上，要指出来，需要的话去改 `docs/SHARED_INTERFACES.md` 里的约定，而不是在自己这一层硬吃掉别人传过来的错误数据
 3. 修完之后，**用大白话跟操作者解释：bug 的根本原因是什么、这次是怎么修的**——操作者要能听懂"为什么会坏"而不只是"现在不报错了"
 4. 如果暂时定位不到根本原因，**如实告诉操作者"目前只能先绕过、没有根治"**，不要不声不响地打个补丁然后说"修好了"
 
@@ -159,7 +159,7 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 1. **业务功能优先用最简单、能跑通的方案，不要为"以后可能用到"的假设性需求预先设计接口。** 但代码结构本身要遵守上面"代码质量红线"，操作者没有编程背景，混乱的代码没人能维护或debug。
 2. **改动尽量小、尽量能独立运行**，方便操作者频繁 commit/push。不要一次性生成一大坨还没验证过的代码。
 3. **开始改动前，先用一句话说明打算改哪些文件/目录**，再动手。团队有3个人同时在跑各自的 AI session，改动范围要清楚，减少和其他人分支的冲突。
-4. **涉及会被其他模块依赖的东西（共享的数据结构、API 返回格式、环境变量名、LLM调用接口）**，先在 `SHARED_INTERFACES.md`（如果还没有就创建一个）里写清楚，再改。这样即使操作者自己看不懂细节，其他人的 AI 至少能读到接口约定。
+4. **涉及会被其他模块依赖的东西（共享的数据结构、API 返回格式、环境变量名、LLM调用接口）**，先在 `docs/SHARED_INTERFACES.md`（如果还没有就创建一个）里写清楚，再改。这样即使操作者自己看不懂细节，其他人的 AI 至少能读到接口约定。
 5. **commit message 用简单直白的话说明做了什么**，不需要遵循 Conventional Commits 之类的规范。
 6. **不确定题目要求或产品方向时，直接问操作者**，不要替对方猜测着做决定。
 7. 每完成一个可运行的小功能，提醒操作者可以 push 了，方便队友的 AI 在集成时读到最新代码。
@@ -182,7 +182,7 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 
 ## 时间不够时的优先级（如果发现3.5天做不完全部要求，从下往上砍，不要砍上面的）
 
-1. **核心三步流水线**（分类→抽取→比对）用 Claude 跑通——这是"Working Core Prototype"25分的来源，绝对不能砍
+1. **核心三步流水线**（分类→抽取→比对）用 Gemini 跑通——这是"Working Core Prototype"25分的来源，绝对不能砍
 2. Web UI 响应式可用
 3. REST API（哪怕只覆盖三个模块里最关键的那个）
 4. MCP Server（哪怕只暴露一两个 tool）
@@ -199,5 +199,9 @@ SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在�
 
 这个分工方式跟已经定好的 `logic/api/mcp/ui` 分层架构天然契合：操作者只改 `logic/api/mcp`，队友A只改 `ui/`，两人几乎不会碰到同一个文件，冲突概率比"按模块分"更低。**给AI的提醒**：
 
-1. `app/features/*/ui/` 调用同模块的 `api/` 时，返回的数据格式要跟 `SHARED_INTERFACES.md` 里写的一致——这是操作者和队友A之间唯一需要对齐的"接口"，操作者这边改了 `api/` 返回格式，要记得同步更新 `SHARED_INTERFACES.md`，队友A的AI才知道要跟着调整
+1. `app/features/*/ui/` 调用同模块的 `api/` 时，返回的数据格式要跟 `docs/SHARED_INTERFACES.md` 里写的一致——这是操作者和队友A之间唯一需要对齐的"接口"，操作者这边改了 `api/` 返回格式，要记得同步更新 `docs/SHARED_INTERFACES.md`，队友A的AI才知道要跟着调整
 2. `README.md` 目前由队友B主笔（叙述性内容、演示相关），但涉及"怎么装依赖""环境变量填什么""部署步骤"这类会随后端改动而变的技术细节，操作者这边改了以后应该主动同步更新，不要指望队友B自己猜对最新状态
+
+## 评审沉淀（/council 2026-09-21）
+
+- ① MCP 新增写 tool 必须显式声明 `readOnlyHint:false`（MCP 入口对未声明注解的 tool 按"需要口令"fail-closed 处理）；② 实现与已批方案有偏差（如分块粒度、默认引擎）必须显式登记并同步验证清单；③ 外部调用的错误文案要可读但不透传上游原文；④ 提交文件完整性（submission 导出）的分母必须来自独立可信来源（官方样例清单），不能用自己的数据当分母

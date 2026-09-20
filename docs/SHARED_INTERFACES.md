@@ -34,9 +34,10 @@ interface ClassifyEmailResult {
 
 ## 用哪个模型（provider）
 
-三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`，缺省 `claude`。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
+三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`。缺省行为（2026-09-20 起）：分类 = 混合引擎（规则 → Jev → Gemini 文本兜底），抽取 = 规则优先、缺字段才用 Gemini 兜底，比对 = 规范化精确比较（不调用模型）。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
 
-- `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；误用时 `callLLM("jev", ...)` 会抛出可读的错误。
+- `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；extraction 的 REST/MCP 只接受文本 provider（`lib/llm` 的 `TEXT_PROVIDER_IDS`，明确排除 jev），显式传 jev 会得到可读的 400/参数错误。
+- 不传 provider 的分类接口保持 `{ category, confidence, needs_review }` 三字段契约不变（混合引擎的 `engine` 字段不外露）。
 - 该参数只在 `api` / `mcp` 层解析、传给 `logic`；`logic` 里的函数签名是 `{ ..., provider?: LLMProvider }`，默认值由 logic 自己兜底，UI 不传也能正常工作。
 
 ## extraction 模块的输出
@@ -121,8 +122,8 @@ interface EmailVerificationResult {
 
 约定：
 
-- 写入一律 **upsert**（不要"先查存不存在再插"）；`updated_at` 由数据库触发器自动刷新，写入方不用手动设置
-- 权限：前三张表"所有人可读（RLS 只开放 select）、只有 service role 能写"；`llm_call_cache` 完全对外关闭（只有 service role 能读写）
+- 写入一律 **upsert**（不要"先查存不存在再插"）。`updated_at` 的实际约定（2026-09-20 核对）：**写入方显式设置**——`scripts/phase2-schema.sql` 里各表只有 `default now()`、没有触发器，插入时生效、update 不会自动刷新；`verification_results.updated_at` 的刷新机制未在本仓库定义（写模式重算后该列不会自动变），以控制台实际 DDL 为准，需导出核对。
+- 权限（可复查口径）：`raw_emails` / `parsed_attachments` / `verification_results` 和只读视图 `verification_overview` **必须保留 anon select 策略**——否则 results 的 list/stats/conflicts/export 与 pipeline 的增量读取会全部失败；写入只有 service role。`llm_call_cache` 只有 service role 能读写，但会被匿名只读接口**顺带写入**缓存行（缓存键含输入指纹，不能伪造他人结果）。主三表/视图/缓存的 DDL 与策略不在仓库，需从现有控制台导出后补进 `scripts/`；第二阶段 4 表的脚本是 `scripts/phase2-schema.sql` + `scripts/phase2-rls.sql`。
 - 扁平化统一用 [`lib/shared/normalize.ts`](lib/shared/normalize.ts) 的 `normalizeText`，不要在别处再写一份
 
 ### 结果查询视图 `verification_overview`
@@ -197,7 +198,12 @@ interface StatsResponse {
 
 - `scope`：`results`（当前筛选的结果列表）/ `conflicts`（冲突文件对）/ `stats`（统计汇总）/ `submission`（官方提交纯 JSON：`{ email_id: EmailVerificationResult }`，只允许 `format=json`）
 - `format`：`json` | `md` | `txt`（json 是结构化数据，md/txt 是给人看的报告，含统计摘要 + 明细）
-- 文件名在响应头 `Content-Disposition`；`scope=submission` 时用 `X-Export-Incomplete` 提示是否覆盖了全部 520 封（有失败行或条数不足时为 true）
+- 文件名在响应头 `Content-Disposition`；`scope=submission` 时用一组响应头判断是否覆盖了全部 520 封（完整性 fail-closed）：
+  - `X-Export-Incomplete`：任意一项异常即 `true`（Expected-Source 非 sample、条数 ≠ 分母、有缺失、有过期版本、有失败行）
+  - `X-Export-Expected-Source`：`sample` = 分母锚定官方样例清单（data/sample/inbox 的文件名）；`db-fallback` = 清单读不到、降级用数据库总数——**此时即使 `Missing=0` 也按不完整处理**
+  - `X-Export-Missing` / `X-Export-Missing-Ids`：清单里有、导出里没有的 email_id（头里最多列 20 个）
+  - `X-Export-Stale` / `X-Export-Stale-Ids`：有结果但 `logic_version` 与当前引擎版本不一致的 email_id（旧版本结果需要重跑）
+  - 注意：前端要 `fetch + blob` 才能读到这些头，`<a>` 直接下载读不到
 
 ### MCP tool（端点 `POST /core/mcp-server`）
 
@@ -224,18 +230,21 @@ MCP 传输方式是无状态 Streamable HTTP + JSON 响应（GET/DELETE 返回 4
 | 字段 | 说明 |
 |---|---|
 | `email_ids` | 只跑这几封（数组；不传 = 全部 520 封）；不存在的 id 返回 400 |
-| `limit` | 单次最多跑几封，1~520，默认 50；剩余数量在响应的 `remaining` 里（Vercel 函数上限 60s，大批量分几次调） |
+| `limit` | 单次最多跑几封，1~520，默认 50；剩余数量在响应的 `remaining` 里（Vercel 函数上限 60s，大批量分几次调）。匿名（未带口令）的 `dry_run` 预览再封顶 20 封 |
 | `force` | true = 忽略增量指纹强制重算，默认 false |
-| `dry_run` | true = 只算不写库（不需要 service key），默认 false |
-| `provider` | 文本兜底模型，默认 claude；不能用 jev（返回 400） |
-| `concurrency` | 同时最多处理几封，1~8，默认 4 |
+| `dry_run` | true = 只算不写库（不需要 service key），默认 false；匿名时只预览清单头部固定前缀（≤20 封） |
+| `provider` | 文本兜底模型，默认 gemini；不能用 jev（返回 400） |
+| `concurrency` | 同时最多处理几封（也是一块的大小），1~8，默认 4 |
 
 响应（`RunBatchSummary`）：
 
 ```ts
 interface RunBatchSummary {
-  total_emails: number; selected: number; skipped: number; ran: number;
-  succeeded: number; failed: number; wrote: number; remaining: number;
+  total_emails: number; selected: number; skipped: number;
+  ran: number;                    // 本次实际完成数（成功+失败）；deadline 截断时不谎报
+  succeeded: number; failed: number; wrote: number;
+  remaining: number;              // 目标 − 已完成：匿名预览目标=清单规模，其余=本次待跑总数
+  stopped_by_deadline: boolean;   // true = 到了 30s deadline 且仍有没跑完的目标（remaining>0）
   dry_run: boolean; logic_version: string; duration_ms: number;
   failures: { email_id: string; error: string }[];   // 最多列 20 条
 }
@@ -246,13 +255,28 @@ interface RunBatchSummary {
 `email_id`），成功的行写 `processing_status='ok'`，失败的行也写
 `processing_status='failed'` + `error_message`（不挡其他邮件）。
 
-错误：参数错 400；需要写库但缺 `SUPABASE_SERVICE_ROLE_KEY` 时 503（提示可改用 `dry_run`）；
-其余 500。GET 同一个地址返回接口用法说明。
+执行方式（2026-09-20 性能/可靠性评审后）：待跑邮件按 **一块 = 一个并发波次**（块大小 =
+`concurrency`）分块，每块结束后检查 **30s deadline**（`BATCH_DEADLINE_MS`），到了就不再取新块；
+`!dry_run` 时结果行攒到 ≥20 条就 upsert 一次，deadline 停止/全部结束时补 flush（进程被平台杀掉时，
+丢失上界 = 一个在途块 + 未 flush 的行数）。`ran`/`remaining` 都按"实际完成数"计算，
+所以 deadline 截断时不会显示成"跑完了"——重复调用即可续跑（写模式自动跳过已算好的增量）。
+
+错误：参数错 400；写模式未授权 401（口令错）/ 403（服务端未配置 `ADMIN_TOKEN`）；
+需要写库但缺 `SUPABASE_SERVICE_ROLE_KEY` 时 503（提示可改用 `dry_run`）；其余 500。
+GET 同一个地址返回接口用法说明。
+
+匿名预览语义（`dry_run=true` 且未带口令）：只解析/处理清单头部固定前缀（单次 ≤20 封，`selected` = 实际解析数），
+**每次调用都从头开始、没有游标**；`remaining` 表示"清单规模 − 本次实际处理数"，不代表"再调几次能跑完"。
+dry_run 不写库，所以预览结果不会累积；要看 520 封完整体用带口令的非 dry_run 模式分批续跑。
 
 ### MCP tool：`run_batch`
 
 参数与 REST 请求体一一对应（snake_case 相同）；注解是 `readOnlyHint: false`
 （与查询类 tool 区分），结果就是上面的 `RunBatchSummary`。
+
+写保护：`dry_run=false` 需要 `x-admin-token` 请求头（MCP 客户端 header 方式配置）；
+`dry_run=true` 允许匿名预览（单次封顶 20 封）。只读 tool 全部显式声明 `readOnlyHint: true`，
+汇总层 gate 按 `readOnlyHint !== true` fail-closed 判定（未注解 = 需要口令）。
 
 ## config 模块（运行时配置中心，第二阶段）
 
@@ -271,14 +295,31 @@ interface RunBatchSummary {
 读响应每项形如 `{ key, category, value, is_secret, has_value, source: "db"|"env"|"default"|"unset", updated_at }`。
 配置项清单和环境变量对应关系见 [PHASE2_SPEC.md](PHASE2_SPEC.md) 第 3.2 节。
 
-### 写保护（所有第二阶段写接口共用）
+**当前接线状态（2026-09-20 核对，避免误解）**：数据库里存的配置目前只有 **测试连接**与 **config CRUD** 会消费；
+`llm.*_api_key` 不会被 `lib/llm` 自动读取（运行时仍读环境变量）；`provider_priority` / 阈值 / `pipeline.*` /
+`storage.*` 仍是**展示项**，改了不会立刻改变运行时行为。`resolveConfigValue()` 已备好（数据库 > env > 默认），
+等真正接线时再逐项切换。
 
-请求头 `x-admin-token: <ADMIN_TOKEN>`；`ADMIN_TOKEN` 未配置时**拒绝所有写操作**（安全默认）。
-读取接口全部开放（裁判/访客自由查看）。实现见 [`lib/shared/admin-guard.ts`](lib/shared/admin-guard.ts)。
+### 写保护（所有写接口共用）
 
-**GUI 做写操作的两种推荐路径**（token 不进浏览器）：
+请求头 `x-admin-token: <ADMIN_TOKEN>`；`ADMIN_TOKEN` 未配置时**拒绝所有写操作**（安全默认，403）；
+口令错误返回 401。读取接口全部开放（裁判/访客自由查看）。策略的唯一实现是
+[`lib/shared/write-policy.ts`](lib/shared/write-policy.ts)（REST 与 MCP 汇总层共用，不依赖 Next.js），
+REST 的 NextResponse 包装见 [`lib/shared/admin-guard.ts`](lib/shared/admin-guard.ts)。
+
+**覆盖范围（会写库的入口）**：
+- REST：`PUT /features/config/api`、`POST /features/config/api/test`、mail 的写接口、import 上传/人工归类、
+  **pipeline 的 `dry_run=false`**
+- MCP：`run_batch`（`dry_run=false`）、`classify_uploaded_document`、`sync_gmail`（一律需口令）
+- 匿名可用：`run_batch` 的 `dry_run=true` 预览（单次封顶 20 封、不写库）；其余写入口匿名一律拒绝
+
+**写业务数据需要口令；LLM 调用结果缓存 `llm_call_cache` 会被匿名只读接口顺带写入**（缓存键含输入指纹，不能伪造他人结果）。
+
+**GUI 做写操作的两种允许路径**（token 不进浏览器）：
 1. Server Action / 服务端代码直接调本仓库的 logic 函数（如 `upsertConfig()`）——同一 app 内最省事，推荐
-2. 服务端 fetch REST 接口时注入 `process.env.ADMIN_TOKEN`（如 Route Handler / Server Action 里）
+2. 服务端 fetch REST 接口时注入 `process.env.ADMIN_TOKEN`——**仅在服务端已完成口令校验之后**（如操作者手动输入口令、服务端验证通过后的转发）
+
+**【禁止】** 创建"公网可触发、服务端自动注入 `ADMIN_TOKEN` 并转发写请求"的路由/代理/Server Action——那等于匿名可写库。
 
 不要在浏览器端直连写接口（否则需要把 token 下发给浏览器，违背保护初衷；读取接口可以随便在浏览器直连）。
 
@@ -297,8 +338,13 @@ interface RunBatchSummary {
 
 Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > 环境变量**——写库类代码请用
 [`lib/shared/supabase.ts`](lib/shared/supabase.ts) 的 `getSupabaseServiceClientAsync()`（每次现解析现建，
-不缓存）；解析管理表本身固定用 env 引导客户端，避免自依赖。现有 `results` / `pipeline` 的写路径
-仍走 env 项目（已知限制，升级它们时改用 async 版本即可）。
+不缓存）；解析管理表本身固定用 env 引导客户端，避免自依赖。
+
+**客户端清单（2026-09-20 核对，A3）**：
+- 走 async（支持切换项目）：`config`、`mail`（及其管理表）
+- 仍走环境变量（`getSupabaseClient` / `getSupabaseServiceClient`）：`results`、`pipeline`、`import`、
+  `llm-cache`、`verification-store`、评测脚本 `scripts/evaluate.ts`
+- **切换启用项目目前只对 config/mail 生效**：演示期间不要切换项目，否则两套数据源会不一致
 
 ## import 模块（手动上传文档，第二阶段）
 
@@ -320,7 +366,8 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 ### MCP tool（第二阶段新增）
 
 `sync_gmail`（占位，返回 not_implemented）、`list_uploaded_documents`、`classify_uploaded_document`（写库）。
-加上原有的 8 个，现在共 11 个 tool。
+加上原有的 8 个，现在共 11 个 tool（8 个只读 + 3 个写库；写 tool 需 `x-admin-token`，只有 `run_batch` 的
+`dry_run=true` 允许匿名预览）。
 
 ## 环境变量约定
 
@@ -338,6 +385,11 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 ## MCP tool 约定
 
 每个 feature 的 `mcp/index.ts` 导出 `{ name, description, inputSchema, handler }` 形状的对象，由 `app/core/mcp-server/tools.ts` 统一汇总注册（一个模块可以导出多个，用数组，如 `resultsMcpTools`），不要自己在别的地方重复注册。handler 返回普通对象时由汇总层转成 JSON 文本；需要返回文件内容/MCP 原生结果时，可以直接返回 `{ content: [...], _meta }`。
+
+**注解是硬约定（写保护 gate 按此 fail-closed 判定）**：只读 tool 必须显式声明 `readOnlyHint: true`；
+会写库的 tool 必须显式声明 `readOnlyHint: false`；未声明的一律按"需要口令"处理。写 tool 可以额外声明
+`anonymousWriteWhen(args)` 作为匿名例外（目前只有 `run_batch` 的 `dry_run=true`）。自检脚本：
+`npm run test:mcp-annotations`；handler 的第二个参数 `context`（`{ anonymous }`）目前只有写 tool 会读。
 
 ## 批量处理并发约定
 

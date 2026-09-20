@@ -57,6 +57,10 @@ const listResultsMcpTool = {
     limit: z.number().int().min(1).max(200).optional().describe("每页条数，缺省 50，最大 200"),
     offset: z.number().int().min(0).optional().describe("跳过多少条，缺省 0"),
   },
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   handler: async (args: Record<string, unknown>) => listResults(normalizeResultQuery(args)),
 };
 
@@ -65,6 +69,10 @@ const getStatsMcpTool = {
   description:
     "获取核验结果统计：邮件总数、已处理/未处理/失败数量、分类分布、状态分布、差异字段频次、模型分布",
   inputSchema: {},
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   handler: async () => getStats(),
 };
 
@@ -83,6 +91,10 @@ const listConflictsMcpTool = {
     limit: z.number().int().min(1).max(200).optional().describe("每页条数，缺省 50"),
     offset: z.number().int().min(0).optional().describe("跳过多少条，缺省 0"),
   },
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   handler: async (args: Record<string, unknown>) => listConflicts(normalizeConflictQuery(args)),
 };
 
@@ -94,6 +106,10 @@ const exportResultsMcpTool = {
     scope: z.enum(EXPORT_SCOPES).optional().describe("导出场景，缺省 results"),
     format: z.enum(EXPORT_FORMATS).optional().describe("文件格式，缺省 json"),
     ...resultFilterShape,
+  },
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
   },
   handler: async (args: Record<string, unknown>) => {
     const doc = await exportResults(normalizeExportRequest(args));
@@ -107,6 +123,11 @@ const exportResultsMcpTool = {
         item_count: doc.itemCount,
         expected_total: doc.expectedTotal,
         incomplete: doc.incomplete,
+        expected_source: doc.expectedSource,
+        missing: doc.missingIds.length,
+        missing_ids: doc.missingIds.slice(0, 50),
+        stale: doc.staleIds.length,
+        stale_ids: doc.staleIds.slice(0, 50),
         generated_at: doc.generatedAt,
       },
     };

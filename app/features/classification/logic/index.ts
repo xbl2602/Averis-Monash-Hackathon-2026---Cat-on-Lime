@@ -11,7 +11,10 @@ import { classifyByRules } from "./rules";
 
 export interface ClassifyEmailInput {
   email: InboxEmail;
-  /** 规则拿不准时用哪个文本模型兜底（Jev 可用时优先 Jev）。默认 claude */
+  /**
+   * 显式指定用哪个模型；**不传时走混合引擎**（规则优先 → Jev → Gemini 文本兜底），
+   * 这样本地没配任何 key 也能靠规则给出结果（demo 兜底，见 CLAUDE.md）。
+   */
   provider?: LLMProvider;
 }
 
@@ -45,16 +48,24 @@ const JEV_CONFIDENCE_THRESHOLD = 0.85;
 
 /**
  * 单一入口：显式按 provider 调用（给 REST/MCP/界面用）。
- * 批量流水线请用 classifyEmailHybrid（规则优先，省调用）。
+ * 不传 provider 时走混合引擎（规则优先，本地没 key 也能出结果），但对外只保留
+ * `category/confidence/needs_review` 三个字段，响应契约与显式 provider 时完全一致。
  */
 export async function classifyEmail(
   input: ClassifyEmailInput
 ): Promise<ClassifyEmailResult> {
-  const provider = input.provider ?? "claude";
-  if (provider === "jev") {
+  if (input.provider === undefined) {
+    const hybrid = await classifyEmailHybrid(input);
+    return {
+      category: hybrid.category,
+      confidence: hybrid.confidence,
+      needs_review: hybrid.needs_review,
+    };
+  }
+  if (input.provider === "jev") {
     return classifyWithJev(input.email);
   }
-  return classifyWithTextLLM(provider, input.email);
+  return classifyWithTextLLM(input.provider, input.email);
 }
 
 /**
@@ -74,7 +85,7 @@ export async function classifyEmailHybrid(
     return { ...jev, engine: "jev" };
   }
 
-  const llm = await classifyWithTextLLM(input.provider ?? "claude", input.email);
+  const llm = await classifyWithTextLLM(input.provider ?? "gemini", input.email);
   return { ...llm, engine: "llm" };
 }
 

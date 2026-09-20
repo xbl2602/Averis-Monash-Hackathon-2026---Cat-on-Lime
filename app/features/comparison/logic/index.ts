@@ -20,7 +20,8 @@ export interface CompareDocumentsInput {
   si: ExtractedDocumentFields;
   bl: ExtractedDocumentFields;
   /**
-   * 用哪种方式比对。默认 claude（沿用原有的"逐字符精确比较"，不调用模型）。
+   * 用哪种方式比对。不传 = 逐字符精确比较（不调用模型；缺省值是 gemini，
+   * 但该路径根本不会走到模型，改成 gemini 只是让"缺省 provider"口径一致）。
    * 传 "jev" 时会让 Jev 逐字段判断两边是否指同一个东西。
    */
   provider?: LLMProvider;
@@ -46,7 +47,8 @@ const JEV_MISMATCH_THRESHOLD = 0.85;
 export async function compareDocuments(
   input: CompareDocumentsInput
 ): Promise<CompareDocumentsResult> {
-  const provider = input.provider ?? "claude";
+  // 缺省值只影响"非 jev"分支（精确比较，不走模型）；jev 分支单独处理
+  const provider = input.provider ?? "gemini";
   if (provider === "jev") {
     return compareWithJev(input.si, input.bl);
   }

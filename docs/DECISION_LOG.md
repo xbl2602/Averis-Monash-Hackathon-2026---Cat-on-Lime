@@ -1,7 +1,7 @@
 # 决策记录
 
 > 记录项目过程中做过的核心决策：定了什么、为什么这么定、有没有别的选项被放弃。
-> 跟 [CLAUDE.md](CLAUDE.md) / [TEAM_HANDBOOK.md](TEAM_HANDBOOK.md) 的区别：那两份文件是"现在生效的规则"，
+> 跟 [CLAUDE.md](../CLAUDE.md) / [TEAM_HANDBOOK.md](TEAM_HANDBOOK.md) 的区别：那两份文件是"现在生效的规则"，
 > 这份文件是"这些规则是怎么来的、当时权衡了什么"——规则改了可以回来查历史，吵起来也有据可查。
 > 更新：2026-09-18
 

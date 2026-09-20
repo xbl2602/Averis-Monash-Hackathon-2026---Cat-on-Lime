@@ -163,9 +163,22 @@ export interface ExportDocument {
   format: ExportFormat;
   scope: ExportScope;
   itemCount: number;
-  /** scope=submission 时给出原始邮件总数，用来判断提交是否完整 */
+  /** scope=submission 时给出"应该有多少封"的分母，用来判断提交是否完整 */
   expectedTotal: number | null;
-  /** submission 场景下：导出条数少于原始邮件数（或含失败行）时为 true */
+  /**
+   * scope=submission 时：分母的来源。
+   * - sample = 官方样例清单（data/sample/inbox 的文件名，最可信）
+   * - db-fallback = 读不到清单，降级用数据库总数（此时 incomplete 强制为 true）
+   */
+  expectedSource: "sample" | "db-fallback" | null;
+  /** scope=submission 且 expectedSource=sample 时：清单里有、导出里没有的 email_id */
+  missingIds: string[];
+  /** scope=submission 时：有结果但 logic_version 与当前引擎版本不一致的 email_id */
+  staleIds: string[];
+  /**
+   * submission 场景：expectedSource 非 sample、条数≠分母、有缺失/过期版本或失败行，
+   * 任意一条成立就是 true（fail-closed：宁可提示不完整，也不谎报"已完整"）
+   */
   incomplete: boolean;
   /** 文件内容本体：HTTP 直接作为响应体，MCP 作为 text 返回 */
   content: string;

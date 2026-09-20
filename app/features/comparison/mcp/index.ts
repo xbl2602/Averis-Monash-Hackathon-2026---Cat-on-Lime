@@ -24,7 +24,11 @@ export const comparisonMcpTool = {
     provider: z
       .enum(LLM_PROVIDER_IDS)
       .optional()
-      .describe("用哪个模型，缺省 claude（逐字符精确比较）；选 jev 可容忍格式差异"),
+      .describe("用哪个模型；不传 = 逐字符精确比较（不调用模型），选 jev 可容忍格式差异"),
+  },
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
   },
   handler: async ({
     si,

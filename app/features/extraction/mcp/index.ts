@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { TEXT_PROVIDER_IDS } from "@/lib/llm";
 import { readSampleAttachmentParsed } from "@/lib/shared/sample-inputs";
 import { extractFields } from "../logic";
 
+/**
+ * extraction 模块的 MCP tool（只读）。
+ * provider 只接受文本模型（TEXT_PROVIDER_IDS 排除了 jev；z.enum 在 handler 前就会挡掉）。
+ */
 export const extractionMcpTool = {
   name: "extract_document_fields",
   description:
@@ -11,13 +16,23 @@ export const extractionMcpTool = {
       .string()
       .describe('样例数据里的附件路径，例如 "attachments/email_004_SI.txt"'),
     documentType: z.enum(["SI", "BL"]),
+    provider: z
+      .enum(TEXT_PROVIDER_IDS)
+      .optional()
+      .describe("文本兜底模型，缺省 gemini；不支持 jev（jev 只能做结构化判断）"),
+  },
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
   },
   handler: async ({
     attachment_path,
     documentType,
+    provider,
   }: {
     attachment_path: string;
     documentType: "SI" | "BL";
+    provider?: (typeof TEXT_PROVIDER_IDS)[number];
   }) => {
     // 按文件格式解析（PDF/xlsx/docx 不能按 UTF-8 直接读，那样只有乱码）
     const parsed = await readSampleAttachmentParsed(attachment_path);
@@ -26,6 +41,6 @@ export const extractionMcpTool = {
         `附件 ${attachment_path} 读不出文字（${parsed.error ?? "未知原因"}），无法抽取字段`
       );
     }
-    return extractFields({ documentText: parsed.text, documentType });
+    return extractFields({ documentText: parsed.text, documentType, provider });
   },
 };

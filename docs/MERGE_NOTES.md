@@ -153,3 +153,5 @@ REST + MCP 都已上线**。新增能力清单：
 - [ ] 做 `/features/verification` 页面（接 `POST /features/pipeline/api`；需求方输入：跑哪几封、最多几封、用哪个 provider、要不要 dry_run；展示：本次成功/失败/剩余多少封）
 - [ ] 给 Claude / OpenAI / DeepSeek 申请 API key 并填到 Vercel（环境变量写 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`，见 .env.example）
 - [ ] 顺手看一眼控制台统计数字：合并后在 `/dashboard` 确认"已配置 LLM"数量显示合理（云端应显示 Jev + Gemini 等已配的）
+
+2026-09-20：UI 侧待办（7 处 `/features/verification` 死链清单、写保护约定、验收路径、remaining 两种成因）见 `UI_HANDOFF.md`。

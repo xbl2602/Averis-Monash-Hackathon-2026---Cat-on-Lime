@@ -1,6 +1,6 @@
 # 团队执行手册 — Averis x Monash Hackathon 2026
 
-给团队3人看的分工/协作手册。技术细节遵循 [CLAUDE.md](CLAUDE.md)（3人的 Claude Code 都会自动读取那份文件），核心决策的来龙去脉见 [DECISION_LOG.md](DECISION_LOG.md)。
+给团队3人看的分工/协作手册。技术细节遵循 [CLAUDE.md](../CLAUDE.md)（3人的 Claude Code 都会自动读取那份文件），核心决策的来龙去脉见 [DECISION_LOG.md](DECISION_LOG.md)。
 
 ## 0. 现状快照
 
@@ -85,7 +85,7 @@
 
 - 前端 + 部署：**Next.js**，部署到 **Vercel**（已确认——免费、git push 即部署、不用碰云控制台、AI 生成的 Next.js 代码质量普遍最高）
 - 后端/数据：**Supabase**（已确认——托管 Postgres 数据库 + 鉴权 + 存储，不用自己搭服务器，清楚地满足"云基础设施"要求）
-- AI 能力：**多 LLM**（Claude / ChatGPT / DeepSeek / Gemini / 本地 LM Studio，都通过 Vercel AI SDK 统一调用），作为产品核心功能的一部分——具体要求见 [CLAUDE.md](CLAUDE.md)"多LLM支持"节
+- AI 能力：**多 LLM**（Claude / ChatGPT / DeepSeek / Gemini / 本地 LM Studio，都通过 Vercel AI SDK 统一调用），作为产品核心功能的一部分——具体要求见 [CLAUDE.md](../CLAUDE.md)"多LLM支持"节
 
 技术栈已经定案，不用再等题目细节变化去调整。
 
@@ -142,7 +142,7 @@
 
 ### 5.2 拆模块：一切皆插件（题目公布当天第一件事，30-60分钟内完成）
 
-团队定的核心架构原则是**"一切皆插件"**——项目分成一个很薄的"核心骨架"（导航、布局、共享配置）加上若干个**自包含的功能模块**，每个模块自己一个文件夹，尽量不碰别人的文件夹。这个约定已经写进 [CLAUDE.md](CLAUDE.md)，3人的 AI 都会自动遵守，具体目录结构见那份文件。
+团队定的核心架构原则是**"一切皆插件"**——项目分成一个很薄的"核心骨架"（导航、布局、共享配置）加上若干个**自包含的功能模块**，每个模块自己一个文件夹，尽量不碰别人的文件夹。这个约定已经写进 [CLAUDE.md](../CLAUDE.md)，3人的 AI 都会自动遵守，具体目录结构见那份文件。
 
 选这个架构不是为了"看起来专业"，是直接对着你们的两个真实痛点来的：
 
@@ -165,7 +165,7 @@
 
 ### 5.3 AI 使用规范
 
-- 3人的 Claude Code（或其他工具）都读取仓库根目录的 [CLAUDE.md](CLAUDE.md)，保证代码风格、目录结构一致
+- 3人的 Claude Code（或其他工具）都读取仓库根目录的 [CLAUDE.md](../CLAUDE.md)，保证代码风格、目录结构一致
 - 开始一项任务前，在 `#开发` 频道说一句"我要做xxx"，避免两人重复做同一件事
 - 完成一个可运行的小功能就 push，让队友的 AI 在集成时能读到最新代码
 - **AI 生成的代码如果你自己看不懂，直接追问 AI"这段在干嘛"**，尤其是会影响别人模块的部分（共享的数据结构、接口格式），不要盲目接受
@@ -197,8 +197,8 @@
 
 - **问题陈述**：Averis 航运操作团队每天在同一邮箱收到约2000封邮件（托运指示SI、提单BL确认、发票询问、垃圾邮件混杂），需要把 BL 草稿和对应的 SI 逐项核对到完全一致才能定稿，人工核对重复且容易出错。系统需要做到：① 分类邮件类型 ② 从正文/附件抽取关键字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI 字段、标出差异 ④ 拿不准时主动提示需要人工介入。完整细节、样例数据说明、评分标准见 [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md)。
 - [ ] 项目名称（还没定，建议今天讨论定下来）
-- **最终技术栈**：官方确认无限制，沿用第4节确定的组合（Next.js + Supabase + Vercel + 多LLM，具体见 [CLAUDE.md](CLAUDE.md)），已够用
-- **功能模块拆分**：按官方给的三个步骤拆成三个 feature（已写进 [CLAUDE.md](CLAUDE.md)），代码结构按模块分成 `classification`/`extraction`/`comparison`，但**人力分工是按层分，不是按模块分**（见第5.2节）：
+- **最终技术栈**：官方确认无限制，沿用第4节确定的组合（Next.js + Supabase + Vercel + 多LLM，具体见 [CLAUDE.md](../CLAUDE.md)），已够用
+- **功能模块拆分**：按官方给的三个步骤拆成三个 feature（已写进 [CLAUDE.md](../CLAUDE.md)），代码结构按模块分成 `classification`/`extraction`/`comparison`，但**人力分工是按层分，不是按模块分**（见第5.2节）：
   - [x] 后端（三个模块的 `logic`/`api`/`mcp` 全部 + `/app/core`、`/lib` 公共区）—— 认领人：操作者
   - [x] UI/UX（三个模块的 `ui/` + 全局布局导航）—— 认领人：队友A
   - [x] README / slide / 演示材料 —— 认领人：队友B

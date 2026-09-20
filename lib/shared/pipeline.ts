@@ -23,8 +23,9 @@ import {
   type ReviewReason,
 } from "@/lib/shared/types";
 
-// 引擎逻辑（规则/提示词/判定策略）有实质改动时手动 +1：让旧结果和旧缓存失效
-export const PIPELINE_LOGIC_VERSION = "v4-2026-09-20";
+// 引擎版本号挪到叶子模块 lib/shared/versions.ts（导出函数只用版本号，不为此打包整个 pipeline）；
+// 这里 re-export，原有 import 路径（pipeline/logic、verification-store 等）全部不变。
+export { PIPELINE_LOGIC_VERSION } from "./versions";
 
 export interface PipelineAttachment {
   path: string;
@@ -38,7 +39,7 @@ export interface PipelineEmailInput {
 }
 
 export interface PipelineOptions {
-  /** 抽取兜底 / 分类兜底用的文本模型（默认 claude） */
+  /** 抽取兜底 / 分类兜底用的文本模型（默认 gemini） */
   textProvider?: LLMProvider;
 }
 

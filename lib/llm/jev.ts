@@ -8,6 +8,7 @@
  * Jev 适合"在代码里做判断"（分类 / 路由 / 逐字段是否一致），不适合需要写文字的
  * 字段抽取（extraction）——那类任务请继续用 callLLM。
  */
+import { isTimeoutError, LLMConfigError, UpstreamServiceError } from "./errors";
 
 export type JevQuestion =
   | { type: "noul"; instructions: string; criteria?: { true: string; false: string } }
@@ -46,6 +47,8 @@ export type JevState = string | Record<string, unknown> | unknown[];
 
 const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_JEV_MODEL = "jev-latest";
+/** 单次调用超时 20s（与 callLLM 一致；超时直接失败，不做重试） */
+const JEV_TIMEOUT_MS = 20_000;
 
 // 有没有配 TYPESAFE_API_KEY——界面/逻辑可以据此决定要不要让用户选 Jev
 export function isJevAvailable(): boolean {
@@ -71,6 +74,11 @@ function explainJevStatus(status: number): string {
 /**
  * 统一调用 Jev。遵守"调试规范"：外部调用失败要抛出有意义、能看懂的错，
  * 不在这里静默吞掉，也不做无脑重试。
+ *
+ * 失败约定（2026-09-20 可靠性/安全评审）：
+ * - 没配 TYPESAFE_API_KEY → LLMConfigError（可读，含变量名）
+ * - 网络错误/超时/上游非 2xx → UpstreamServiceError（message 只含 provider + 状态 + code）
+ *   上游响应正文只进 console.warn，不拼进 message、不返回给调用方
  */
 export async function callJev(
   state: JevState,
@@ -78,7 +86,7 @@ export async function callJev(
 ): Promise<JevResponse> {
   const apiKey = process.env.TYPESAFE_API_KEY;
   if (!apiKey) {
-    throw new Error(
+    throw new LLMConfigError(
       "缺少 TYPESAFE_API_KEY 环境变量，无法调用 Jev。请在 .env.local 或部署平台配置该变量，或改用其他 provider。"
     );
   }
@@ -94,21 +102,48 @@ export async function callJev(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ state, model, questions }),
+      signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new Error(
-      `调用 Jev 失败（网络错误）：${err instanceof Error ? err.message : String(err)}`
+    if (isTimeoutError(err)) {
+      throw new UpstreamServiceError({ provider: "jev", status: 504, code: "timeout" });
+    }
+    console.warn(
+      `[jev] 网络错误（原始信息只进服务端日志）：${err instanceof Error ? err.message : String(err)}`
     );
+    throw new UpstreamServiceError({ provider: "jev", status: 502, code: "network_error" });
   }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(
-      `调用 Jev 失败：HTTP ${response.status}${explainJevStatus(response.status)}${
-        detail ? ` - ${detail.slice(0, 500)}` : ""
+    // 上游响应正文只进服务端日志，绝不拼进 message / 返回给调用方
+    console.warn(
+      `[jev] HTTP ${response.status}${explainJevStatus(response.status)}${
+        detail ? `：${detail.slice(0, 500)}` : ""
       }`
     );
+    throw new UpstreamServiceError({
+      provider: "jev",
+      status: response.status,
+      code: explainJevCode(response.status),
+    });
   }
 
   return (await response.json()) as JevResponse;
+}
+
+// 给 UpstreamServiceError 用的稳定短代码（可安全回给客户端的部分）
+function explainJevCode(status: number): string {
+  switch (status) {
+    case 401:
+      return "unauthorized";
+    case 422:
+      return "invalid_request";
+    case 429:
+      return "rate_limited";
+    case 529:
+      return "overloaded";
+    default:
+      return "http_error";
+  }
 }

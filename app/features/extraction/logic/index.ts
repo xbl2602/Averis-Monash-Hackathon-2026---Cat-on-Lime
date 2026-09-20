@@ -17,7 +17,7 @@ import { isLikelyOtherDocument, parseDocumentFields, PLACEHOLDER_VALUE } from ".
 export interface ExtractFieldsInput {
   documentText: string;
   documentType: "SI" | "BL";
-  /** 规则缺字段时用哪个文本模型兜底，默认 claude */
+  /** 规则缺字段时用哪个文本模型兜底，默认 gemini */
   provider?: LLMProvider;
 }
 
@@ -48,7 +48,7 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
 async function tryLlmExtraction(
   input: ExtractFieldsInput
 ): Promise<ExtractedDocumentFields | null> {
-  const provider = input.provider ?? "claude";
+  const provider = input.provider ?? "gemini";
   const prompt = buildExtractionPrompt(input);
 
   try {

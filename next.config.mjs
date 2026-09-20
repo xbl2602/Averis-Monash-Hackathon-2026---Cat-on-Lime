@@ -33,6 +33,9 @@ const nextConfig = {
       './node_modules/pdfjs-dist/**',
       './node_modules/@napi-rs/**',
     ],
+    // 导出函数只用样例清单（inbox 文件名）做完整性分母，不需要附件本体：
+    // 只带 inbox 文件名，避免把 pdfjs/@napi-rs 等解析依赖打进导出函数包
+    '/features/results/api/export': ['./data/sample/inbox/**'],
     '/features/jev-lab': ['./data/sample/**'],
   },
 };

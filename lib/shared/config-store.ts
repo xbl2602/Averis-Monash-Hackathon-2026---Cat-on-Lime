@@ -284,8 +284,13 @@ export async function resolveConfigValue(key: string): Promise<unknown> {
       const row = data as { value: unknown; is_secret: boolean };
       return row.is_secret && typeof row.value === "string" ? decryptSecret(row.value) : row.value;
     }
-  } catch {
-    // 数据库不可用时静默落到 env/默认（读配置失败不应该让主流程崩）
+  } catch (err) {
+    // 数据库不可用时静默落到 env/默认（读配置失败不应该让主流程崩）；
+    // 但要留下日志，方便排查"为什么配置没生效"（见调试规范：不静默吞掉）
+    console.warn(
+      "[config-store] 读取数据库配置失败，回退 env/默认：",
+      err instanceof Error ? err.message : err
+    );
   }
   if (envName && process.env[envName]) return process.env[envName];
   return CONFIG_DEFAULTS[key] ?? null;

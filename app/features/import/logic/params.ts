@@ -8,6 +8,7 @@ import {
   DOCUMENT_LIST_DEFAULT_LIMIT,
   DOCUMENT_LIST_MAX_LIMIT,
   MANUAL_DOCUMENT_TYPES,
+  MAX_BATCH_FILES,
   REVIEW_STATUSES,
   type ClassifyDocumentRequest,
   type DocumentListQuery,
@@ -26,6 +27,11 @@ export function isDocumentId(value: string): boolean {
 export function normalizeUploadRequest(raw: Record<string, unknown>): UploadRequest {
   if (!Array.isArray(raw.files) || raw.files.length === 0) {
     throw new ImportRequestError("请求体缺少 files 数组（形如 [{ name, mime?, data_base64 }]）");
+  }
+  if (raw.files.length > MAX_BATCH_FILES) {
+    throw new ImportRequestError(
+      `单次最多 ${MAX_BATCH_FILES} 个文件，请分批上传（当前 ${raw.files.length} 个）`
+    );
   }
   const batchId = raw.batch_id;
   if (batchId !== undefined && batchId !== null && typeof batchId !== "string") {

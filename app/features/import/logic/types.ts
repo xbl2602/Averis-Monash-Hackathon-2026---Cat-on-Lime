@@ -22,6 +22,8 @@ export const DOCUMENT_LIST_DEFAULT_LIMIT = 20;
 export const DOCUMENT_LIST_MAX_LIMIT = 200;
 export const UPLOADED_BY = "admin";
 export const MAX_FILE_NAME_LENGTH = 120;
+// 单请求最多几个文件（纯防误用：上传本来就有口令保护；超限返回可读 400 提示分批）
+export const MAX_BATCH_FILES = 50;
 
 export const ALLOWED_EXTENSIONS = ["txt", "md", "pdf", "docx", "xlsx"] as const;
 export type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];

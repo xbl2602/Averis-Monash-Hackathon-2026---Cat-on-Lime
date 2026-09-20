@@ -67,7 +67,7 @@ function toProvider(value: unknown): LLMProvider | undefined {
   }
   if (value === "jev") {
     throw new BatchRequestError(
-      "jev 只能做结构化判断（分类/比对），不能当批量流程里的文本兜底模型，请换 claude 等文本模型"
+      "jev 只能做结构化判断（分类/比对），不能当批量流程里的文本兜底模型，请换 gemini 等文本模型"
     );
   }
   return value;

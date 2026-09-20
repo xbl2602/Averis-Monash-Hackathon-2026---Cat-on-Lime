@@ -9,7 +9,7 @@
  * 做四步，任何一步失败就退出码 1：
  *   1. initialize（协议版本/服务名）
  *   2. notifications/initialized（规范要求的通知，无响应体）
- *   3. tools/list（应列出 7 个 tool）
+ *   3. tools/list（应列出 11 个 tool）
  *   4. tools/call get_stats（真实调用一个 tool，验证 handler 和数据库链路）
  *
  * 服务器是无状态 Streamable HTTP + JSON 响应模式（见 app/core/mcp-server/route.ts），

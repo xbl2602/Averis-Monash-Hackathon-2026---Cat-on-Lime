@@ -10,6 +10,8 @@ const TARGETS: TestTarget[] = ["claude", "openai", "deepseek", "gemini", "typesa
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// test-connection 内部有 15s/20s 的 abort；平台函数时长必须大于它，否则会先被 504 掐断
+export const maxDuration = 30;
 
 export async function POST(request: Request) {
   const denied = requireAdmin(request);

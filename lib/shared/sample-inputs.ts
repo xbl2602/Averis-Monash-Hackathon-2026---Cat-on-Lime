@@ -25,10 +25,8 @@ export async function readSampleAttachmentParsed(
   return extractAttachmentText(path.basename(attachmentPath), buffer);
 }
 
-export async function listSampleEmailIds(): Promise<string[]> {
-  const emails = await listSampleEmails();
-  return emails.map((email) => email.email_id);
-}
+// 只读文件名、不解析 JSON 的轻量清单（实现已挪到 inbox.ts；这里 re-export 保持调用方路径不变）
+export { listSampleEmailIds } from "./inbox";
 
 /** emailIds 不传 = 全部；limit 不传 = 不限制（评测脚本 --limit 用） */
 export async function loadSamplePipelineInputs(
