@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";
 import {
+  ConfigConflictError,
   isConfigStoreAvailable,
   listConfigViews,
   upsertConfig,
@@ -53,6 +54,10 @@ export async function PUT(request: Request) {
     const result = await upsertConfig(updates);
     return NextResponse.json(result);
   } catch (err) {
+    // 乐观锁冲突：整批未写入，提示调用方重新读取后再保存
+    if (err instanceof ConfigConflictError) {
+      return NextResponse.json({ error: err.message, conflicts: err.keys }, { status: 409 });
+    }
     return NextResponse.json({ error: errorMessage(err) }, { status: 400 });
   }
 }
@@ -74,14 +79,28 @@ function normalizeUpdates(body: Record<string, unknown>): ConfigUpdate[] {
   }
   return raw.map((entry, index) => {
     if (!entry || typeof entry !== "object") throw new Error(`updates[${index}] 不是对象`);
-    const { key, value } = entry as { key?: unknown; value?: unknown };
+    const { key, value, expected_updated_at } = entry as {
+      key?: unknown;
+      value?: unknown;
+      expected_updated_at?: unknown;
+    };
     if (typeof key !== "string" || key.trim() === "") {
       throw new Error(`updates[${index}].key 必须是非空字符串`);
     }
     if (value !== null && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean" && !Array.isArray(value)) {
       throw new Error(`updates[${index}].value 只支持 string / number / boolean / string[] / null`);
     }
-    return { key: key.trim(), value: value as ConfigUpdate["value"] };
+    // null 视为"不带乐观锁"：GET 对没有数据库行的项返回 updated_at: null，
+    // GUI 原样回传整个 item 时不应因此报 400；只有乱填的非法值才拒绝
+    const hasExpected = expected_updated_at !== undefined && expected_updated_at !== null;
+    if (hasExpected && (typeof expected_updated_at !== "string" || Number.isNaN(new Date(expected_updated_at).getTime()))) {
+      throw new Error(`updates[${index}].expected_updated_at 必须是合法的 ISO 时间字符串（来自上次 GET 的 updated_at）`);
+    }
+    return {
+      key: key.trim(),
+      value: value as ConfigUpdate["value"],
+      ...(hasExpected ? { expected_updated_at: expected_updated_at as string } : {}),
+    };
   });
 }
 

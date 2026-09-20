@@ -15,11 +15,17 @@ export type {
 } from "./gmail";
 export {
   activateSupabaseProject,
+  deactivateSupabaseProjects,
   listSupabaseProjects,
   normalizeActivateInput,
+  normalizeDeactivateInput,
   normalizeSaveProjectInput,
   saveSupabaseProject,
 } from "./projects";
-export type { SaveSupabaseProjectInput, SupabaseProjectView } from "./projects";
+export type {
+  DeactivateSupabaseProjectsResult,
+  SaveSupabaseProjectInput,
+  SupabaseProjectView,
+} from "./projects";
 export { isMailStoreAvailable } from "./store";
-export { MailDataError, MailRequestError, MailStoreUnavailableError } from "./errors";
+export { MailDataError, MailNotFoundError, MailRequestError, MailStoreUnavailableError } from "./errors";

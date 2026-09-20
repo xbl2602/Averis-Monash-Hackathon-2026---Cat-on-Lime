@@ -3,18 +3,16 @@
  * 服务端解密后真实调用一次目标服务，只回 ok/detail，不泄露 key。
  */
 import { resolveConfigValue } from "@/lib/shared/config-store";
+import { getActiveSupabaseConfig } from "@/lib/shared/supabase";
 import { isLocalLLMAvailable } from "@/lib/llm";
 
 export type TestTarget = "claude" | "openai" | "deepseek" | "gemini" | "typesafe" | "supabase" | "lmstudio";
 
-const KEY_BY_TARGET: Record<TestTarget, string> = {
+const KEY_BY_TARGET: Record<"claude" | "openai" | "deepseek" | "gemini", string> = {
   claude: "llm.anthropic_api_key",
   openai: "llm.openai_api_key",
   deepseek: "llm.deepseek_api_key",
   gemini: "llm.gemini_api_key",
-  typesafe: "llm.typesafe_api_key",
-  supabase: "supabase.service_key",
-  lmstudio: "llm.lmstudio_base_url",
 };
 
 export interface TestResult {
@@ -38,8 +36,16 @@ export async function testConnection(target: TestTarget): Promise<TestResult> {
         return testLmStudio();
     }
   } catch (err) {
-    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+    return { ok: false, detail: describeError(err) };
   }
+}
+
+// fetch 抛出的 "fetch failed" 本身没有可读信息，把底层 cause 的 code/message 一起带上（不含任何密钥）
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+  const suffix = cause?.code ?? cause?.message;
+  return suffix ? `${err.message}（${suffix}）` : err.message;
 }
 
 async function testLlmKey(target: "claude" | "openai" | "deepseek" | "gemini"): Promise<TestResult> {
@@ -96,9 +102,16 @@ async function testTypesafe(): Promise<TestResult> {
 }
 
 async function testSupabase(): Promise<TestResult> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = (await resolveConfigValue("supabase.service_key")) as string | null;
-  if (!url || !key) return { ok: false, detail: "未配置 Supabase URL 或 service key" };
+  // 用"当前实际生效"的配置（启用项目 > 环境变量），和写库走的 getSupabaseServiceClientAsync 语义一致。
+  // 不走 resolveConfigValue("supabase.service_key")：那个 key 不在 config-store 的环境变量映射里，永远解析不到。
+  const config = await getActiveSupabaseConfig();
+  if (!config || !config.serviceKey) {
+    return {
+      ok: false,
+      detail: "未配置可用的 Supabase service key：请在 mail 的 supabase-projects 接口启用一个带 service key 的项目，或在环境变量里配置",
+    };
+  }
+  const { url, serviceKey: key } = config;
   const response = await fetch(`${url}/rest/v1/`, {
     headers: { apikey: key, Authorization: `Bearer ${key}` },
     signal: AbortSignal.timeout(15000),

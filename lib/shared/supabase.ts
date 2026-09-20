@@ -107,14 +107,17 @@ function readEnvSupabaseConfig(): ActiveSupabaseConfig | null {
  */
 export async function getSupabaseServiceClientAsync(): Promise<SupabaseClient> {
   const config = await getActiveSupabaseConfig();
+  // 出错时的可操作恢复指引：刚启用了地址不可达/配置错误的项目时，先停用它再回退环境变量
+  const deactivateHint =
+    "（如果刚切换过启用项目）可调用 POST /features/mail/api/supabase-projects/deactivate 停用该项目后恢复";
   if (!config) {
     throw new Error(
-      "没有可用的 Supabase 配置：请配置环境变量（见 .env.example），或在 /features/mail/api/supabase-projects 启用一个项目"
+      `没有可用的 Supabase 配置：请配置环境变量（见 .env.example），或在 /features/mail/api/supabase-projects 启用一个项目${deactivateHint}`
     );
   }
   if (!config.serviceKey) {
     throw new Error(
-      `Supabase 项目 ${config.url} 没有可用的 service key（service_key 未配置或无法解密）：写库/批量任务需要它，请检查 supabase_projects 表或环境变量 SUPABASE_SERVICE_ROLE_KEY`
+      `Supabase 项目 ${config.url} 没有可用的 service key（service_key 未配置或无法解密）：写库/批量任务需要它，请检查 supabase_projects 表或环境变量 SUPABASE_SERVICE_ROLE_KEY${deactivateHint}`
     );
   }
   return createClient(config.url, config.serviceKey, { auth: { persistSession: false } });

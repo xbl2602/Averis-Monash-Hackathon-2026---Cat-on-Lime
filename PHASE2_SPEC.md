@@ -178,10 +178,14 @@ GUI 侧约定：文件夹上传用 `<input webkitdirectory>` 拿到文件列表�
 
 ## 7. MCP 暴露（本阶段）
 
-- `get_config` / `update_config`（写库，`readOnlyHint:false`）
+实际交付（与 SHARED_INTERFACES.md 一致，共新增 3 个，总数 11 个）：
+- `sync_gmail`（占位：返回 `not_implemented` 的可读说明）
 - `list_uploaded_documents`（只读）
-- `sync_gmail`（本阶段返回 `not_implemented` 的可读说明）
-- 现有 8 个 tool 不变；新 tool 由各 feature 的 `mcp/index.ts` 定义，`app/core/mcp-server/tools.ts` 汇总
+- `classify_uploaded_document`（写库，人工归类，`readOnlyHint:false`）
+
+说明：原计划里的 `get_config` / `update_config` 两个 tool 本期未做（配置通过 REST 接口读写，
+GUI 接入用 REST 已足够；MCP 客户端如需配置能力，后续按同一 mcp/index.ts 模式补即可）。
+新 tool 一律由各 feature 的 `mcp/index.ts` 定义，`app/core/mcp-server/tools.ts` 只汇总注册。
 
 ## 8. 验收清单
 

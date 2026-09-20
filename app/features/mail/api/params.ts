@@ -1,7 +1,7 @@
 /** HTTP 传输层的小工具：请求体解析 + 错误 → HTTP 响应（参数格式校验在 logic 里） */
 import { NextResponse } from "next/server";
 import { CryptoConfigError } from "@/lib/shared/crypto";
-import { MailDataError, MailRequestError, MailStoreUnavailableError } from "../logic";
+import { MailDataError, MailNotFoundError, MailRequestError, MailStoreUnavailableError } from "../logic";
 
 export async function parseJsonBody(request: Request): Promise<Record<string, unknown>> {
   let body: unknown;
@@ -18,6 +18,10 @@ export async function parseJsonBody(request: Request): Promise<Record<string, un
 }
 
 export function toErrorResponse(err: unknown): NextResponse {
+  // 404 要放在 MailRequestError 之前判断（NotFound 是它的子类，否则会被吞成 400）
+  if (err instanceof MailNotFoundError) {
+    return NextResponse.json({ error: err.message }, { status: 404 });
+  }
   if (err instanceof MailRequestError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }

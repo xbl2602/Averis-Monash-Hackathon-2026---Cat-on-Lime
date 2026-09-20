@@ -7,7 +7,7 @@
  * - 切换启用用两次 update（先清其他、再置目标），并发交给数据库唯一索引兜底
  */
 import { decryptSecret, encryptSecret, maskSecret } from "@/lib/shared/crypto";
-import { MailDataError, MailRequestError } from "./errors";
+import { MailDataError, MailNotFoundError, MailRequestError } from "./errors";
 import { getMailDbClient } from "./store";
 
 /** 给界面回显的项目形态：service_key 是掩码，has_service_key 表示库里到底有没有值 */
@@ -124,6 +124,47 @@ export async function activateSupabaseProject(id: string): Promise<SupabaseProje
   return toProjectView(data as SupabaseProjectRow);
 }
 
+export interface DeactivateSupabaseProjectsResult {
+  /** 本次实际从启用变为停用的项目数（本来就没启用时为 0） */
+  deactivated: number;
+  /** 本次被停用的项目列表（与 GET 列表相同的掩码回显） */
+  items: SupabaseProjectView[];
+}
+
+/**
+ * 停用启用中的 Supabase 项目（可运维性恢复通道）：
+ * - 传 id：只停用该项目；该项目不存在 → MailNotFoundError（HTTP 404）
+ * - 不传 id：停用当前所有 is_active=true 的项目（"清空启用，回到环境变量"）
+ *
+ * 并发约定：写操作是条件 update（is_active=true [且 id=...]），不在代码里先读后写；
+ * 预先按 id 查询仅为给出可读 404，不作为是否写入的依据（唯一索引只约束"最多一个 true"，
+ * 置 false 不会触发冲突）。
+ */
+export async function deactivateSupabaseProjects(id?: string): Promise<DeactivateSupabaseProjectsResult> {
+  const client = getMailDbClient();
+
+  if (id) {
+    const { data: existing, error: existsError } = await client
+      .from("supabase_projects")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle();
+    if (existsError) throw new MailDataError(`查询要停用的项目失败：${existsError.message}`);
+    if (!existing) throw new MailNotFoundError(`要停用的项目不存在：${id}`);
+  }
+
+  let query = client
+    .from("supabase_projects")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("is_active", true);
+  if (id) query = query.eq("id", id);
+
+  const { data, error } = await query.select(PROJECT_COLUMNS);
+  if (error) throw new MailDataError(`停用项目失败：${error.message}`);
+  const items = ((data ?? []) as SupabaseProjectRow[]).map(toProjectView);
+  return { deactivated: items.length, items };
+}
+
 /** 校验并整理新增/更新项目的请求体（api 层只负责解析 JSON，格式规则在这里） */
 export function normalizeSaveProjectInput(body: Record<string, unknown>): SaveSupabaseProjectInput {
   const id = optionalString(body.id, "id");
@@ -147,6 +188,16 @@ export function normalizeActivateInput(body: Record<string, unknown>): { id: str
   const id = requiredString(body.id, "id");
   if (!UUID_PATTERN.test(id)) {
     throw new MailRequestError("id 必须是合法的 UUID");
+  }
+  return { id };
+}
+
+/** 校验停用项目的请求体：id 可省略（不传 = 停用所有启用项目），传了必须是合法 UUID */
+export function normalizeDeactivateInput(body: Record<string, unknown>): { id?: string } {
+  const raw = optionalString(body.id, "id");
+  const id = raw ? raw : undefined;
+  if (id && !UUID_PATTERN.test(id)) {
+    throw new MailRequestError("id 必须是合法的 UUID（不传表示停用所有启用项目）");
   }
   return { id };
 }
