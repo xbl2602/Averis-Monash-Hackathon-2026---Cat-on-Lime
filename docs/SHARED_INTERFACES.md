@@ -38,7 +38,7 @@ interface ClassifyEmailResult {
 
 - `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；extraction 的 REST/MCP 只接受文本 provider（`lib/llm` 的 `TEXT_PROVIDER_IDS`，明确排除 jev），显式传 jev 会得到可读的 400/参数错误。
 - 不传 provider 的分类接口保持 `{ category, confidence, needs_review }` 三字段契约不变（混合引擎的 `engine` 字段不外露）。
-- **降级标记（2026-09-21 起）**：混合引擎（不传 provider）降级时，结果层 `model_provider` 会带 `degraded`（分类尽力兜底）或 `rules-degraded`（比对 Jev 复核失败）；运维/GUI 可用 `provider=degraded` 子串筛出这些邮件，再用 pipeline 的 `retry_failed` 一键重试（接法见 UI_HANDOFF §7）。**显式传 provider 时不会降级到别的模型**（选谁只试谁，避免"悄悄换模型装作成功"）。
+- **降级标记（2026-09-21 起）**：混合引擎（不传 provider）降级时，结果层 `model_provider` 会带 `degraded`（分类尽力兜底）或 `rules-degraded`（比对 Jev 复核失败）；运维/GUI 可用 `provider=degraded` 子串筛出这些邮件，再用 pipeline 的 `retry_failed` 一键重试（接法见 UI_GUIDE.md 第二部分 §7）。**显式传 provider 时不会降级到别的模型**（选谁只试谁，避免"悄悄换模型装作成功"）。
 - 该参数只在 `api` / `mcp` 层解析、传给 `logic`；`logic` 里的函数签名是 `{ ..., provider?: LLMProvider }`，默认值由 logic 自己兜底，UI 不传也能正常工作。
 
 ## extraction 模块的输出

@@ -55,7 +55,7 @@
 
 ## 3. 评分对齐（把力气花在刀刃上）
 
-来自 [Rules and Regulations.md](Rules%20and%20Regulations.md) 里的评分图表，两轮里权重最高的都是"能不能跑起来"：
+来自 [Rules and Regulations.md](official/Rules%20and%20Regulations.md) 里的评分图表，两轮里权重最高的都是"能不能跑起来"：
 
 **初赛（100分）**：Working Core Prototype 25 分（最高）、System Design & Architecture 15、Technology Integration 15、Technical Feasibility & Validation 15、Problem Statement Understanding 10、Innovation & Solution Approach 10、Practical Value & Potential 10
 
@@ -183,7 +183,7 @@
 - **Day 4 (9/21)**：**功能冻结**（不再加新功能），开始整合、debug、准备演示素材、准备API失败时的备用数据
 - **Day 5 上午 (9/22)**：录视频、写 slide、最终检查提交清单，中午12点前提交
 
-## 7. 提交前检查清单（依据 [Rules and Regulations.md](Rules%20and%20Regulations.md)）
+## 7. 提交前检查清单（依据 [Rules and Regulations.md](official/Rules%20and%20Regulations.md)）
 
 - [ ] Project Description（项目名称、目的、要解决的问题）
 - [ ] Demo Video（**≤5分钟**，每超30秒扣1分；YouTube unlisted/public 均可，不能 private；Google Drive 需设为 "Anyone with the link → Viewer"）

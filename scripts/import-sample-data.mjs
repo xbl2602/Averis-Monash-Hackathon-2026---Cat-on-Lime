@@ -14,6 +14,7 @@
  * 用法（在项目根目录）：
  *   npm run import:data:dry    # 只解析、打印统计，不连数据库（不需要 key）
  *   npm run import:data        # 增量导入到 Supabase（需要 .env.local 里的 SERVICE_ROLE key）
+ *   npm run perturb:import     # 导入 data/perturb 扰动集（--dir=data/perturb，走同一套逻辑）
  */
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
@@ -23,7 +24,11 @@ import { extractAttachmentText } from "../lib/shared/attachment-text.ts";
 import { normalizeText } from "../lib/shared/normalize.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SAMPLE_DIR = path.join(ROOT, "data", "sample");
+const DIR_ARG = process.argv.find((item) => item.startsWith("--dir="));
+const SAMPLE_DIR = path.resolve(
+  ROOT,
+  DIR_ARG ? DIR_ARG.slice("--dir=".length) : path.join("data", "sample")
+);
 const DRY_RUN = process.argv.includes("--dry-run");
 
 async function main() {

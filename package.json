@@ -14,6 +14,10 @@
     "import:data": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs",
     "import:data:dry": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs --dry-run",
     "evaluate": "tsx scripts/evaluate.ts",
+    "perturb:generate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/perturb-generate.mjs",
+    "perturb:import": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/import-sample-data.mjs --dir=data/perturb",
+    "perturb:run": "tsx scripts/perturb-run.ts",
+    "perturb:score": "tsx scripts/perturb-score.ts",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "test:crypto": "tsx scripts/crypto-self-test.mjs",
     "test:mcp-annotations": "tsx scripts/check-mcp-annotations.ts"

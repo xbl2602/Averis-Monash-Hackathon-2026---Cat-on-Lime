@@ -25,3 +25,10 @@ npm-debug.log*
 # 私有调研资料与编排日志 —— 不进 git、不提交、不推送
 /private/
 /.paizhang/
+
+# 扰动测试集为生成物（由 scripts/perturb-generate.mjs 重建）
+/data/perturb/
+
+# Python 缓存（score_cli.py 本地运行产生）
+__pycache__/
+*.pyc

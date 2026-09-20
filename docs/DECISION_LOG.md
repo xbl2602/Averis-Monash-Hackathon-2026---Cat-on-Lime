@@ -335,7 +335,7 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
      （与"没有 Jev key"时的既有口径一致，宁多勿漏），`engine=rules-degraded`；不整封失败。
   4. 一键重试：pipeline 的 REST / MCP 新增 `retry_failed`；服务端从结果表自动挑出
      `processing_status='failed'` 或 `model_provider` 含 `degraded` 的邮件并强制重算；
-     不能和 `email_ids` 同用。GUI 接法见 UI_HANDOFF §7。
+      不能和 `email_ids` 同用。GUI 接法见 UI_GUIDE.md 第二部分 §7。
   5. 失败原因只进服务端日志，不拼进用户可见响应；`needs_review` 不进官方提交格式。
 - **验证**：tsc；全量评测 **520/520 完全一致**（分类 100%、缺陷 TP=72 FP=0 FN=0、
   复核原因 20/20）；正常数据全部由规则判出（rules=520），降级路径未被误触发。

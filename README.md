@@ -215,7 +215,7 @@ docker compose up --build
 /scripts           本地工具脚本（导入样例数据到 Supabase 等，不参与线上运行）
 ```
 
-完整的架构规范和约束见 [CLAUDE.md](CLAUDE.md)。
+完整的架构规范和约束见 [CLAUDE.md](CLAUDE.md)；`docs/` 下所有文档的目录、权威状态与维护规则见 [docs/README.md](docs/README.md)。
 
 ## 当前状态
 
@@ -228,4 +228,4 @@ docker compose up --build
 - LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库），Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）
 - 第二阶段（功能已合并，详见 [PHASE2_SPEC.md](docs/PHASE2_SPEC.md)）：**config 配置中心**（GUI 可调、敏感值 AES-256-GCM 加密、读开放/写口令保护）、**mail 占位接口**（Gmail 连接状态 + 多 Supabase 项目切换与停用恢复）、**import 文档上传**（单件/多选/文件夹、校验链、内容哈希去重、按内容识别 SI/BL、原文件存 Storage）。新增 4 张业务表与 `uploads` bucket（RLS 脚本见 `scripts/phase2-rls.sql`；线上实际策略以控制台为准，核对/探测方法见上文「数据库初始化」）。
   - **线上写入已配置**（2026-09-20）：`ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已加进 Vercel（production + preview），线上实测：无口令写入 401、带口令可写、敏感值加密存储；本地 `.env.local` 有同样的值。如需在其他环境部署，记得补这两个变量（见 `.env.example`）
-  - GUI（配置页/上传页）由队友A负责接入，接口契约见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md) 的 config / mail / import 章节
+  - GUI（配置页/上传页）由队友A负责接入：**先看 [docs/UI_GUIDE.md](docs/UI_GUIDE.md)**（GUI 开发指南：就绪接口速查 + 要做的界面改动）；字段级契约见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md) 的 config / mail / import 章节
