@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { describeApiError, describeNetworkError, type ApiErrorInfo } from "../../../_components/api-error";
+import { ErrorNotice } from "../../../_components/error-notice";
+import { Icon } from "../../../_components/icon";
 
 interface EmailOption {
   email_id: string;
@@ -14,16 +17,16 @@ interface ClassifyResponse {
 }
 
 const PROVIDERS = [
-  { id: "jev", label: "Jev（TypeSafe 结构化决策）" },
-  { id: "claude", label: "Claude（Anthropic，对照）" },
+  { id: "jev", label: "Jev (structured decisions)" },
+  { id: "claude", label: "Claude (Anthropic, for comparison)" },
 ];
 
 const CATEGORY_LABELS: Record<string, { name: string; desc: string }> = {
-  BL_COMPARISON: { name: "BL 核对", desc: "发来 BL 草稿，要求核对/确认其与 SI 是否一致" },
-  SI_REQUEST: { name: "SI 往来", desc: "发来或索取装运指示（SI）" },
-  INVOICE_QUERY: { name: "发票询问", desc: "询问发票、费用、付款相关事宜" },
-  GENERAL: { name: "一般业务", desc: "其他正常航运业务往来" },
-  SPAM: { name: "垃圾邮件", desc: "广告、钓鱼或与航运业务无关" },
+  BL_COMPARISON: { name: "BL comparison", desc: "A draft BL was sent to be checked against the SI" },
+  SI_REQUEST: { name: "SI request", desc: "A Shipping Instruction was sent or requested" },
+  INVOICE_QUERY: { name: "Invoice query", desc: "A question about an invoice, charges or payment" },
+  GENERAL: { name: "General", desc: "Other normal shipping business" },
+  SPAM: { name: "Spam", desc: "Advertising, phishing or unrelated to shipping" },
 };
 
 export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
@@ -32,7 +35,7 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ClassifyResponse | null>(null);
   const [ranProvider, setRanProvider] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   async function runClassification() {
     setLoading(true);
@@ -45,28 +48,30 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email_id: emailId, provider }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "请求失败");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(describeApiError(res.status, data));
+        return;
+      }
       setResult(data as ClassifyResponse);
       setRanProvider(provider);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误");
+    } catch {
+      setError(describeNetworkError());
     } finally {
       setLoading(false);
     }
   }
 
+  const confidencePct = result && result.confidence !== null ? Math.round(result.confidence * 100) : null;
+  const category = result ? CATEGORY_LABELS[result.category] : undefined;
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <div className="grid gap-3 sm:grid-cols-2">
+    <div className="space-y-5">
+      <div className="card p-6 sm:p-8">
+        <div className="grid gap-5 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="text-gray-600 dark:text-gray-400">样例邮件</span>
-            <select
-              value={emailId}
-              onChange={(e) => setEmailId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-            >
+            <span className="mb-2 block font-semibold">Sample email</span>
+            <select value={emailId} onChange={(e) => setEmailId(e.target.value)} className="field">
               {emails.map((email) => (
                 <option key={email.email_id} value={email.email_id}>
                   {email.email_id} — {email.subject.slice(0, 60)}
@@ -75,12 +80,8 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-gray-600 dark:text-gray-400">用哪个模型</span>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-            >
+            <span className="mb-2 block font-semibold">Model</span>
+            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
               {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -89,72 +90,50 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
             </select>
           </label>
         </div>
-        <button
-          onClick={runClassification}
-          disabled={loading || !emailId}
-          className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
-        >
-          {loading ? "运行中..." : "运行分类"}
+        <button onClick={runClassification} disabled={loading || !emailId} className="btn btn-primary mt-6 !px-7 !py-3">
+          <Icon name="play" size={16} />
+          {loading ? "Running…" : "Run classification"}
         </button>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-          出错了：{error}
-        </div>
-      )}
+      {error && <ErrorNotice error={error} />}
 
       {result && (
-        <div className="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-gray-900 px-2 py-1 text-sm font-medium text-white dark:bg-gray-100 dark:text-gray-900">
-              {CATEGORY_LABELS[result.category]?.name ?? result.category}
-            </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {result.category}
-            </span>
+        <div className="card space-y-4 p-6 sm:p-8" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-full bg-fg px-4 py-1.5 text-sm font-semibold text-page">{category?.name ?? result.category}</span>
+            <span className="font-mono text-xs text-fg-faint">{result.category}</span>
             <span
-              className={
-                "ml-auto rounded-md px-2 py-1 text-xs font-medium " +
-                (result.needs_review
-                  ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
-                  : "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200")
-              }
+              className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+                result.needs_review ? "bg-bad-soft text-bad" : "bg-ok-soft text-ok"
+              }`}
             >
-              {result.needs_review ? "需人工介入" : "可自动处理"}
+              <Icon name={result.needs_review ? "users" : "check"} size={14} />
+              {result.needs_review ? "Needs human review" : "Can be handled automatically"}
             </span>
           </div>
 
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {CATEGORY_LABELS[result.category]?.desc ?? "未知类别"}
-          </p>
+          <p className="text-sm text-fg-muted">{category?.desc ?? "Unknown category"}</p>
 
-          {result.confidence !== null ? (
+          {confidencePct !== null ? (
             <div>
-              <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
-                <span>置信度（Jev 校准概率）</span>
-                <span>{Math.round(result.confidence * 100)}%</span>
+              <div className="flex justify-between text-xs text-fg-muted">
+                <span>Confidence (calibrated by Jev)</span>
+                <span className="font-mono">{confidencePct}%</span>
               </div>
-              <div className="mt-1 h-2 w-full rounded-full bg-gray-200 dark:bg-gray-800">
-                <div
-                  className="h-2 rounded-full bg-gray-900 dark:bg-gray-100"
-                  style={{ width: `${Math.round(result.confidence * 100)}%` }}
-                />
+              <div className="mt-2 h-2.5 w-full rounded-full bg-sunken">
+                <div className="h-2.5 rounded-full bg-accent" style={{ width: `${confidencePct}%` }} />
               </div>
             </div>
           ) : (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              该模型（{ranProvider}）不返回校准置信度，所以没有人工介入判断。
+            <p className="text-xs text-fg-faint">
+              This model ({ranProvider}) does not return a calibrated confidence, so there is no review decision.
             </p>
           )}
 
           <details className="text-sm">
-            <summary className="cursor-pointer text-gray-600 dark:text-gray-400">
-              原始 JSON 返回
-            </summary>
-            <pre className="mt-2 overflow-auto rounded-md bg-gray-100 p-3 text-xs dark:bg-gray-900">
-              {JSON.stringify(result, null, 2)}
-            </pre>
+            <summary className="cursor-pointer text-fg-muted hover:text-fg">Raw JSON response</summary>
+            <pre className="mt-2 overflow-auto rounded-2xl bg-code p-4 font-mono text-xs">{JSON.stringify(result, null, 2)}</pre>
           </details>
         </div>
       )}

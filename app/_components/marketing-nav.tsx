@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BrandMark } from "./brand-mark";
+import { ThemeToggle } from "./theme-toggle";
 
 const ANCHORS = [
-  { href: "#product", label: "产品" },
-  { href: "#about", label: "关于我们" },
-  { href: "#contact", label: "联系我们" },
+  { href: "#capabilities", label: "Capabilities" },
+  { href: "#formats", label: "Formats" },
+  { href: "#access", label: "Web, API & MCP" },
+  { href: "#reliability", label: "Reliability" },
 ];
 
 export function MarketingNav() {
@@ -21,86 +24,65 @@ export function MarketingNav() {
   }, []);
 
   return (
-    <header
-      className={`sticky top-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "border-b border-hairline bg-paper/80 backdrop-blur-md shadow-[0_1px_0_0_rgba(20,14,40,0.04)]"
-          : "border-b border-transparent bg-transparent"
-      }`}
-    >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo to-royal text-sm font-bold text-white shadow-sm">
-            航
-          </span>
-          <span className="text-ink">
-            Shipping Doc <span className="text-gradient">Verifier</span>
-          </span>
+    <header className="sticky top-0 z-50 px-3 pt-3 sm:px-5">
+      <div
+        className={`card mx-auto flex max-w-6xl items-center justify-between !rounded-full px-4 py-2.5 transition-shadow duration-300 sm:px-5 ${
+          scrolled ? "" : "!shadow-none"
+        }`}
+      >
+        <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
+          <BrandMark />
+          <span className="text-fg">Shipping Doc Verifier</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 text-sm font-medium text-ink/70 md:flex">
+        <nav className="hidden items-center gap-7 text-sm font-medium text-fg-muted lg:flex">
           {ANCHORS.map((a) => (
-            <a key={a.href} href={a.href} className="transition hover:text-ink">
+            <a key={a.href} href={a.href} className="transition hover:text-fg">
               {a.label}
             </a>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/login"
-            className="rounded-full px-4 py-2 text-sm font-medium text-ink/70 transition hover:text-ink"
-          >
-            登录
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Link href="/login" className="hidden px-2 text-sm font-medium text-fg-muted transition hover:text-fg md:block">
+            Sign in
           </Link>
-          <Link
-            href="/dashboard"
-            className="group relative overflow-hidden rounded-full bg-ink px-5 py-2 text-sm font-semibold text-white transition hover:shadow-lg hover:shadow-indigo/30"
-          >
-            <span className="relative z-10">进入系统 →</span>
-            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-indigo to-royal transition-transform duration-300 group-hover:translate-x-0" />
+          <Link href="/dashboard" className="btn btn-primary hidden !py-2 md:inline-flex">
+            Open the app
+            <span aria-hidden>→</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-fg md:hidden"
+          >
+            <span className="relative block h-3.5 w-4">
+              <span className={`absolute left-0 top-0 h-0.5 w-4 bg-fg transition-transform ${open ? "translate-y-1.5 rotate-45" : ""}`} />
+              <span className={`absolute left-0 top-1.5 h-0.5 w-4 bg-fg transition-opacity ${open ? "opacity-0" : ""}`} />
+              <span className={`absolute left-0 top-3 h-0.5 w-4 bg-fg transition-transform ${open ? "-translate-y-1.5 -rotate-45" : ""}`} />
+            </span>
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-label="打开菜单"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-hairline text-ink md:hidden"
-        >
-          <span className="relative block h-3.5 w-4">
-            <span
-              className={`absolute left-0 top-0 h-0.5 w-4 bg-ink transition-transform ${open ? "translate-y-1.5 rotate-45" : ""}`}
-            />
-            <span className={`absolute left-0 top-1.5 h-0.5 w-4 bg-ink transition-opacity ${open ? "opacity-0" : ""}`} />
-            <span
-              className={`absolute left-0 top-3 h-0.5 w-4 bg-ink transition-transform ${open ? "-translate-y-1.5 -rotate-45" : ""}`}
-            />
-          </span>
-        </button>
       </div>
 
       {open && (
-        <div className="border-t border-hairline bg-paper px-5 py-4 md:hidden">
-          <nav className="flex flex-col gap-1 text-sm font-medium text-ink/80">
+        <div className="card mx-auto mt-2 max-w-6xl p-4 md:hidden">
+          <nav className="flex flex-col gap-1 text-sm font-medium text-fg">
             {ANCHORS.map((a) => (
-              <a key={a.href} href={a.href} onClick={() => setOpen(false)} className="rounded-lg px-2 py-2 hover:bg-veil">
+              <a key={a.href} href={a.href} onClick={() => setOpen(false)} className="rounded-xl px-3 py-2.5 hover:bg-sunken">
                 {a.label}
               </a>
             ))}
           </nav>
           <div className="mt-3 flex gap-2">
-            <Link
-              href="/login"
-              className="flex-1 rounded-full border border-hairline px-4 py-2 text-center text-sm font-medium text-ink"
-            >
-              登录
+            <Link href="/login" className="btn btn-glass flex-1">
+              Sign in
             </Link>
-            <Link
-              href="/dashboard"
-              className="flex-1 rounded-full bg-ink px-4 py-2 text-center text-sm font-semibold text-white"
-            >
-              进入系统
+            <Link href="/dashboard" className="btn btn-primary flex-1">
+              Open the app
             </Link>
           </div>
         </div>

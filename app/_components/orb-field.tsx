@@ -1,11 +1,13 @@
 /**
- * 背景装饰用的漂浮光晕，纯 CSS 动画（见 globals.css 的 .orb / drift 关键帧）。
- * 只是视觉效果，不含任何业务逻辑，父容器需要 position: relative + overflow: hidden。
+ * Decorative floating aurora blobs, pure CSS animation (see .orb / drift in globals.css).
+ * Visual only, no business logic. The parent needs position: relative + overflow: hidden.
+ *  - tone="auto" (default): colours follow the active theme
+ *  - tone="dark": always the dark-palette colours (for panels that are dark in both themes)
  */
-export function OrbField({ tone = "light" }: { tone?: "light" | "dark" }) {
-  const a = tone === "dark" ? "var(--color-halo)" : "var(--color-indigo)";
-  const b = tone === "dark" ? "var(--color-indigo)" : "var(--color-halo)";
-  const c = "var(--color-royal)";
+export function OrbField({ tone = "auto" }: { tone?: "auto" | "dark" }) {
+  const a = tone === "dark" ? "var(--color-halo)" : "var(--orb-1)";
+  const b = tone === "dark" ? "var(--color-indigo)" : "var(--orb-2)";
+  const c = tone === "dark" ? "var(--color-royal)" : "var(--orb-3)";
 
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">

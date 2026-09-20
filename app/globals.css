@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
+/* `dark:` follows the in-app theme switch (data-theme on <html>), not the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
-  /* 品牌色板：靛紫系，呼应航运"单证核验"里那种严谨但不呆板的调性 */
+  /* Brand palette (kept as-is: the dark theme is built from these) */
   --color-paper: #faf9fc;
   --color-veil: #f1eefa;
   --color-indigo: #5b4fe8;
@@ -17,7 +20,7 @@
   --color-mint: #34d3a4;
   --color-amber: #f5b447;
 
-  --font-sans: var(--font-jakarta), "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --animate-drift-a: drift 22s ease-in-out infinite;
@@ -28,23 +31,233 @@
   --animate-pulse-glow: pulse-glow 3.2s ease-in-out infinite;
 }
 
-:root {
-  --background: var(--color-paper);
-  --foreground: var(--color-ink);
+/*
+ * Semantic theme tokens. Components use these (bg-page, text-fg, border-line, ...),
+ * never raw colours, so one attribute on <html> re-themes the whole app.
+ *   light = "Aether" pearl + frosted glass     dark = the original indigo/ink look
+ */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #eef1f6;
+  --sunken: rgba(28, 32, 60, 0.045);
+  --surface: rgba(255, 255, 255, 0.74);
+  --surface-solid: #ffffff;
+  --fg: #1c1c1e;
+  --fg-muted: rgba(28, 28, 30, 0.64);
+  --fg-faint: rgba(28, 28, 30, 0.44);
+  --line: rgba(28, 28, 30, 0.09);
+  --line-strong: rgba(28, 28, 30, 0.2);
+  --accent: #0a7cff;
+  --accent-strong: #0867d2;
+  --ok: #167a3a;
+  --ok-soft: rgba(52, 199, 89, 0.15);
+  --warn: #9a5b00;
+  --warn-soft: rgba(255, 159, 10, 0.17);
+  --bad: #c0281f;
+  --bad-soft: rgba(255, 69, 58, 0.12);
+
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset -1px -1px 0 rgba(255, 255, 255, 0.4),
+    0 10px 34px rgba(30, 44, 90, 0.09), 0 1px 3px rgba(30, 44, 90, 0.06);
+  --card-blur: blur(20px) saturate(180%);
+  --btn-bg: #1c1c1e;
+  --btn-fg: #ffffff;
+  --btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 16px rgba(28, 28, 30, 0.22);
+  --band-bg: #1c1c1e;
+  --sidebar-bg: rgba(255, 255, 255, 0.6);
+  --header-bg: rgba(238, 241, 246, 0.72);
+  --orb-1: rgba(120, 150, 255, 0.55);
+  --orb-2: rgba(200, 170, 255, 0.55);
+  --orb-3: rgba(130, 205, 255, 0.45);
+  --code-bg: rgba(28, 32, 60, 0.06);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #120e24;
+  --sunken: rgba(255, 255, 255, 0.05);
+  --surface: #1c1633;
+  --surface-solid: #1c1633;
+  --fg: #ffffff;
+  --fg-muted: rgba(201, 194, 232, 0.72);
+  --fg-faint: rgba(201, 194, 232, 0.45);
+  --line: rgba(183, 169, 247, 0.16);
+  --line-strong: rgba(183, 169, 247, 0.36);
+  --accent: #5b4fe8;
+  --accent-strong: #b7a9f7;
+  --ok: #34d3a4;
+  --ok-soft: rgba(52, 211, 164, 0.14);
+  --warn: #f5b447;
+  --warn-soft: rgba(245, 180, 71, 0.14);
+  --bad: #ff8b8b;
+  --bad-soft: rgba(255, 107, 107, 0.14);
+
+  --card-shadow: none;
+  --card-blur: none;
+  --btn-bg: linear-gradient(100deg, #5b4fe8, #241454);
+  --btn-fg: #ffffff;
+  --btn-shadow: 0 8px 20px rgba(91, 79, 232, 0.25);
+  --band-bg: #1c1633;
+  --sidebar-bg: #1c1633;
+  --header-bg: rgba(18, 14, 36, 0.9);
+  --orb-1: #b7a9f7;
+  --orb-2: #5b4fe8;
+  --orb-3: #241454;
+  --code-bg: rgba(255, 255, 255, 0.06);
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-sunken: var(--sunken);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-band: var(--band-bg);
+  --color-sidebar: var(--sidebar-bg);
+  --color-header: var(--header-bg);
+  --color-code: var(--code-bg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background-color: var(--page);
+  color: var(--fg);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Light theme: pearl page with a soft aurora wash behind the frosted glass */
+:root[data-theme="light"] body,
+:root:not([data-theme]) body {
+  background-image: radial-gradient(60rem 38rem at 8% -8%, rgba(140, 165, 255, 0.34), transparent 62%),
+    radial-gradient(52rem 36rem at 100% 2%, rgba(205, 175, 255, 0.34), transparent 60%),
+    radial-gradient(56rem 40rem at 45% 112%, rgba(150, 212, 255, 0.28), transparent 62%);
+  background-attachment: fixed;
 }
 
 ::selection {
-  background: var(--color-indigo);
+  background: var(--accent);
   color: white;
 }
 
-/* 装饰性渐变光晕，用在 hero / 深色区块背景里，纯 CSS，不依赖任何动画库 */
+/* ---------- Shared building blocks ---------- */
+@layer components {
+  /* Frosted-glass panel (light) / solid ink panel (dark) */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 1.5rem;
+    box-shadow: var(--card-shadow);
+    -webkit-backdrop-filter: var(--card-blur);
+    backdrop-filter: var(--card-blur);
+  }
+
+  .card-hover {
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.7rem 1.35rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    box-shadow: var(--btn-shadow);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .btn-glass {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    box-shadow: var(--card-shadow);
+    -webkit-backdrop-filter: var(--card-blur);
+    backdrop-filter: var(--card-blur);
+  }
+  .btn-glass:hover:not(:disabled) {
+    border-color: var(--line-strong);
+  }
+
+  /* Pill inputs / selects; textareas use .field-area for a softer corner */
+  .field {
+    width: 100%;
+    border-radius: 9999px;
+    border: 1px solid var(--line);
+    background: var(--sunken);
+    padding: 0.6rem 1.1rem;
+    font-size: 0.875rem;
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .field-area {
+    border-radius: 1.25rem;
+  }
+  .field::placeholder {
+    color: var(--fg-faint);
+  }
+  .field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 25%, transparent);
+  }
+  .field option {
+    background: var(--surface-solid);
+    color: var(--fg);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    border: 1px solid var(--line);
+    background: var(--sunken);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+  }
+}
+
+/* Decorative aurora blobs: pure CSS, colours come from the theme tokens */
 .orb {
   position: absolute;
   border-radius: 9999px;
@@ -99,10 +312,14 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(100deg, var(--color-indigo), var(--color-halo) 70%);
+  background: linear-gradient(100deg, var(--accent), var(--accent-strong) 75%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+:root[data-theme="light"] .text-gradient {
+  background-image: linear-gradient(100deg, #1c1c1e 5%, #2a5fb8 60%, #0a7cff);
 }
 
 .grid-fade-mask {
@@ -110,6 +327,108 @@ body {
   -webkit-mask-image: linear-gradient(to bottom, black, transparent);
 }
 
+/* ---------- Theme switch ----------
+ * Outline animation: one SVG path traces the track plus BOTH thumb circles
+ * (pathLength normalised to 360). A dash "snake" of fixed length slides along it,
+ * so the outlined circle is drawn on the far side while it is erased on the near side.
+ * Colours: white track / graphite ink in light, near-black track / white ink in dark.
+ * State is driven purely by [data-theme] so the first paint is already correct
+ * (no animation on page load). */
+.theme-switch {
+  --h: 28px;
+  --ease: cubic-bezier(0.65, 0, 0.35, 1);
+  position: relative;
+  display: inline-block;
+  flex: none;
+  height: var(--h);
+  width: calc(var(--h) * 2.5155);
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #1c1c1e;
+  box-shadow: 0 1px 3px rgba(20, 20, 40, 0.14);
+  cursor: pointer;
+  transition: background-color 0.5s var(--ease), color 0.5s var(--ease);
+}
+.theme-switch--lg {
+  --h: 40px;
+}
+:root[data-theme="dark"] .theme-switch {
+  background: #0a0716;
+  color: #f1eeff;
+  box-shadow: 0 0 0 1px rgba(183, 169, 247, 0.25);
+}
+.theme-switch:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  outline-offset: 3px;
+}
+.theme-switch__outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.theme-switch__outline path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 269.2 90.8;
+  stroke-dashoffset: -316.2;
+  transition: stroke-dashoffset 0.7s var(--ease);
+}
+:root[data-theme="dark"] .theme-switch__outline path {
+  stroke-dashoffset: -450.8;
+}
+.theme-switch__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: #1c1c1e;
+  color: #ffd66b;
+  transition: transform 0.7s var(--ease), background-color 0.5s var(--ease), color 0.5s var(--ease);
+}
+:root[data-theme="dark"] .theme-switch__thumb {
+  transform: translateX(calc(var(--h) * 1.5155));
+  background: #ffffff;
+  color: #241454;
+}
+.theme-switch__icon {
+  position: absolute;
+  width: 52%;
+  height: 52%;
+  transition: opacity 0.4s var(--ease), transform 0.7s var(--ease);
+}
+.theme-switch__icon--moon {
+  opacity: 0;
+  transform: rotate(-70deg) scale(0.5);
+}
+:root[data-theme="dark"] .theme-switch__icon--sun {
+  opacity: 0;
+  transform: rotate(70deg) scale(0.5);
+}
+:root[data-theme="dark"] .theme-switch__icon--moon {
+  opacity: 1;
+  transform: none;
+}
+
+/* While the theme flips, ease colours everywhere (except the switch, which has its own timing) */
+:root.theme-switching :not(.theme-switch, .theme-switch *) {
+  transition-property: background-color, color, border-color, fill, stroke, box-shadow !important;
+  transition-duration: 0.45s !important;
+  transition-timing-function: ease !important;
+}
+
+/* Reduce-motion: from the OS setting or the toggle in Settings */
 @media (prefers-reduced-motion: reduce) {
   .orb,
   [class*="animate-"] {
@@ -118,4 +437,17 @@ body {
   * {
     transition-duration: 0.01ms !important;
   }
+}
+:root[data-motion="reduced"] .orb,
+:root[data-motion="reduced"] [class*="animate-"] {
+  animation: none !important;
+}
+:root[data-motion="reduced"] * {
+  transition-duration: 0.01ms !important;
+}
+
+/* The reliability band and auth brand panel are dark in both themes, so their gradient text must stay light */
+.band .text-gradient,
+.on-dark .text-gradient {
+  background-image: linear-gradient(100deg, #ffffff, #b7a9f7 70%);
 }

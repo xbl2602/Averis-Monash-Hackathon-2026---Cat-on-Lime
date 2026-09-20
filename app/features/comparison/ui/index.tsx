@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { describeApiError, describeNetworkError, type ApiErrorInfo } from "../../../_components/api-error";
+import { ErrorNotice } from "../../../_components/error-notice";
+import { Icon } from "../../../_components/icon";
+import { JsonResult } from "../../../_components/json-result";
+import { Notice } from "../../../_components/notice";
 
-// 一组会产生 MISMATCH 的示例数据，方便验证比对逻辑接线是否正常
+// Example data with a deliberate MISMATCH (consignee), to show what a flagged result looks like
 const EXAMPLE_SI = { shipper: "APRIL Fine Paper", consignee: "ABC Trading Co" };
 const EXAMPLE_BL = { shipper: "APRIL Fine Paper", consignee: "XYZ Trading Co" };
 
 export function ComparisonPanel() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   async function runExample() {
     setLoading(true);
@@ -21,35 +26,40 @@ export function ComparisonPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ si: EXAMPLE_SI, bl: EXAMPLE_BL }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "请求失败");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(describeApiError(res.status, data));
+        return;
+      }
       setResult(JSON.stringify(data, null, 2));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误");
+    } catch {
+      setError(describeNetworkError());
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-        这里目前是最简单的字符串完全相等比较，还没有处理格式差异/缺失字段等情况。
-        负责人可以在 <code>app/features/comparison/logic/index.ts</code> 里替换。
+    <div className="space-y-5">
+      <Notice title="How it compares">
+        Values are normalised first, so case, punctuation and number formats don&rsquo;t cause false alarms. Wording
+        differences get a second look from the Jev model, while numbers are always compared exactly. When it can&rsquo;t
+        decide, the result is marked <span className="font-mono">NEEDS_REVIEW</span>.
+      </Notice>
+
+      <div className="card flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+        <div>
+          <h2 className="text-lg font-bold">Try it on example data</h2>
+          <p className="mt-1 text-sm text-fg-muted">The consignee is deliberately different between the SI and the BL.</p>
+        </div>
+        <button onClick={runExample} disabled={loading} className="btn btn-primary !px-7 !py-3">
+          <Icon name="play" size={16} />
+          {loading ? "Comparing…" : "Run comparison"}
+        </button>
       </div>
-      <button
-        onClick={runExample}
-        disabled={loading}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
-      >
-        {loading ? "运行中..." : "用示例数据（consignee 故意不一样）运行比对"}
-      </button>
-      {error && <p className="text-sm text-red-600">出错了：{error}</p>}
-      {result && (
-        <pre className="overflow-auto rounded-md bg-gray-100 p-4 text-sm dark:bg-gray-900">
-          {result}
-        </pre>
-      )}
+
+      {error && <ErrorNotice error={error} />}
+      {result && <JsonResult data={result} />}
     </div>
   );
 }

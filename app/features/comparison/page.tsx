@@ -1,12 +1,14 @@
+import { PageHeader } from "../../_components/page-header";
 import { ComparisonPanel } from "./ui";
 
 export default function ComparisonPage() {
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">比对确认</h1>
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        比对 BL 与 SI 的字段，标出差异，拿不准时提示人工介入。
-      </p>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Step 03"
+        title="SI / BL comparison"
+        description="Compare the Bill of Lading draft against the Shipping Instruction field by field, show the differences, and flag anything a person should check."
+      />
       <ComparisonPanel />
     </div>
   );

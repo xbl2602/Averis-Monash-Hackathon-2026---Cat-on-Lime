@@ -1,12 +1,14 @@
+import { PageHeader } from "../../_components/page-header";
 import { ExtractionPanel } from "./ui";
 
 export default function ExtractionPage() {
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">字段抽取</h1>
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        从邮件正文/附件里抽取 shipper、consignee、port of loading 等 7 个字段。
-      </p>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Step 02"
+        title="Field extraction"
+        description="Pull the seven shipment fields (shipper, consignee, notify party, ports, container count and gross weight) out of an email or its attachment."
+      />
       <ExtractionPanel />
     </div>
   );
