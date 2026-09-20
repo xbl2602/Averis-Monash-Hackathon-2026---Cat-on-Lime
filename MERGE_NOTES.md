@@ -3,7 +3,32 @@
 这份文件记录 2026-09-20 把队友A的前端分支合并进 `main` 时做了什么、为什么这么做、以及接下来要注意什么。
 不用记住全部，只要出问题时知道"回来翻这份文件"就够了。
 
-## 合并了什么
+## 先看这里：后端在队友A拉分支之后新增了什么（给队友A / 队友B）
+
+时间线：队友A的分支从 `cef6586`（加 Jev 验证页那次）拉出来。**从那之后，后端在 `main` 上又做了 12 个提交**，
+这些能力队友A本地看不到，合并后全部生效。一句话总结：**分类→抽取→比对全流程已能整批判量、评测达标、结果可查可导出，
+REST + MCP 都已上线**。新增能力清单：
+
+| # | 新能力 | 对队友来说意味着什么 |
+|---|---|---|
+| 1 | **整箱批量入口** `POST /features/pipeline/api` 与 MCP tool `run_batch` | 之前只能一封封跑；现在可以一次跑一批（默认最多 50 封/次，带 `remaining` 提示还剩多少）。**`/features/verification` 页面要接的就是它**（支持 `provider` 选择、`dry_run` 只预览不写库、`limit` 控制数量、并发上限） |
+| 2 | **结果查询模块**（新 feature：`app/features/results/`） | 新增 4 个只读 REST 接口：`/features/results/api`（列表/排序/分页）、`/stats`（统计）、`/conflicts`（冲突对）、`/export`（导出 json/md/txt）。网页上想做"结果看板/导出按钮"直接调这些 |
+| 3 | **比对引擎 v4** + 规则引擎 | 分类/比对改为"本地规则优先 → Jev 判断 → LLM 兜底"三层；没有 LLM key 也能靠规则跑。评测成绩：分类 macro-F1 100%、端到端 520/520 |
+| 4 | **数据层落地 Supabase**（3 张表 + 1 视图 + 缓存表） | `raw_emails`（原始邮件）、`parsed_attachments`（附件文字）、`verification_results`（结果）、只读视图 `verification_overview`、缓存 `llm_call_cache`。导入脚本支持增量（内容没变就跳过） |
+| 5 | **附件解析打通** TXT/PDF/Word/Excel | 抽取模块现在真能读附件内容（含两个服务端 PDF 解析 bug 的根治），不再只靠正文 |
+| 6 | **MCP server 接上真实握手** | 共 8 个 tool（7 个只读 + 1 个 `run_batch` 写库），地址 `/core/mcp-server`，线上 https://hackathonaveris.vercel.app/core/mcp-server 。验证脚本：`npm run mcp:smoke` |
+| 7 | **本地评测脚本** `npm run evaluate` | 对照官方 ground_truth 全量 520 封自测（仅自测用，不进提交文件），出分数并写库；参数 `--force` / `--limit=50` / `--no-write` |
+| 8 | **多 LLM provider 配置化** | Claude / OpenAI / DeepSeek / Gemini / 本地 LM Studio / Jev 都能在接口参数里选。本地缺 key 会自动降级不影响规则路径；线上 Claude/OpenAI/DeepSeek 还缺 key（选它们会返回可读的缺 key 提示，不是崩溃） |
+
+**队友A需要知道的两个接口细节**（做 `/features/verification` 页面时用）：
+- `POST /features/pipeline/api` 请求体（全部可选）：`{ email_ids?, limit?, force?, dry_run?, provider?, concurrency? }`，
+  返回 `RunBatchSummary`（selected / skipped / ran / succeeded / failed / wrote / remaining）
+- 完整格式见 `SHARED_INTERFACES.md`「pipeline 模块（批量入口）」
+
+**队友B（写 README/演示材料）需要知道的**：上面这些能力在 README 里有更详细的说明和 curl 示例，
+"当前状态"一节的数据可以直接引用；官方 ground_truth 只用于自测、不进提交、演示时不要展示对照答案。
+
+## 合并了什么（前端）
 
 **前端（队友A）**：`origin/FRONTEND-BY-WJ` 分支的 1 个提交（`0d703c5`），
 从 `cef6586` 拉出来独立开发，现在整个合并进 `main`。具体新增/改动的功能：
