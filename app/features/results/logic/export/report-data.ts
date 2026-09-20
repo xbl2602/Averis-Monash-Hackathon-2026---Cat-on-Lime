@@ -35,6 +35,12 @@ export function describeResultFilters(query: ResultQuery): string {
 export function describeConflictFilters(query: ConflictQuery): string {
   const parts: string[] = [`状态=${query.statuses.join("|")}`];
   if (query.q) parts.push(`关键词=${query.q}`);
+  if (query.numericMode === "fuzzy") {
+    parts.push(`数值口径=模糊（容差${query.tolerance ?? "默认"}）`);
+  }
+  if (query.valueField && query.value) {
+    parts.push(`按值搜索=${query.valueField}≈${query.value}`);
+  }
   return parts.join("，");
 }
 

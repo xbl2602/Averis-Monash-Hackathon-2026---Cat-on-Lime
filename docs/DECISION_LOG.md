@@ -316,5 +316,70 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
      `Cannot find module .../pdf.worker.mjs`），批量入口会把 10 封 PDF 邮件误标 unreadable。
      修复：`next.config.mjs` 加 `serverExternalPackages: ['pdf-parse','pdfjs-dist']`。
 - **验证**：tsc + 生产构建通过；本地 `next start` 与 Docker 镜像里 PDF/XLSX/DOCX 解析与抽取正常；
-  tsx 与 Next 两个运行时算出的 `input_hash` 一致（API 增量跑 520/520 全跳过）；REST 的
-  400 / 503 / dry_run / force / 失败行留痕都实测过；全量评测仍 520/520。
+   tsx 与 Next 两个运行时算出的 `input_hash` 一致（API 增量跑 520/520 全跳过）；REST 的
+   400 / 503 / dry_run / force / 失败行留痕都实测过；全量评测仍 520/520。
+
+### 决策 25：引擎失败不再整封崩——分级降级链 + degraded 标记 + 一键重试（P0-2 / P1-5 / P1-9）
+
+- **背景**：混合引擎任一环节（Jev / 文本模型）失败会直接抛错，整封邮件变成 failed 行；
+  云端演示时断网、额度被限、供应商被挡都可能发生。操作者要求：Jev 挂了走 LLM、
+  LLM 多家慢慢 fallback、全失败就"人工/失败标签 + 一键重试"。
+- **决策**：
+  1. 分类混合链改为逐级降级：规则（高置信）→ Jev（失败只记日志、继续）→ 文本 provider 链
+     （首选最前，默认 gemini→deepseek→openai→claude→lmstudio，只试配了 key 的；
+     实现在 `lib/shared/llm-chain.ts`，逐 provider 走同一套内容指纹缓存）→
+     仍失败用"尽力规则"（分差 ≥1）降级，再无信号记 GENERAL。降级结果 `needs_review=true`、
+     `engine=degraded`（写进 `model_provider` 列，供筛选/重试）。
+  2. 显式指定 provider 的单独接口**不参与**降级链（选谁只试谁，避免"悄悄换模型装作成功"）。
+  3. 比对：文字字段候选差异交 Jev 复核失败时，保守降级为"候选差异全部计入不一致"
+     （与"没有 Jev key"时的既有口径一致，宁多勿漏），`engine=rules-degraded`；不整封失败。
+  4. 一键重试：pipeline 的 REST / MCP 新增 `retry_failed`；服务端从结果表自动挑出
+     `processing_status='failed'` 或 `model_provider` 含 `degraded` 的邮件并强制重算；
+     不能和 `email_ids` 同用。GUI 接法见 UI_HANDOFF §7。
+  5. 失败原因只进服务端日志，不拼进用户可见响应；`needs_review` 不进官方提交格式。
+- **验证**：tsc；全量评测 **520/520 完全一致**（分类 100%、缺陷 TP=72 FP=0 FN=0、
+  复核原因 20/20）；正常数据全部由规则判出（rules=520），降级路径未被误触发。
+
+### 决策 26：附件配对加"按内容识别"兜底（P0-3）
+
+- **背景**：原来只按文件名 `_SI`/`_BL` 配对，改名/换名就误判缺附件（对手的"去文件名"实验证明
+  这是全行业最脆弱的一环）。
+- **决策**：配对顺序 = 文件名 →（有缺位时）对未占用、可读的附件按内容识别补缺：
+  先复用 `document-identify.ts` 的关键词规则（import 上传模块同一份），规则判不出（UNKNOWN）
+  才用文本模型链兜底（`document-identify-llm.ts`，模型只许从 SI/BL/OTHER/UNKNOWN 里选一个，
+  输入只有文本片段）；同一附件不会被 SI 和 BL 抢两次；全失败维持缺位、走原有
+  missing_attachment / unreadable 分支。不动"先判 OTHER 再判 SI/BL"的既有规则顺序。
+- **验证**：tsc；全量评测 520/520 不变（样例数据仍全部由文件名配对命中，规则链对答案不乱动）。
+
+### 决策 27：导出前做提交格式校验，fail-closed（P0-4）
+
+- **背景**：官方 schema（`data/sample/README.md`）要求：MISMATCH 必带
+  `defect_fields`/`has_defect=true`；NEEDS_REVIEW 必带 `review_reason` 且不得携带缺陷；
+  OK 两者都为空。格式不对可能让好成绩白费，而且不允许"悄悄放过"。
+- **决策**：`buildSubmissionDocument` 增加逐行一致性校验，违规 id 进 `invalidIds`；
+  `incomplete` 判定追加 invalid 条件；HTTP 新增响应头 `X-Export-Invalid` /
+  `X-Export-Invalid-Ids`；MCP `export_results` 的 `_meta` 同步 `invalid` / `invalid_ids`。
+  导出照常返回文件（方便定位修复），但完整性告警必须可见。
+- **验证**：tsc；头与 `_meta` 已接线；全量评测 520/520（当前 0 条 invalid）。
+
+### 决策 28：数值"精确/模糊"只用于冲突查询，不进官方提交（P1-6）
+
+- **背景**：操作者要"精确比和模糊比都要，筛选搜冲突文件时可选、可输入"；同时
+  FINALS_ROADMAP 3.5/4.4 依据官方生成器与评分脚本，明确官方差异量级大（重量 ±500~2000kg）、
+  提交路径加容差会漏检，故提交判定保持精确。
+- **决策**：results 的 conflicts 查询新增参数：`numeric_mode=exact|fuzzy`、
+  `tolerance`（≥0，仅 fuzzy 可用）、`value_field`（container_count / gross_weight_kg）、
+  `value`（按值搜索，命中 SI/BL 任一侧；必须与 value_field 成对）。
+  模糊口径下差值 ≤ 容差的数字字段不再算冲突（默认容差：重量 max(0.5kg, 0.1%)、箱数 0）；
+  实现为逻辑层过滤（`numeric-query.ts`），不改存储判定；REST + MCP 同参，conflicts 导出同样支持。
+- **验证**：tsc；参数非法返回中文 400；该功能只影响查询层，不影响全量评测口径。
+
+### 决策 29：字段级出处落库（P1-7）
+
+- **背景**：此前结果只有整封文件指纹，回答不了"这个值是从哪一行抽出来的"。
+- **决策**：规则解析返回每个字段的命中行号 + 原句（`parseDocumentFieldsWithEvidence`），
+  LLM 兜底字段只标 `source=llm`（不给假出处）；沿 pipeline 透传，结果表新增两列
+  `evidence_si` / `evidence_bl`（jsonb），视图 `verification_overview` 同步追加；
+  results 列表与冲突对返回 `evidence_si/bl`、`si_evidence/bl_evidence`。
+  DDL 已同步 `scripts/phase3-evidence-migration.sql`；表结构变更经操作者确认（2026-09-21）。
+- **验证**：tsc；迁移已应用并核实视图列；全量评测 520/520 不变。

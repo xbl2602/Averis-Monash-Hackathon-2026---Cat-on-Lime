@@ -76,6 +76,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
     expectedSource: null,
     missingIds: [],
     staleIds: [],
+    invalidIds: [],
     incomplete: false,
     content: serialize(request.format, data),
     generatedAt,
@@ -104,6 +105,7 @@ async function buildSubmissionDocument(
 
   const itemCount = Object.keys(payload).length;
   const expected = await resolveExpectedSampleIds(stats);
+  const invalidIds = findInvalidSubmissionIds(payload);
 
   const present = new Set(Object.keys(payload));
   const missingIds =
@@ -123,7 +125,8 @@ async function buildSubmissionDocument(
     itemCount !== expected.total ||
     missingIds.length > 0 ||
     staleIds.length > 0 ||
-    failedCount > 0;
+    failedCount > 0 ||
+    invalidIds.length > 0;
 
   return {
     filename: "submission.json",
@@ -135,10 +138,34 @@ async function buildSubmissionDocument(
     expectedSource: expected.source,
     missingIds,
     staleIds,
+    invalidIds,
     incomplete,
     content: toJson(payload),
     generatedAt,
   };
+}
+
+/**
+ * 提交文件的合法性校验（2026-09-21 P0-4，规则来自官方 data/sample/README.md）：
+ * - MISMATCH：defect_fields 非空、has_defect 为 true、review_reason 为空
+ * - NEEDS_REVIEW：review_reason 有值（官方四类之一）、defect_fields 为空（不确定不许当缺陷导出）
+ * - OK：defect_fields 为空、has_defect 为 false、review_reason 为空
+ * 违反任一条的行进 invalidIds：导出不拦截，但 incomplete 强制为 true + 专用响应头，绝不悄悄放过。
+ */
+function findInvalidSubmissionIds(payload: Record<string, EmailVerificationResult>): string[] {
+  const invalid: string[] = [];
+  for (const [emailId, result] of Object.entries(payload)) {
+    const hasDefects = result.defect_fields.length > 0;
+    const consistent =
+      result.has_defect === hasDefects &&
+      (result.status === "MISMATCH"
+        ? hasDefects && result.review_reason === null
+        : result.status === "NEEDS_REVIEW"
+          ? !hasDefects && result.review_reason !== null
+          : !hasDefects && result.review_reason === null);
+    if (!consistent) invalid.push(emailId);
+  }
+  return invalid;
 }
 
 interface ExpectedSampleIds {

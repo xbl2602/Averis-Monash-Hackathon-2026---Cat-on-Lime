@@ -9,10 +9,15 @@ import { callWithCache } from "@/lib/shared/llm-cache";
 import {
   COMPARED_FIELDS,
   type ComparedField,
+  type ExtractedDocumentEvidence,
   type ExtractedDocumentFields,
   type ExtractDocumentResult,
 } from "@/lib/shared/types";
-import { isLikelyOtherDocument, parseDocumentFields, PLACEHOLDER_VALUE } from "./label-parser";
+import {
+  isLikelyOtherDocument,
+  parseDocumentFieldsWithEvidence,
+  PLACEHOLDER_VALUE,
+} from "./label-parser";
 
 export interface ExtractFieldsInput {
   documentText: string;
@@ -23,13 +28,19 @@ export interface ExtractFieldsInput {
 
 export async function extractFields(input: ExtractFieldsInput): Promise<ExtractDocumentResult> {
   if (isLikelyOtherDocument(input.documentText)) {
-    return { document_type: "OTHER", fields: {}, extracted_by: "rules" };
+    return { document_type: "OTHER", fields: {}, extracted_by: "rules", evidence: {} };
   }
 
-  const ruleFields = parseDocumentFields(input.documentText);
+  const parsed = parseDocumentFieldsWithEvidence(input.documentText);
+  const ruleFields = parsed.fields;
   const missing = COMPARED_FIELDS.filter((field) => !ruleFields[field]);
   if (missing.length === 0) {
-    return { document_type: input.documentType, fields: ruleFields, extracted_by: "rules" };
+    return {
+      document_type: input.documentType,
+      fields: ruleFields,
+      extracted_by: "rules",
+      evidence: parsed.evidence,
+    };
   }
 
   const llmFields = await tryLlmExtraction(input);
@@ -38,10 +49,18 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
   const usedLlm = (Object.keys(llmFields ?? {}) as ComparedField[]).some(
     (field) => !ruleFields[field]
   );
+  // 出处：规则字段带行号+原句；LLM 补上的字段只标来源（没有行证据，不给假出处）
+  const evidence: ExtractedDocumentEvidence = { ...parsed.evidence };
+  if (llmFields) {
+    for (const field of Object.keys(llmFields) as ComparedField[]) {
+      if (!ruleFields[field]) evidence[field] = { source: "llm" };
+    }
+  }
   return {
     document_type: input.documentType,
     fields: merged,
     extracted_by: usedLlm ? "llm" : "rules",
+    evidence,
   };
 }
 

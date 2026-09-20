@@ -75,3 +75,33 @@
 - `app/dashboard/page.tsx:2,54` 直读并解析全部样例邮件（`listSampleEmails()`）且没有 try/catch：样例数据缺失/损坏时该页可能 500。建议加兜底文案（"数据暂时读取失败"）而不是整页崩掉。
 - 首页 `page.tsx:266` 的"≤5 并发批量上限"与后端实际上限（`BATCH_MAX_CONCURRENCY = 8`）不一致，顺手校准即可。
 - 页面 provider 下拉的默认值建议 `gemini`（demo 兜底）；`lmstudio` 在云端不可用，可按环境隐藏或给出可读提示。
+
+## 7. 本轮后端新增（2026-09-21，已实现，GUI 可直接接）
+
+> 背景：P0-2/P0-3/P0-4/P1-5/P1-6/P1-7 后端完成（详见 DECISION_LOG 决策 25~29）。
+> 接口只增不改：老参数/老响应字段保持不变，新字段可以忽略不显示。
+
+### 7.1 一键重试（失败/降级邮件）
+
+- 触发：`POST /features/pipeline/api`，body `{ "retry_failed": true }`（写模式，需口令；不能和 `email_ids` 同用）
+- 语义：服务端自动挑出结果表里 `processing_status='failed'` 或 `model_provider` 含 `degraded` 的邮件，强制重算；没有目标时 `ran=0` 正常返回
+- 建议：结果页统计区显示"处理失败 N 封、降级 M 封"，加一个按钮调用；调用后展示 `RunBatchSummary`（ran / succeeded / failed / remaining）
+- 筛选列表：`GET /features/results/api?processing=failed`（失败）；`GET /features/results/api?provider=degraded`（降级，子串匹配）
+
+### 7.2 冲突数值搜索（精确/模糊 + 按值）
+
+- `GET /features/results/api/conflicts` 新增：`numeric_mode=exact|fuzzy`、`tolerance`（仅 fuzzy，≥0）、`value_field=container_count|gross_weight_kg`、`value`（必须成对）
+- 示例：`?numeric_mode=fuzzy&tolerance=2`（差值 ≤2kg 不算冲突）；`?value_field=gross_weight_kg&value=12000&numeric_mode=fuzzy`（≈12000）
+- 建议文案："数值口径：精确 / 模糊（容差 __）" + "按值搜索：字段 + 数值"
+- 只影响查询，不影响导出提交（submission 永远是精确判定的结果）
+
+### 7.3 字段级出处（证据）
+
+- `list_results` items 新增 `evidence_si` / `evidence_bl`；`list_conflicts` items 新增 `si_evidence` / `bl_evidence`
+- 形状：`{ [字段名]: { line: 3, text: "Shipper: ABC PTE LTD", source: "rules" } }`；LLM 兜底字段只有 `{ source: "llm" }`（没有行号，不要显示"第 N 行"）
+- 建议：冲突卡片/字段详情显示"出处：第 3 行 · 原文片段"（折叠区或 `title` 提示）
+
+### 7.4 导出完整性新响应头
+
+- `X-Export-Invalid` / `X-Export-Invalid-Ids`：行内自相矛盾（如 MISMATCH 没有缺陷清单、NEEDS_REVIEW 缺原因）的 email_id；任一条时 `X-Export-Incomplete` 也为 true
+- 建议：`fetch + blob` 下载 submission 后检查头，`Invalid > 0` 显示红色告警（"提交文件有 N 条自相矛盾，请先修复/重跑"）；`Missing` / `Stale` 沿用原建议

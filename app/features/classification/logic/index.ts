@@ -5,9 +5,10 @@ import {
   type JevQuestion,
   type LLMProvider,
 } from "@/lib/llm";
+import { callTextLLMChain } from "@/lib/shared/llm-chain";
 import { callWithCache } from "@/lib/shared/llm-cache";
 import { EMAIL_CATEGORIES, type InboxEmail, type EmailCategory } from "@/lib/shared/types";
-import { classifyByRules } from "./rules";
+import { classifyByRules, classifyByRulesBestEffort } from "./rules";
 
 export interface ClassifyEmailInput {
   email: InboxEmail;
@@ -27,8 +28,8 @@ export interface ClassifyEmailResult {
 }
 
 export interface HybridClassificationResult extends ClassifyEmailResult {
-  /** 这次结果是谁给出的：规则 / Jev / 文本LLM */
-  engine: "rules" | "jev" | "llm";
+  /** 这次结果是谁给出的：规则 / Jev / 文本LLM链 / 全部失败后的尽力兜底（degraded） */
+  engine: "rules" | "jev" | "llm" | "degraded";
 }
 
 // 类别清单的唯一来源是 lib/shared/types.ts 的 EMAIL_CATEGORIES，这里只是本地别名
@@ -69,8 +70,10 @@ export async function classifyEmail(
 }
 
 /**
- * 混合分类（流水线默认）：高精度规则 → 拿不准交给 Jev → 没有 Jev 时文本 LLM 兜底。
- * 2026-09-20 全量强制重跑实测：520 封样例全部由规则直接判定（rules=520），Jev 只兜底规则判不了的新邮件。
+ * 混合分类（流水线默认）：高精度规则 → 拿不准交给 Jev → Jev 不可用/失败走文本模型链兜底 →
+ * 全部失败用"尽力规则"降级（engine=degraded、needs_review=true，绝不整封抛错）。
+ * 2026-09-20 全量强制重跑实测：520 封样例全部由规则直接判定（rules=520），模型只兜底规则判不了的新邮件。
+ * 2026-09-21（P0-2）：每个环节单独 try/catch，前一级失败不影响后一级；失败原因只进服务端日志。
  */
 export async function classifyEmailHybrid(
   input: ClassifyEmailInput
@@ -81,12 +84,36 @@ export async function classifyEmailHybrid(
   }
 
   if (isJevAvailable()) {
-    const jev = await classifyWithJev(input.email);
-    return { ...jev, engine: "jev" };
+    try {
+      const jev = await classifyWithJev(input.email);
+      return { ...jev, engine: "jev" };
+    } catch (err) {
+      console.warn(
+        `[classification] Jev 失败，降级到文本模型链：${err instanceof Error ? err.message : err}`
+      );
+    }
   }
 
-  const llm = await classifyWithTextLLM(input.provider ?? "gemini", input.email);
-  return { ...llm, engine: "llm" };
+  try {
+    const llm = await classifyWithTextChain(input.email, input.provider);
+    return { ...llm, engine: "llm" };
+  } catch (err) {
+    console.warn(
+      `[classification] 所有模型都失败，使用尽力规则兜底：${err instanceof Error ? err.message : err}`
+    );
+  }
+
+  // 降级兜底：放宽门槛的规则再试一次；仍无信号就暂记 GENERAL（内部已标 degraded，可一键重试）
+  const bestEffort = classifyByRulesBestEffort({
+    subject: input.email.subject,
+    body: input.email.body,
+  });
+  return {
+    category: bestEffort?.category ?? "GENERAL",
+    confidence: null,
+    needs_review: true,
+    engine: "degraded",
+  };
 }
 
 /**
@@ -138,21 +165,7 @@ async function classifyWithTextLLM(
   provider: LLMProvider,
   email: InboxEmail
 ): Promise<ClassifyEmailResult> {
-  const definitions = CATEGORIES.map(
-    (c) => `- ${c}: ${CATEGORY_DEFINITIONS[c]}`
-  ).join("\n");
-  const flat = buildFlatEmailInput(email);
-
-  const prompt = `请判断下面这封航运邮件属于哪一类，只回答类别代号本身，不要解释、不要加标点或其它文字。
-
-可选类别：
-${definitions}
-
-邮件：
-From: ${flat.from}
-Subject: ${flat.subject}
-Body:
-${flat.body}`;
+  const prompt = buildClassificationPrompt(email);
 
   const { value: text } = await callWithCache({
     purpose: "classification_llm",
@@ -162,13 +175,51 @@ ${flat.body}`;
     execute: () => callLLM(provider, prompt),
   });
 
+  return toTextLlmClassification(text);
+}
+
+/**
+ * 混合引擎的文本兜底：显式选择的 provider 排最前，其余按固定顺序逐个尝试（只试配了 key 的）。
+ * 显式指定 provider 的单独接口不走这条链（选谁就只试谁，不会悄悄换模型冒充成功）。
+ */
+async function classifyWithTextChain(
+  email: InboxEmail,
+  preferred?: LLMProvider
+): Promise<ClassifyEmailResult> {
+  const prompt = buildClassificationPrompt(email);
+  const { text } = await callTextLLMChain({
+    purpose: "classification_llm",
+    prompt,
+    preferred,
+  });
+  return toTextLlmClassification(text);
+}
+
+function buildClassificationPrompt(email: InboxEmail): string {
+  const definitions = CATEGORIES.map(
+    (c) => `- ${c}: ${CATEGORY_DEFINITIONS[c]}`
+  ).join("\n");
+  const flat = buildFlatEmailInput(email);
+
+  return `请判断下面这封航运邮件属于哪一类，只回答类别代号本身，不要解释、不要加标点或其它文字。
+
+可选类别：
+${definitions}
+
+邮件：
+From: ${flat.from}
+Subject: ${flat.subject}
+Body:
+${flat.body}`;
+}
+
+function toTextLlmClassification(text: string): ClassifyEmailResult {
   const category = CATEGORIES.find((c) => text.toUpperCase().includes(c));
   if (!category) {
     throw new Error(
       `分类失败：模型没有返回合法的类别代号（可选值：${CATEGORIES.join(" / ")}），实际返回：${text.slice(0, 200)}`
     );
   }
-
   return { category, confidence: null, needs_review: false };
 }
 

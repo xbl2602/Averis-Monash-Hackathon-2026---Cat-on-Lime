@@ -51,13 +51,15 @@ export async function GET() {
       "x-admin-token": "写模式（dry_run=false）必填；服务端未配置 ADMIN_TOKEN 时写操作一律拒绝",
     },
     body: {
-      email_ids: "string[]，只跑这几封；不传 = 全部样例邮件",
+      email_ids: "string[]，只跑这几封；不传 = 全部样例邮件（不能和 retry_failed 同时用）",
       limit: "1~520，默认 50（单次最多跑几封；匿名 dry_run 再封顶 20）",
       force: "boolean，默认 false；true = 忽略增量指纹强制重算",
       dry_run:
         "boolean，默认 false；true = 只算不写库（不需要 service key；匿名=预览，单次最多 20 封）",
       provider: "claude | openai | deepseek | gemini | lmstudio（文本兜底模型），默认 gemini",
       concurrency: "1~8，默认 4（同时最多处理几封，也是一块的大小）",
+      retry_failed:
+        "boolean，默认 false；true = 一键重试结果表里所有处理失败或降级的邮件（名单由服务端自动挑，不能和 email_ids 同时用）",
     },
     example: {
       email_ids: ["email_004", "email_107"],

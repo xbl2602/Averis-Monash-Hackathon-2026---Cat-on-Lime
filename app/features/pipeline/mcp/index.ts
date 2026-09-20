@@ -19,7 +19,7 @@ export const pipelineMcpTool = {
     email_ids: z
       .array(z.string())
       .optional()
-      .describe("只跑这几封（如 ['email_004']）；不传 = 全部样例邮件"),
+      .describe("只跑这几封（如 ['email_004']）；不传 = 全部样例邮件；不能和 retry_failed 同时用"),
     limit: z
       .number()
       .int()
@@ -43,6 +43,12 @@ export const pipelineMcpTool = {
       .max(BATCH_MAX_CONCURRENCY)
       .optional()
       .describe(`同时最多处理几封（也是一块的大小），默认 4，最大 ${BATCH_MAX_CONCURRENCY}`),
+    retry_failed: z
+      .boolean()
+      .optional()
+      .describe(
+        "true = 一键重试结果表里所有处理失败或降级的邮件（名单自动挑、强制重算）；不能和 email_ids 同时用"
+      ),
   },
   annotations: {
     readOnlyHint: false,

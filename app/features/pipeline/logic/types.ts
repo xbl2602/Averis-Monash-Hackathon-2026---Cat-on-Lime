@@ -36,7 +36,7 @@ export const BATCH_DEADLINE_MS = 30_000;
 export const FLUSH_EVERY = 20;
 
 export interface RunBatchRequest {
-  /** 只跑这几封；不传 = 全部样例邮件 */
+  /** 只跑这几封；不传 = 全部样例邮件（不能和 retryFailed 同时用） */
   emailIds?: string[];
   limit: number;
   /** true = 忽略增量指纹强制重算 */
@@ -46,6 +46,12 @@ export interface RunBatchRequest {
   /** 抽取/分类兜底用的文本模型，默认 gemini；不能用 jev */
   provider?: LLMProvider;
   concurrency: number;
+  /**
+   * 一键重试（2026-09-21 P0-2/P1-9）：true = 不传 email_ids，由服务端从结果表里
+   * 自动挑出"处理失败（processing_status=failed）或降级（model_provider 带 degraded）"的邮件，
+   * 强制重算。没有目标时本次 ran=0，正常返回。
+   */
+  retryFailed: boolean;
 }
 
 export interface BatchFailure {

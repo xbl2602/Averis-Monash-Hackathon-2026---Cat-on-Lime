@@ -34,10 +34,11 @@ interface ClassifyEmailResult {
 
 ## 用哪个模型（provider）
 
-三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`。缺省行为（2026-09-20 起）：分类 = 混合引擎（规则 → Jev → Gemini 文本兜底），抽取 = 规则优先、缺字段才用 Gemini 兜底，比对 = 规范化精确比较（不调用模型）。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
+三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`。缺省行为（2026-09-21 起）：分类 = 混合引擎（规则 → Jev → 文本模型链：首选 gemini，失败依次降级 deepseek → openai → claude → lmstudio，只试配了 key 的；全部失败用"尽力规则"降级并标 `needs_review`），抽取 = 规则优先、缺字段才用 Gemini 兜底，比对 = 规范化精确比较 + 文字候选差异交 Jev（Jev 失败时保守降级为"候选差异全部不一致"，不整封失败）。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
 
 - `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；extraction 的 REST/MCP 只接受文本 provider（`lib/llm` 的 `TEXT_PROVIDER_IDS`，明确排除 jev），显式传 jev 会得到可读的 400/参数错误。
 - 不传 provider 的分类接口保持 `{ category, confidence, needs_review }` 三字段契约不变（混合引擎的 `engine` 字段不外露）。
+- **降级标记（2026-09-21 起）**：混合引擎（不传 provider）降级时，结果层 `model_provider` 会带 `degraded`（分类尽力兜底）或 `rules-degraded`（比对 Jev 复核失败）；运维/GUI 可用 `provider=degraded` 子串筛出这些邮件，再用 pipeline 的 `retry_failed` 一键重试（接法见 UI_HANDOFF §7）。**显式传 provider 时不会降级到别的模型**（选谁只试谁，避免"悄悄换模型装作成功"）。
 - 该参数只在 `api` / `mcp` 层解析、传给 `logic`；`logic` 里的函数签名是 `{ ..., provider?: LLMProvider }`，默认值由 logic 自己兜底，UI 不传也能正常工作。
 
 ## extraction 模块的输出
@@ -65,8 +66,11 @@ interface ExtractDocumentResult {
   document_type: "SI" | "BL" | "OTHER" | "UNKNOWN";  // OTHER = 明显不是 SI/BL（如发票/装箱单/产地证）
   fields: ExtractedDocumentFields;                    // 只包含真的抽到的字段；占位符(TBA/____MT)不算抽到
   extracted_by: "rules" | "llm";                      // 规则解析还是 LLM 兜底（规则优先，缺字段才兜底）
+  evidence: ExtractedDocumentEvidence;                // 字段级出处（规则字段带 line+text；LLM 字段只有 source）
 }
 ```
+
+`evidence` 每个抽到的字段一条：规则路径给 `{ line, text, source: "rules" }`（行号从 1 开始，`text` 是实际取到值的那一行原文）；LLM 兜底字段只有 `{ source: "llm" }`，不给假出处。落库与查询格式见下文 results 模块（`evidence_si` / `evidence_bl`）。
 
 一个 `BL_COMPARISON` 邮件需要抽取两次：一次对 SI 附件，一次对 BL 附件，各自得到一个 `ExtractDocumentResult`。
 
@@ -89,11 +93,15 @@ interface EmailVerificationResult {
 
 **这个 `EmailVerificationResult` 就是最终要交的东西**——把每封邮件的这个结果，按 `{ [email_id]: EmailVerificationResult }` 拼成一个大对象，格式必须和官方给的 `data/sample/sample_submission.json` 完全一致（每个 email_id 都要有）。
 
+比对引擎（`compareDocumentsHybrid`）在 Jev 复核失败时会保守降级（候选文字差异全部计入不一致），照常产出结果、不整封失败；降级只记录在结果层的 `model_provider`（含 `rules-degraded`），不进提交格式。导出 `scope=submission` 前会做一次格式校验（2026-09-21），见下文"导出（Save as）"。
+
 ## 编排层与混合引擎（pipeline）
 
 `lib/shared/pipeline.ts` 是唯一拼"分类 → 抽取 → 比对"顺序的地方：
 
 - `runEmailPipeline`：单封邮件 → `EmailVerificationResult`，同时负责 4 种"拿不准"判定（missing_attachment / wrong_doc_type / unreadable / missing_value）
+- 附件配对：文件名 `_SI`/`_BL` 优先；有缺位时按内容识别补缺（关键词规则 → 判不出才问模型链），同一附件不会被两边抢用（2026-09-21，决策 26）
+- 失败降级：分类/比对任一模型环节失败都不会让整封邮件崩——分类走 provider 链 + 尽力规则兜底（`engine=degraded`）、比对走保守口径（`rules-degraded`）；`retry_failed` 可一键重算这些邮件（2026-09-21，决策 25）
 - `runBatchPipeline`：批量（限量并发、单封失败隔离）
 - `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据
 
@@ -111,7 +119,7 @@ interface EmailVerificationResult {
 |---|---|---|---|
 | `raw_emails` | 原始层 | `email_id` / `from_address`（对应邮件里的 `from`）/ `subject` / `body` / `normalized_body` / `attachment_paths` / `content_hash` | 导入脚本（upsert，冲突键 `email_id`） |
 | `parsed_attachments` | 文字层 | `email_id` + `file_path` 为主键；`file_format`（txt/pdf/xlsx/docx/unsupported）；`parse_status`（ok/unreadable）；`parse_error`；`parsed_text`（解析出的文字）；`normalized_text`（扁平化文本）；`content_hash` | 导入脚本（upsert，冲突键 `email_id,file_path`） |
-| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `defect_count`（生成列，自动等于 `defect_fields` 的个数）/ `has_defect` / `extracted_si` / `extracted_bl` / `model_provider` / `input_hash` / `logic_version` / `processing_status`（ok / failed）/ `error_message` | 本地评测 `npm run evaluate`、批量入口（`POST /features/pipeline/api` / MCP `run_batch`）：upsert，冲突键 `email_id`；处理失败的邮件也写一行（`processing_status='failed'` + `error_message`），下次重跑会自动重试 |
+| `verification_results` | 结果层 | `category` / `comparison_status` / `review_reason` / `defect_fields` / `defect_count`（生成列，自动等于 `defect_fields` 的个数）/ `has_defect` / `extracted_si` / `extracted_bl` / `evidence_si` / `evidence_bl`（字段级出处，2026-09-21 新增，迁移见 `scripts/phase3-evidence-migration.sql`）/ `model_provider` / `input_hash` / `logic_version` / `processing_status`（ok / failed）/ `error_message` | 本地评测 `npm run evaluate`、批量入口（`POST /features/pipeline/api` / MCP `run_batch`）：upsert，冲突键 `email_id`；处理失败的邮件也写一行（`processing_status='failed'` + `error_message`），下次重跑会自动重试 |
 | `llm_call_cache` | 调用缓存 | `cache_key`（指纹）/ `purpose` / `provider` / `model` / `request_payload` / `response_payload` / `last_used_at` | 服务端缓存层（upsert，不对外开放） |
 
 **指纹（`*_hash`）统一算法**：sha256(该行要存的全部内容做 JSON 序列化)。作用：
@@ -145,10 +153,15 @@ interface EmailVerificationResult {
 |---|---|---|
 | `/features/results/api` | 按需求查结果列表（含未处理邮件）：邮件信息 + 分类 + 比对结果 + 抽取字段 | `category` `status` `processing` `has_defect` `provider` `q` `sort_by` `order` `group_by` `limit` `offset` |
 | `/features/results/api/stats` | 统计汇总 | 无 |
-| `/features/results/api/conflicts` | 冲突文件对（默认 MISMATCH + NEEDS_REVIEW） | `status` `q` `sort_by` `order` `limit` `offset` |
+| `/features/results/api/conflicts` | 冲突文件对（默认 MISMATCH + NEEDS_REVIEW） | `status` `q` `sort_by` `order` `limit` `offset` `numeric_mode` `tolerance` `value_field` `value` |
 | `/features/results/api/export` | Save as：返回带 `Content-Disposition` 的文件内容 | `scope` `format` + 上面的筛选参数 |
 
 - 多值参数用逗号分隔（`status=MISMATCH,NEEDS_REVIEW`）或同名参数重复；`limit` 默认 50、最大 200
+- 数值搜索（2026-09-21 新增，P1-6，**只影响查询、不影响官方提交**）：
+  - `numeric_mode=exact|fuzzy`（默认 exact）：fuzzy = 差值在容差内的数字字段不再算冲突
+  - `tolerance`（≥0，仅 fuzzy 可用）：重量单位 kg；不传用默认（重量 max(0.5kg, 0.1%)、箱数 0）
+  - `value_field=container_count|gross_weight_kg` + `value=<数字>`（成对出现）：按值搜索，命中 SI/BL 任一侧
+  - 非法组合（如 exact 带 tolerance、缺一半的成对参数）返回中文 400；该筛选在 logic 层做，导出 conflicts 同样支持
 - `sort_by` 白名单：`email_id` / `category` / `comparison_status` / `defect_count` / `updated_at`；`order` 缺省：按 `email_id` 升序、其余降序
 - `group_by=category|comparison_status` 时返回 `groups`（对筛选后的全集计数，不是只算当前页）
 - 参数不合法返回 400（中文错误信息）；Supabase 未配置/连不上返回 503
@@ -173,6 +186,8 @@ interface ResultListResponse {
     updated_at: string | null;
     extracted_si: Record<string, string> | null;
     extracted_bl: Record<string, string> | null;
+    evidence_si: ExtractedDocumentEvidence | null;  // 字段级出处（规则字段有 line/text；LLM 字段只有 source）
+    evidence_bl: ExtractedDocumentEvidence | null;
   }[];
 }
 ```
@@ -192,7 +207,7 @@ interface StatsResponse {
 ```
 
 冲突对响应：`{ total, limit, offset, sortBy, order, items }`，其中每条 item 是
-`{ email_id, from, subject, si_file, bl_file, other_files, status, review_reason, defect_fields, defect_count, si_values, bl_values, updated_at }`。
+`{ email_id, from, subject, si_file, bl_file, other_files, status, review_reason, defect_fields, defect_count, si_values, bl_values, si_evidence, bl_evidence, updated_at }`（`si_evidence/bl_evidence` 为字段级出处，2026-09-21 新增）。
 
 ### 导出（Save as）
 
@@ -203,6 +218,7 @@ interface StatsResponse {
   - `X-Export-Expected-Source`：`sample` = 分母锚定官方样例清单（data/sample/inbox 的文件名）；`db-fallback` = 清单读不到、降级用数据库总数——**此时即使 `Missing=0` 也按不完整处理**
   - `X-Export-Missing` / `X-Export-Missing-Ids`：清单里有、导出里没有的 email_id（头里最多列 20 个）
   - `X-Export-Stale` / `X-Export-Stale-Ids`：有结果但 `logic_version` 与当前引擎版本不一致的 email_id（旧版本结果需要重跑）
+  - `X-Export-Invalid` / `X-Export-Invalid-Ids`（2026-09-21 新增）：行内字段自相矛盾（MISMATCH 没有缺陷清单、NEEDS_REVIEW 却带缺陷或缺原因、OK 带缺陷/原因）的 email_id；有任意一条时 `incomplete` 也为 true
   - 注意：前端要 `fetch + blob` 才能读到这些头，`<a>` 直接下载读不到
 
 ### MCP tool（端点 `POST /core/mcp-server`）
@@ -235,6 +251,7 @@ MCP 传输方式是无状态 Streamable HTTP + JSON 响应（GET/DELETE 返回 4
 | `dry_run` | true = 只算不写库（不需要 service key），默认 false；匿名时只预览清单头部固定前缀（≤20 封） |
 | `provider` | 文本兜底模型，默认 gemini；不能用 jev（返回 400） |
 | `concurrency` | 同时最多处理几封（也是一块的大小），1~8，默认 4 |
+| `retry_failed` | true = 一键重试（2026-09-21 新增）：服务端自动挑出结果表里 `processing_status='failed'` 或 `model_provider` 含 `degraded` 的邮件并强制重算；不能和 `email_ids` 同时用；没有目标时 `ran=0` 正常返回 |
 
 响应（`RunBatchSummary`）：
 

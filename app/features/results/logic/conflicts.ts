@@ -3,9 +3,14 @@
  * 的邮件整理成一组组文件对，附上两边抽取到的字段值，供人工复核和导出。
  * 读 verification_overview 视图（只包含处理过的行，字段是扁平列）。
  */
-import type { ComparisonStatus, ReviewReason } from "@/lib/shared/types";
+import type {
+  ComparisonStatus,
+  ExtractedDocumentEvidence,
+  ReviewReason,
+} from "@/lib/shared/types";
 import { fetchAllRows, getReadClient, ilikeFragment, sanitizeSearchTerm } from "./db";
 import { DataAccessError } from "./errors";
+import { applyNumericQuery, usesNumericFeatures } from "./numeric-query";
 import { OVERVIEW_VIEW } from "./query";
 import type { ConflictList, ConflictPair, ConflictQuery } from "./types";
 
@@ -20,6 +25,8 @@ const CONFLICT_SELECT = [
   "defect_count",
   "extracted_si",
   "extracted_bl",
+  "evidence_si",
+  "evidence_bl",
   "updated_at",
 ].join(",");
 
@@ -44,10 +51,25 @@ interface ConflictRow {
   defect_count: number | null;
   extracted_si: Record<string, string> | null;
   extracted_bl: Record<string, string> | null;
+  evidence_si: ExtractedDocumentEvidence | null;
+  evidence_bl: ExtractedDocumentEvidence | null;
   updated_at: string | null;
 }
 
 export async function listConflicts(query: ConflictQuery): Promise<ConflictList> {
+  // 带数值口径/按值搜索时要在内存里套用（见 numeric-query.ts），先取全量再分页
+  if (usesNumericFeatures(query)) {
+    const all = await fetchAllConflictsMatching(query);
+    return {
+      total: all.length,
+      limit: query.limit,
+      offset: query.offset,
+      sortBy: query.sortBy,
+      order: query.order,
+      items: all.slice(query.offset, query.offset + query.limit),
+    };
+  }
+
   const builder = applyConflictFilters(buildBaseQuery({ withCount: true }), query);
   const { data, error, count } = await applyConflictOrder(builder, query)
     .range(query.offset, query.offset + query.limit - 1);
@@ -66,11 +88,25 @@ export async function listConflicts(query: ConflictQuery): Promise<ConflictList>
 
 /** 导出用：同样筛选条件下取回全部冲突对 */
 export async function listAllConflicts(query: ConflictQuery): Promise<ConflictPair[]> {
+  if (usesNumericFeatures(query)) return fetchAllConflictsMatching(query);
+
   const rows = await fetchAllRows<ConflictRow>((from, to) => {
     const builder = applyConflictFilters(buildBaseQuery(), query);
     return applyConflictOrder(builder, query).range(from, to);
   });
   return rows.map(toConflictPair);
+}
+
+/** 数值口径/按值搜索：SQL 只做状态+关键词筛选，数字比较在内存里按查询口径套用 */
+async function fetchAllConflictsMatching(query: ConflictQuery): Promise<ConflictPair[]> {
+  const rows = await fetchAllRows<ConflictRow>((from, to) => {
+    const builder = applyConflictFilters(buildBaseQuery(), query);
+    return applyConflictOrder(builder, query).range(from, to);
+  });
+  return rows
+    .map(toConflictPair)
+    .map((pair) => applyNumericQuery(pair, query))
+    .filter((pair): pair is ConflictPair => pair !== null);
 }
 
 function applyConflictFilters<T extends ConflictQueryBuilder>(
@@ -123,6 +159,8 @@ function toConflictPair(row: ConflictRow): ConflictPair {
     defect_count: row.defect_count ?? 0,
     si_values: row.extracted_si ?? {},
     bl_values: row.extracted_bl ?? {},
+    si_evidence: row.evidence_si,
+    bl_evidence: row.evidence_bl,
     updated_at: row.updated_at,
   };
 }

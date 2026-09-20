@@ -63,25 +63,29 @@ export async function runPipelineBatch(
   }
 
   const allIds = await listSampleEmailIds();
-  validateRequestedIds(request.emailIds, allIds);
-  const scope = request.emailIds ?? allIds;
+  // 一键重试（P0-2/P1-9）：目标名单由服务端从结果表里挑（failed 或降级），并强制重算
+  const resolved = request.retryFailed
+    ? { ...request, emailIds: await resolveRetryEmailIds(new Set(allIds)), force: true }
+    : request;
+  validateRequestedIds(resolved.emailIds, allIds);
+  const scope = resolved.emailIds ?? allIds;
 
   // 匿名 dry_run 只预览清单头部的固定前缀：先截 id 再解析，匿名请求不会把整箱都读一遍/跑一遍
-  const anonymousPreview = options.anonymous === true && request.dryRun;
+  const anonymousPreview = options.anonymous === true && resolved.dryRun;
   const effectiveIds = anonymousPreview
-    ? scope.slice(0, Math.min(request.limit, ANONYMOUS_DRY_RUN_MAX_LIMIT))
-    : request.emailIds;
+    ? scope.slice(0, Math.min(resolved.limit, ANONYMOUS_DRY_RUN_MAX_LIMIT))
+    : resolved.emailIds;
 
   const inputs = await loadSamplePipelineInputs(effectiveIds);
   const hashByEmail = new Map<string, string>();
-  const { toRun, skipped } = await selectToRun(inputs, request, hashByEmail);
+  const { toRun, skipped } = await selectToRun(inputs, resolved, hashByEmail);
 
   // remaining 的"目标"：匿名预览 = 本次 scope 的清单规模；其余 = 增量筛选后的待跑总数
   const target = anonymousPreview ? scope.length : toRun.length;
-  const batch = toRun.slice(0, request.limit);
+  const batch = toRun.slice(0, resolved.limit);
 
   // 每块 = 一个并发波次，块结束后检查 deadline（30s），到了就不再取新块
-  const chunkSize = Math.max(1, request.concurrency);
+  const chunkSize = Math.max(1, resolved.concurrency);
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
@@ -93,8 +97,8 @@ export async function runPipelineBatch(
   for (let offset = 0; offset < batch.length; offset += chunkSize) {
     const chunk = batch.slice(offset, offset + chunkSize);
     const outcome = await runBatchPipeline(chunk, {
-      concurrency: request.concurrency,
-      textProvider: request.provider,
+      concurrency: resolved.concurrency,
+      textProvider: resolved.provider,
     });
 
     processed += outcome.succeeded.length + outcome.failed.length;
@@ -102,7 +106,7 @@ export async function runPipelineBatch(
     failed += outcome.failed.length;
     appendFailures(failures, outcome.failed);
 
-    if (!request.dryRun) {
+    if (!resolved.dryRun) {
       pendingRows.push(
         ...outcome.succeeded.map(({ input, outcome: pipelineOutcome }) =>
           buildSuccessRow(input, pipelineOutcome, inputHashOf(hashByEmail, input))
@@ -124,7 +128,7 @@ export async function runPipelineBatch(
   }
 
   // deadline 停止或全部结束：把没落库的尾巴补上（dry_run 不写库）
-  if (!request.dryRun && pendingRows.length > 0) {
+  if (!resolved.dryRun && pendingRows.length > 0) {
     wrote += await flushPendingRows(pendingRows);
     pendingRows = [];
   }
@@ -141,7 +145,7 @@ export async function runPipelineBatch(
     wrote,
     remaining: Math.max(0, target - processed),
     stopped_by_deadline: stoppedByDeadline,
-    dry_run: request.dryRun,
+    dry_run: resolved.dryRun,
     logic_version: PIPELINE_LOGIC_VERSION,
     duration_ms: Date.now() - startedAt,
     failures,
@@ -206,6 +210,23 @@ async function flushPendingRows(rows: VerificationResultRow[]): Promise<number> 
   if (rows.length === 0) return 0;
   await upsertVerificationRows(rows);
   return rows.length;
+}
+
+/**
+ * 一键重试的目标（2026-09-21 P0-2/P1-9）：结果表里"处理失败"或"降级"的行。
+ * 降级 = model_provider 里带 degraded（分类全失败尽力兜底 / 比对 Jev 失败保守降级）。
+ * 只挑样例清单里仍然存在的 id，排序后返回；后面统一 force=true 重算。
+ */
+async function resolveRetryEmailIds(knownIds: Set<string>): Promise<string[]> {
+  const stored = await loadStoredVerificationRows();
+  const ids: string[] = [];
+  for (const row of stored.values()) {
+    const degraded = (row.model_provider ?? "").includes("degraded");
+    if ((row.processing_status === "failed" || degraded) && knownIds.has(row.email_id)) {
+      ids.push(row.email_id);
+    }
+  }
+  return ids.sort();
 }
 
 function validateRequestedIds(requested: string[] | undefined, allIds: string[]): void {

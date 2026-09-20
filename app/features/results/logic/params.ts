@@ -11,6 +11,8 @@ import {
   EXPORT_FORMATS,
   EXPORT_SCOPES,
   GROUP_FIELDS,
+  NUMERIC_MODES,
+  NUMERIC_SEARCH_FIELDS,
   PROCESSING_STATES,
   RESULT_SORT_FIELDS,
   SORT_ORDERS,
@@ -20,6 +22,8 @@ import {
   type ExportRequest,
   type ExportScope,
   type GroupField,
+  type NumericMode,
+  type NumericSearchField,
   type ResultQuery,
   type ResultSortField,
   type SortOrder,
@@ -41,6 +45,10 @@ export interface RawQueryInput {
   group_by?: unknown;
   limit?: unknown;
   offset?: unknown;
+  numeric_mode?: unknown;
+  tolerance?: unknown;
+  value_field?: unknown;
+  value?: unknown;
 }
 
 export interface RawConflictQueryInput {
@@ -50,6 +58,10 @@ export interface RawConflictQueryInput {
   order?: unknown;
   limit?: unknown;
   offset?: unknown;
+  numeric_mode?: unknown;
+  tolerance?: unknown;
+  value_field?: unknown;
+  value?: unknown;
 }
 
 export interface RawExportInput extends RawQueryInput {
@@ -81,6 +93,23 @@ export function normalizeConflictQuery(raw: RawConflictQueryInput): ConflictQuer
     "defect_count") as ConflictSortField;
   const statuses = pickAll(toStringList(raw.status), COMPARISON_STATUSES, "status");
 
+  // 数值口径/按值搜索（2026-09-21 P1-6）：两个参数成对校验，避免"给了字段没给值"的含糊请求
+  const numericMode = (pickOne(toStringList(raw.numeric_mode), NUMERIC_MODES, "numeric_mode") ??
+    "exact") as NumericMode;
+  const tolerance = toTolerance(raw.tolerance);
+  if (tolerance !== null && numericMode !== "fuzzy") {
+    throw new ResultQueryError("tolerance 只在 numeric_mode=fuzzy 时可用（exact 口径不允许容差）");
+  }
+  const valueField = (pickOne(
+    toStringList(raw.value_field),
+    NUMERIC_SEARCH_FIELDS,
+    "value_field"
+  ) ?? null) as NumericSearchField | null;
+  const value = toNumericValue(raw.value);
+  if ((valueField === null) !== (value === null)) {
+    throw new ResultQueryError("value_field 和 value 必须成对出现（按值搜索时两个都要传）");
+  }
+
   return {
     // 缺省看"所有需要人关注的"：MISMATCH + NEEDS_REVIEW
     statuses: statuses ?? ["MISMATCH", "NEEDS_REVIEW"],
@@ -89,6 +118,10 @@ export function normalizeConflictQuery(raw: RawConflictQueryInput): ConflictQuer
     order: resolveOrder(raw.order, sortBy),
     limit: resolveLimit(raw.limit),
     offset: resolveOffset(raw.offset),
+    numericMode,
+    tolerance,
+    valueField,
+    value,
   };
 }
 
@@ -159,6 +192,26 @@ function toShortText(value: unknown, label: string, maxLength: number): string |
   if (text === "") return undefined;
   if (text.length > maxLength) {
     throw new ResultQueryError(`${label} 太长了（最多 ${maxLength} 个字符）`);
+  }
+  return text;
+}
+
+/** 容差：非负有限数字；不传 = null（numeric-query 里按字段默认值处理） */
+function toTolerance(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new ResultQueryError(`tolerance 必须是不小于 0 的数字，收到：${String(value)}`);
+  }
+  return parsed;
+}
+
+/** 按值搜索的数值：必须是合法有限数字；原样返回字符串，比较时再转 */
+function toNumericValue(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  if (!Number.isFinite(Number(text))) {
+    throw new ResultQueryError(`value 必须是数字（可带小数点），收到：${text}`);
   }
   return text;
 }

@@ -14,6 +14,8 @@ import {
   EXPORT_FORMATS,
   EXPORT_SCOPES,
   GROUP_FIELDS,
+  NUMERIC_MODES,
+  NUMERIC_SEARCH_FIELDS,
   PROCESSING_STATES,
   RESULT_SORT_FIELDS,
   SORT_ORDERS,
@@ -90,6 +92,25 @@ const listConflictsMcpTool = {
     order: z.enum(SORT_ORDERS).optional().describe("排序方向，缺省 desc"),
     limit: z.number().int().min(1).max(200).optional().describe("每页条数，缺省 50"),
     offset: z.number().int().min(0).optional().describe("跳过多少条，缺省 0"),
+    numeric_mode: z
+      .enum(NUMERIC_MODES)
+      .optional()
+      .describe(
+        "数值口径（只影响查询，不影响官方提交）：exact=默认，与结果表存储的判定一致；fuzzy=容差内的小差异不算冲突"
+      ),
+    tolerance: z
+      .number()
+      .min(0)
+      .optional()
+      .describe("仅 numeric_mode=fuzzy 时可用；不传用默认（重量 max(0.5kg, 0.1%)、箱数 0）"),
+    value_field: z
+      .enum(NUMERIC_SEARCH_FIELDS)
+      .optional()
+      .describe("按值搜索的字段（container_count / gross_weight_kg），必须和 value 成对出现"),
+    value: z
+      .string()
+      .optional()
+      .describe('按值搜索的数值（如 "12000"），命中 SI 或 BL 任一侧；必须和 value_field 成对'),
   },
   annotations: {
     readOnlyHint: true,
@@ -128,6 +149,8 @@ const exportResultsMcpTool = {
         missing_ids: doc.missingIds.slice(0, 50),
         stale: doc.staleIds.length,
         stale_ids: doc.staleIds.slice(0, 50),
+        invalid: doc.invalidIds.length,
+        invalid_ids: doc.invalidIds.slice(0, 50),
         generated_at: doc.generatedAt,
       },
     };

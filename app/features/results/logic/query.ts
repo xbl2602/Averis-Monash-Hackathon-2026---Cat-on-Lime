@@ -32,6 +32,8 @@ const VIEW_COLUMNS = [
   "updated_at",
   "extracted_si",
   "extracted_bl",
+  "evidence_si",
+  "evidence_bl",
 ].join(",");
 
 interface OverviewRow {
@@ -53,6 +55,8 @@ interface OverviewRow {
   updated_at: string | null;
   extracted_si: Record<string, string> | null;
   extracted_bl: Record<string, string> | null;
+  evidence_si: Record<string, unknown> | null;
+  evidence_bl: Record<string, unknown> | null;
 }
 
 function buildBaseQuery(options?: { withCount?: boolean }) {
@@ -187,5 +191,7 @@ function toResultRow(row: OverviewRow): ResultRow {
     updated_at: row.updated_at ?? null,
     extracted_si: row.extracted_si ?? null,
     extracted_bl: row.extracted_bl ?? null,
+    evidence_si: (row.evidence_si as ResultRow["evidence_si"]) ?? null,
+    evidence_bl: (row.evidence_bl as ResultRow["evidence_bl"]) ?? null,
   };
 }

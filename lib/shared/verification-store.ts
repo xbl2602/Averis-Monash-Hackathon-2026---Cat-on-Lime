@@ -15,6 +15,7 @@ import type {
   ComparedField,
   ComparisonStatus,
   EmailCategory,
+  ExtractedDocumentEvidence,
   ExtractedDocumentFields,
   ReviewReason,
 } from "./types";
@@ -29,6 +30,7 @@ export interface StoredVerificationRow {
   review_reason: ReviewReason | null;
   defect_fields: ComparedField[];
   has_defect: boolean | null;
+  model_provider: string | null;
   input_hash: string | null;
   logic_version: string | null;
   processing_status: ProcessingStatus;
@@ -44,6 +46,8 @@ export interface VerificationResultRow {
   has_defect: boolean | null;
   extracted_si: ExtractedDocumentFields | null;
   extracted_bl: ExtractedDocumentFields | null;
+  evidence_si: ExtractedDocumentEvidence | null;
+  evidence_bl: ExtractedDocumentEvidence | null;
   model_provider: string | null;
   input_hash: string;
   logic_version: string;
@@ -52,7 +56,7 @@ export interface VerificationResultRow {
 }
 
 const SELECT_COLUMNS =
-  "email_id,category,comparison_status,review_reason,defect_fields,has_defect,input_hash,logic_version,processing_status";
+  "email_id,category,comparison_status,review_reason,defect_fields,has_defect,model_provider,input_hash,logic_version,processing_status";
 
 const UPSERT_BATCH_SIZE = 100;
 
@@ -86,6 +90,8 @@ export function buildSuccessRow(
     has_defect: outcome.result.has_defect,
     extracted_si: outcome.extracted.si,
     extracted_bl: outcome.extracted.bl,
+    evidence_si: outcome.evidence.si,
+    evidence_bl: outcome.evidence.bl,
     model_provider: [
       outcome.meta.classifier,
       outcome.meta.extractor.si ?? "-",
@@ -114,6 +120,8 @@ export function buildFailureRow(
     has_defect: null,
     extracted_si: null,
     extracted_bl: null,
+    evidence_si: null,
+    evidence_bl: null,
     model_provider: null,
     input_hash: inputHash,
     logic_version: PIPELINE_LOGIC_VERSION,

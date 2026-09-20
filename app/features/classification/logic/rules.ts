@@ -88,7 +88,7 @@ const SCORE_WORDS: Record<EmailCategory, string[]> = {
 const SCORE_MARGIN = 2;
 
 export function classifyByRules(input: { subject: string; body: string }): RuleClassification | null {
-  const text = normalizeText(`${input.subject} ${input.subject} ${input.body}`);
+  const text = buildScoringText(input);
 
   for (const signature of SIGNATURES) {
     if (signature.pattern.test(text)) {
@@ -96,6 +96,32 @@ export function classifyByRules(input: { subject: string; body: string }): RuleC
     }
   }
 
+  return pickByScore(text, SCORE_MARGIN, "score");
+}
+
+/**
+ * 尽力版（2026-09-21 新增，P0-2 的降级兜底用，见 DECISION_LOG 决策 25）：
+ * 把自动下结论的"分差 >= 2"放宽为"有分且不并列"（分差 >= 1）。
+ * 只在所有模型都失败的降级路径上使用，结果会被标记 needs_review=true + engine=degraded；
+ * 正常路径（classifyByRules）的口径不变，两条路径共用同一份打分逻辑。
+ */
+export function classifyByRulesBestEffort(input: {
+  subject: string;
+  body: string;
+}): RuleClassification | null {
+  return pickByScore(buildScoringText(input), 1, "best-effort");
+}
+
+// 主题算两遍、权重更高（原有口径，不要动）
+function buildScoringText(input: { subject: string; body: string }): string {
+  return normalizeText(`${input.subject} ${input.subject} ${input.body}`);
+}
+
+function pickByScore(
+  text: string,
+  minMargin: number,
+  evidencePrefix: string
+): RuleClassification | null {
   const scores = {} as Record<EmailCategory, number>;
   for (const [category, words] of Object.entries(SCORE_WORDS) as [EmailCategory, string[]][]) {
     scores[category] = words.filter((word) => text.includes(word)).length;
@@ -103,8 +129,8 @@ export function classifyByRules(input: { subject: string; body: string }): RuleC
   const sorted = (Object.entries(scores) as [EmailCategory, number][]).sort((a, b) => b[1] - a[1]);
   const [topCategory, topScore] = sorted[0];
   const margin = topScore - sorted[1][1];
-  if (topScore >= 1 && margin >= SCORE_MARGIN) {
-    return { category: topCategory, evidence: `score:${JSON.stringify(scores)}` };
+  if (topScore >= 1 && margin >= minMargin) {
+    return { category: topCategory, evidence: `${evidencePrefix}:${JSON.stringify(scores)}` };
   }
   return null;
 }

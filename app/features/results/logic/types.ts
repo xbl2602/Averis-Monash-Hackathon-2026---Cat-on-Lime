@@ -5,7 +5,12 @@
  * 写在 SHARED_INTERFACES.md「results 模块」一节，两边改动要同步。
  * 不要从别的 feature 直接 import 这里的内部实现（见 CLAUDE.md「一切皆插件」）。
  */
-import type { ComparisonStatus, EmailCategory, ReviewReason } from "@/lib/shared/types";
+import type {
+  ComparisonStatus,
+  EmailCategory,
+  ExtractedDocumentEvidence,
+  ReviewReason,
+} from "@/lib/shared/types";
 
 // 列表可排序的字段（白名单：只有这几列能进查询/排序，避免任意列名）
 export const RESULT_SORT_FIELDS = [
@@ -78,6 +83,9 @@ export interface ResultRow {
   updated_at: string | null;
   extracted_si: Record<string, string> | null;
   extracted_bl: Record<string, string> | null;
+  /** 字段级出处（规则命中的行号/原句；LLM 兜底只标来源），没有就是 null */
+  evidence_si: ExtractedDocumentEvidence | null;
+  evidence_bl: ExtractedDocumentEvidence | null;
 }
 
 export interface ResultList {
@@ -114,6 +122,14 @@ export interface StatsSummary {
   last_updated_at: string | null;
 }
 
+// 数值搜索/模糊口径可用的字段（"精确/模糊"只对数字字段有意义；权威数字字段集合在 comparison 模块的
+// canonical.ts，这里是读侧子集，两边如有一方调整要同步）
+export const NUMERIC_SEARCH_FIELDS = ["container_count", "gross_weight_kg"] as const;
+export type NumericSearchField = (typeof NUMERIC_SEARCH_FIELDS)[number];
+
+export const NUMERIC_MODES = ["exact", "fuzzy"] as const;
+export type NumericMode = (typeof NUMERIC_MODES)[number];
+
 export interface ConflictQuery {
   statuses: ComparisonStatus[];
   q?: string;
@@ -121,6 +137,14 @@ export interface ConflictQuery {
   order: SortOrder;
   limit: number;
   offset: number;
+  /** 数值口径：exact（默认，与结果表的存储判定一致）/ fuzzy（容差内的小差异不算冲突） */
+  numericMode: NumericMode;
+  /** 仅 fuzzy 时可用；不传时各字段用默认容差（重量 max(0.5kg, 0.1%)、箱数 0） */
+  tolerance: number | null;
+  /** 按值搜索的字段（和 value 成对出现；都为空 = 不做值搜索） */
+  valueField: NumericSearchField | null;
+  /** 按值搜索的数值（校验时已转成合法数字字符串） */
+  value: string | null;
 }
 
 export interface ConflictPair {
@@ -137,6 +161,9 @@ export interface ConflictPair {
   defect_count: number;
   si_values: Record<string, string>;
   bl_values: Record<string, string>;
+  /** 字段级出处（和 values 同源；规则命中才有行号/原句） */
+  si_evidence: ExtractedDocumentEvidence | null;
+  bl_evidence: ExtractedDocumentEvidence | null;
   updated_at: string | null;
 }
 
@@ -175,6 +202,11 @@ export interface ExportDocument {
   missingIds: string[];
   /** scope=submission 时：有结果但 logic_version 与当前引擎版本不一致的 email_id */
   staleIds: string[];
+  /**
+   * scope=submission 时：行内字段自相矛盾（违反官方 schema，如 MISMATCH 却没有缺陷清单、
+   * NEEDS_REVIEW 却带着缺陷、复核缺少原因）的 email_id。非 submission 场景恒为空数组。
+   */
+  invalidIds: string[];
   /**
    * submission 场景：expectedSource 非 sample、条数≠分母、有缺失/过期版本或失败行，
    * 任意一条成立就是 true（fail-closed：宁可提示不完整，也不谎报"已完整"）

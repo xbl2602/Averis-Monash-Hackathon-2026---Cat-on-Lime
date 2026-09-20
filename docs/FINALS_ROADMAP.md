@@ -126,3 +126,16 @@
 - 官方题目包内：`data_v2/generate.py`（`--seed`）、`data_v2/README.md`（"Change the seed for a fresh draw"）、`server/scoring.py`（50/30/20 权重与 reliability 诊断）、`edgecases.py`（`BLANK_TOKENS`）、`shipment.py`（缺陷注入）、`pools.py`（标签/实体池）
 - Laya 模型评估来源：https://huggingface.co/convaiinnovations/laya （子 checkpoint：`laya-multilingual` / `laya-typed-decisions`）
 - 本仓库对应实现：`app/features/extraction/logic/label-parser.ts:47`、`app/features/extraction/logic/index.ts:118`、`lib/shared/pipeline.ts`、`scripts/evaluate.ts:32-40`、`app/features/results/logic/stats.ts`、`app/features/results/logic/export/json.ts`、`app/features/mail/logic/gmail.ts`（占位）
+
+## 8. 操作者决议与后端进展（2026-09-21）
+
+- **搁置项（进后端计划单，初赛提交后再排）**：
+  - A6 人工复核写回（对应白话版 P1-8）：等初赛提交后再做。
+  - 扰动测试 + 风险文档（对应白话版 P1-10）：等初赛提交后再做。
+- **本轮已交付（后端，详见 DECISION_LOG 决策 25~29 与 UI_HANDOFF §7）**：
+  - P0-2 / P1-5 / P1-9：分类与比对的失败降级链（逐级 fallback）+ `degraded` 标记 + `retry_failed` 一键重试
+  - P0-3：附件配对内容兜底（关键词规则 → 规则判不出才 LLM）
+  - P0-4：导出格式校验（`X-Export-Invalid` / `X-Export-Invalid-Ids`）
+  - P1-6：冲突数值搜索（`numeric_mode` / `tolerance` / `value_field` / `value`，只影响查询）
+  - P1-7：字段级出处落库（`evidence_si` / `evidence_bl`，`scripts/phase3-evidence-migration.sql`）
+- **验证**：typecheck 通过；MCP 注解自检 11 tools 通过；全量评测 520/520 完全一致（缺陷 TP=72 / FP=0 / FN=0，复核原因 20/20）；Supabase 迁移已应用并核实视图列。

@@ -7,7 +7,11 @@
  * - 值的位置：有的和标签同一行（txt/xlsx），有的在下面几行（docx/pdf）
  * - 占位符（TBA / N/A / ____MT / 空值）视为"没有这个字段"，交给上层判 missing_value
  */
-import type { ComparedField, ExtractedDocumentFields } from "@/lib/shared/types";
+import type {
+  ComparedField,
+  ExtractedDocumentEvidence,
+  ExtractedDocumentFields,
+} from "@/lib/shared/types";
 
 interface LabelDef {
   field: ComparedField;
@@ -52,9 +56,23 @@ const VALUE_VALIDATORS: Partial<Record<ComparedField, (value: string) => boolean
   gross_weight_kg: (value) => /^[\d,.\s]+\s*(kgs?|mts?)?\.?$/i.test(value),
 };
 
+export interface ParsedDocumentFields {
+  fields: ExtractedDocumentFields;
+  evidence: ExtractedDocumentEvidence;
+}
+
 export function parseDocumentFields(text: string): ExtractedDocumentFields {
+  return parseDocumentFieldsWithEvidence(text).fields;
+}
+
+/**
+ * 带出处的解析（2026-09-21 P1-7）：每个字段记录命中的原文行号与那一行原文
+ * （值在标签下一行时，记实际取到值的那一行）。只用于展示/复核，不影响字段值本身。
+ */
+export function parseDocumentFieldsWithEvidence(text: string): ParsedDocumentFields {
   const lines = text.split(/\r?\n/).map((line) => line.replace(/[ \t]+$/g, ""));
   const found: ExtractedDocumentFields = {};
+  const evidence: ExtractedDocumentEvidence = {};
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -67,9 +85,16 @@ export function parseDocumentFields(text: string): ExtractedDocumentFields {
 
       const indent = line.match(/^\s*/)?.[0].length ?? 0;
       let value = consumeLabel(line.slice(indent + hit[0].length));
+      let evidenceLine = i + 1;
+      let evidenceText = line.trim();
 
       if (!value) {
-        value = collectFollowingLines(lines, i, field);
+        const collected = collectFollowingLines(lines, i, field);
+        if (collected) {
+          value = collected.value;
+          evidenceLine = collected.line;
+          evidenceText = collected.text;
+        }
       }
 
       const cleaned = value
@@ -80,11 +105,14 @@ export function parseDocumentFields(text: string): ExtractedDocumentFields {
         Boolean(cleaned) &&
         !PLACEHOLDER_VALUE.test(cleaned) &&
         (VALUE_VALIDATORS[field]?.(cleaned) ?? true);
-      if (valid) found[field] = cleaned;
+      if (valid) {
+        found[field] = cleaned;
+        evidence[field] = { line: evidenceLine, text: evidenceText, source: "rules" };
+      }
       break; // 一行只认一个字段
     }
   }
-  return found;
+  return { fields: found, evidence };
 }
 
 // 把标签后面紧贴的修饰（括号注释、毛重(KGS) 这类、/Intermediate Consignee 写法）剥掉
@@ -100,13 +128,21 @@ function consumeLabel(rest: string): string {
   return s.replace(/^[\s:：;]+/, "").trim();
 }
 
-// 值在标签下一行（docx/pdf 常见）：收集到下一节标题/分隔线/空行/上限为止
+// 值在标签下一行（docx/pdf 常见）：收集到下一节标题/分隔线/空行/上限为止。
+// 返回值带"实际取到值的第一行"（行号+原文），给字段级出处用。
+interface CollectedValue {
+  value: string;
+  line: number;
+  text: string;
+}
+
 function collectFollowingLines(
   lines: string[],
   labelIndex: number,
   field: ComparedField
-): string {
+): CollectedValue | null {
   const parts: string[] = [];
+  let first: { line: number; text: string } | null = null;
   // 公司名一般就在第一行，地址在随后的行；只取第一行避免把地址差异当公司名差异
   const maxLines = field === "shipper" || field === "consignee" || field === "notify_party" ? 1 : 3;
 
@@ -120,9 +156,11 @@ function collectFollowingLines(
       continue;
     }
     parts.push(next.trim());
+    if (!first) first = { line: j + 1, text: next.trim() };
     if (parts.length >= maxLines) break;
   }
-  return parts.join(" ");
+  if (!first) return null;
+  return { value: parts.join(" "), line: first.line, text: first.text };
 }
 
 // 明显不是 SI/BL 的文档（样例里的 wrong_doc_type 陷阱：商业发票/装箱单/产地证）。

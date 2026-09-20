@@ -55,6 +55,8 @@
 
 网页、REST API、MCP 要"跑一封/一整箱"都应该调用这里，不要在别处重新拼顺序逻辑。
 引擎是混合模式（规则优先，拿不准/有矛盾才调模型），所有模型调用走 `lib/shared/llm-cache.ts` 的内容指纹缓存；本地全量评测用 `npm run evaluate`（对照 ground_truth 自测，官方已澄清允许）。
+模型环节失败按"逐级降级"处理（2026-09-21，决策 25）：分类 = 规则 → Jev → 文本 provider 链 → 尽力规则（`degraded`）；比对 = 规范化精确比 + Jev 复核，Jev 失败转保守口径（`rules-degraded`）；`retry_failed` 可一键重算这些邮件。
+字段级出处（规则命中的行号 + 原句）随抽取结果一起流到结果层（`evidence_si` / `evidence_bl`，决策 29）；LLM 兜底的字段只标来源、没有行号。
 
 ## 结果查询（results 模块）：只读分支
 

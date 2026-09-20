@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
         "X-Export-Missing-Ids": formatIdList(doc.missingIds),
         "X-Export-Stale": String(doc.staleIds.length),
         "X-Export-Stale-Ids": formatIdList(doc.staleIds),
+        "X-Export-Invalid": String(doc.invalidIds.length),
+        "X-Export-Invalid-Ids": formatIdList(doc.invalidIds),
         "X-Export-Generated-At": doc.generatedAt,
       },
     });

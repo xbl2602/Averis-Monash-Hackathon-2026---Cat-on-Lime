@@ -15,9 +15,11 @@ import { compareDocumentsHybrid } from "@/app/features/comparison/logic";
 import { extractFields } from "@/app/features/extraction/logic";
 import type { LLMProvider } from "@/lib/llm";
 import { mapWithConcurrencyLimit } from "@/lib/shared/concurrency";
+import { identifyDocumentTypeSmart } from "@/lib/shared/document-identify-llm";
 import {
   COMPARED_FIELDS,
   type EmailVerificationResult,
+  type ExtractedDocumentEvidence,
   type ExtractedDocumentFields,
   type InboxEmail,
   type ReviewReason,
@@ -44,9 +46,9 @@ export interface PipelineOptions {
 }
 
 export interface PipelineMeta {
-  classifier: "rules" | "jev" | "llm";
+  classifier: "rules" | "jev" | "llm" | "degraded";
   extractor: { si: "rules" | "llm" | null; bl: "rules" | "llm" | null };
-  comparer: "rules" | "rules+jev" | null;
+  comparer: "rules" | "rules+jev" | "rules-degraded" | null;
 }
 
 export interface PipelineOutcome {
@@ -54,6 +56,8 @@ export interface PipelineOutcome {
   meta: PipelineMeta;
   /** 抽取到的字段（给结果层存 extracted_si / extracted_bl 用） */
   extracted: { si: ExtractedDocumentFields | null; bl: ExtractedDocumentFields | null };
+  /** 字段级出处（P1-7）：规则命中的行号/原句；LLM 兜底只标来源 */
+  evidence: { si: ExtractedDocumentEvidence | null; bl: ExtractedDocumentEvidence | null };
 }
 
 export async function runEmailPipeline(
@@ -70,23 +74,24 @@ export async function runEmailPipeline(
     comparer: null,
   };
   const extracted: PipelineOutcome["extracted"] = { si: null, bl: null };
+  const evidence: PipelineOutcome["evidence"] = { si: null, bl: null };
 
   if (classification.category !== "BL_COMPARISON") {
     return {
       result: buildOk(classification.category),
       meta,
       extracted,
+      evidence,
     };
   }
 
-  const siDoc = findDocument(input.attachments, "_SI");
-  const blDoc = findDocument(input.attachments, "_BL");
+  const { siDoc, blDoc } = await resolveDocumentPair(input.attachments, options.textProvider);
 
   if (!siDoc || !blDoc) {
     const result = emailAsksForComparison(input.email.body)
       ? buildReview(classification.category, "missing_attachment")
       : buildOk(classification.category);
-    return { result, meta, extracted };
+    return { result, meta, extracted, evidence };
   }
 
   const si =
@@ -108,20 +113,22 @@ export async function runEmailPipeline(
   meta.extractor = { si: si?.extracted_by ?? null, bl: bl?.extracted_by ?? null };
 
   if (si?.document_type === "OTHER" || bl?.document_type === "OTHER") {
-    return { result: buildReview(classification.category, "wrong_doc_type"), meta, extracted };
+    return { result: buildReview(classification.category, "wrong_doc_type"), meta, extracted, evidence };
   }
   if (siDoc.parseStatus !== "ok" || blDoc.parseStatus !== "ok" || !si || !bl) {
-    return { result: buildReview(classification.category, "unreadable"), meta, extracted };
+    return { result: buildReview(classification.category, "unreadable"), meta, extracted, evidence };
   }
 
   extracted.si = si.fields;
   extracted.bl = bl.fields;
+  evidence.si = si.evidence;
+  evidence.bl = bl.evidence;
 
   const missingField = COMPARED_FIELDS.some(
     (field) => !si.fields[field] || !bl.fields[field]
   );
   if (missingField) {
-    return { result: buildReview(classification.category, "missing_value"), meta, extracted };
+    return { result: buildReview(classification.category, "missing_value"), meta, extracted, evidence };
   }
 
   const comparison = await compareDocumentsHybrid({ si: si.fields, bl: bl.fields });
@@ -136,6 +143,7 @@ export async function runEmailPipeline(
     },
     meta,
     extracted,
+    evidence,
   };
 }
 
@@ -209,6 +217,37 @@ function findDocument(
 ): PipelineAttachment | undefined {
   const pattern = marker === "_SI" ? /_SI[._]/i : /_BL[._]/i;
   return attachments.find((attachment) => pattern.test(attachment.path));
+}
+
+/**
+ * 配对 SI / BL 附件（2026-09-21 P0-3，见 DECISION_LOG 决策 26）：
+ * 1. 先按文件名的 _SI / _BL 标记配对（历史行为，样例数据走这条）；
+ * 2. 有缺位时，对没被占用、且能读出文字的附件按内容识别（关键词规则为准，规则判不出才问模型链），
+ *    只补缺的那一侧，同一份附件不会被 SI 和 BL 抢两次；
+ * 3. 内容也认不出就维持缺位，走原来的 missing_attachment / unreadable 分支。
+ * 识别规则本身只在 lib/shared/document-identify.ts / document-identify-llm.ts，这里不重写。
+ */
+async function resolveDocumentPair(
+  attachments: PipelineAttachment[],
+  preferred?: LLMProvider
+): Promise<{ siDoc?: PipelineAttachment; blDoc?: PipelineAttachment }> {
+  let siDoc = findDocument(attachments, "_SI");
+  let blDoc = findDocument(attachments, "_BL");
+  if (siDoc && blDoc) return { siDoc, blDoc };
+
+  const claimed = new Set(
+    [siDoc, blDoc].filter((doc): doc is PipelineAttachment => Boolean(doc))
+  );
+  const candidates = attachments.filter(
+    (attachment) => !claimed.has(attachment) && attachment.parseStatus === "ok"
+  );
+  for (const candidate of candidates) {
+    if (siDoc && blDoc) break;
+    const type = await identifyDocumentTypeSmart(candidate.text, preferred);
+    if (type === "SI" && !siDoc) siDoc = candidate;
+    else if (type === "BL" && !blDoc) blDoc = candidate;
+  }
+  return { siDoc, blDoc };
 }
 
 function buildOk(category: EmailVerificationResult["category"]): EmailVerificationResult {

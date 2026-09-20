@@ -35,8 +35,12 @@ export interface CompareDocumentsResult {
 }
 
 export interface HybridCompareResult extends CompareDocumentsResult {
-  /** rules = 规范化精确比；rules+jev = 文字字段的候选差异复核过 Jev */
-  engine: "rules" | "rules+jev";
+  /**
+   * rules = 规范化精确比（含"没有 Jev key"的保守路径）；
+   * rules+jev = 文字字段的候选差异复核过 Jev；
+   * rules-degraded = Jev 调用失败，候选差异按保守口径（全部计入不一致）处理、可一键重试
+   */
+  engine: "rules" | "rules+jev" | "rules-degraded";
 }
 
 // Jev 对每个字段返回"两边是否一致"的概率，低于这个值就算不一致（与分类的置信度阈值统一为 0.85，偏保守）。
@@ -95,24 +99,37 @@ export async function compareDocumentsHybrid(input: {
     };
   }
 
-  const { value } = await callWithCache({
-    purpose: "field_equivalence",
-    provider: "jev",
-    model: process.env.JEV_MODEL || "jev-latest",
-    request: { state, questions },
-    execute: () => callJev(state, questions),
-  });
+  // Jev 复核失败（网络/额度/格式异常）不再让整封邮件失败（2026-09-21 P1-5）：
+  // 保守降级为"候选差异全部计入不一致"（和没有 Jev key 时的口径一致，宁多勿漏），
+  // engine 标 rules-degraded 供一键重试筛选，失败原因只进服务端日志。
+  let jevDefects: ComparedField[];
+  let engine: HybridCompareResult["engine"] = "rules+jev";
+  try {
+    const { value } = await callWithCache({
+      purpose: "field_equivalence",
+      provider: "jev",
+      model: process.env.JEV_MODEL || "jev-latest",
+      request: { state, questions },
+      execute: () => callJev(state, questions),
+    });
 
-  const jevDefects = textCandidates.filter((field) => {
-    const answer = value.answers[field];
-    if (!answer || answer.type !== "noul") {
-      throw new Error(`Jev 返回的比对结果格式异常：字段 ${field} 缺少 noul 答案`);
-    }
-    return answer.noul < JEV_MISMATCH_THRESHOLD;
-  });
+    jevDefects = textCandidates.filter((field) => {
+      const answer = value.answers[field];
+      if (!answer || answer.type !== "noul") {
+        throw new Error(`Jev 返回的比对结果格式异常：字段 ${field} 缺少 noul 答案`);
+      }
+      return answer.noul < JEV_MISMATCH_THRESHOLD;
+    });
+  } catch (err) {
+    console.warn(
+      `[comparison] Jev 复核失败，候选差异按保守口径处理（全部计为不一致）：${err instanceof Error ? err.message : err}`
+    );
+    jevDefects = textCandidates;
+    engine = "rules-degraded";
+  }
 
   const defect_fields = dedupe([...oneSidedDefects, ...numericDefects, ...jevDefects]);
-  return buildResult(defect_fields, "rules+jev");
+  return buildResult(defect_fields, engine);
 }
 
 function buildResult(

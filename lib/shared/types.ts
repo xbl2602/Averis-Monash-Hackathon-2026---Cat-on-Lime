@@ -57,12 +57,25 @@ export type ExtractedDocumentFields = Partial<Record<ComparedField, string>>;
 // extraction 模块对"这份文档实际是什么"的判断（OTHER = 明显不是 SI/BL，如商业发票/装箱单/产地证）
 export type DocumentType = "SI" | "BL" | "OTHER" | "UNKNOWN";
 
+// 字段级出处（2026-09-21 P1-7）：规则解析命中的原文位置（行号 + 原句）；
+// LLM 兜底抽到的字段没有行证据，只标来源（不要假装有出处）
+export interface FieldEvidence {
+  /** 规则解析命中时：原文行号（从 1 开始） */
+  line?: number;
+  /** 规则解析命中时：实际取到值的那一行原文（行尾空白已去） */
+  text?: string;
+  source: "rules" | "llm";
+}
+export type ExtractedDocumentEvidence = Partial<Record<ComparedField, FieldEvidence>>;
+
 // extraction 模块的完整输出
 export interface ExtractDocumentResult {
   document_type: DocumentType;
   fields: ExtractedDocumentFields;
   /** 字段主要靠"规则解析"还是"LLM 兜底"得出，用于排查与统计 */
   extracted_by: "rules" | "llm";
+  /** 每个抽到的字段的出处（只包含真的抽到的字段） */
+  evidence: ExtractedDocumentEvidence;
 }
 
 // comparison 模块的输出，同时也是最终要交给官方评分系统的那份结果的"单条"格式

@@ -96,6 +96,32 @@ export function isProviderConfigured(provider: LLMProvider): boolean {
   return Boolean(process.env[PROVIDER_KEY_ENV_VARS[provider]]);
 }
 
+/**
+ * 文本模型的安全兜底顺序（2026-09-21 新增，P0-2，见 DECISION_LOG 决策 25）：
+ * 首选（显式传入的 provider）排最前，其余按固定顺序补齐；只保留当前配了 key 的。
+ * gemini 放第一是因为它是本项目的 demo 兜底（见 CLAUDE.md）；lmstudio 只有本地可用。
+ * 现算现用，不做模块级缓存（规范禁止模块级可变状态；环境变量本身进程内不变）。
+ */
+const TEXT_FALLBACK_ORDER: readonly TextLLMProvider[] = [
+  "gemini",
+  "deepseek",
+  "openai",
+  "claude",
+  "lmstudio",
+];
+
+export function orderedTextProviders(preferred?: LLMProvider): TextLLMProvider[] {
+  const ordered = [...TEXT_FALLBACK_ORDER];
+  if (preferred && preferred !== "jev") {
+    const index = ordered.indexOf(preferred as TextLLMProvider);
+    if (index >= 0) {
+      ordered.splice(index, 1);
+      ordered.unshift(preferred as TextLLMProvider);
+    }
+  }
+  return ordered.filter((provider) => isProviderConfigured(provider));
+}
+
 /** provider 不可用时给用户的可读说明（含要配哪个环境变量） */
 function unavailableProviderMessage(provider: LLMProvider): string {
   switch (provider) {

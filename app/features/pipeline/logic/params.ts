@@ -19,6 +19,7 @@ export interface RawBatchInput {
   dry_run?: unknown;
   provider?: unknown;
   concurrency?: unknown;
+  retry_failed?: unknown;
 }
 
 export function normalizeBatchRequest(raw: unknown): RunBatchRequest {
@@ -28,8 +29,16 @@ export function normalizeBatchRequest(raw: unknown): RunBatchRequest {
   }
   const input = raw as RawBatchInput;
 
+  const emailIds = toEmailIds(input.email_ids);
+  const retryFailed = toBoolean(input.retry_failed, "retry_failed") ?? false;
+  if (retryFailed && emailIds) {
+    throw new BatchRequestError(
+      "retry_failed 不能和 email_ids 同时使用：重试名单由服务端从结果表里自动挑（处理失败或降级的邮件）"
+    );
+  }
+
   return {
-    emailIds: toEmailIds(input.email_ids),
+    emailIds,
     limit: toInteger(input.limit, BATCH_DEFAULT_LIMIT, "limit", 1, BATCH_MAX_LIMIT),
     force: toBoolean(input.force, "force") ?? false,
     dryRun: toBoolean(input.dry_run, "dry_run") ?? false,
@@ -41,6 +50,7 @@ export function normalizeBatchRequest(raw: unknown): RunBatchRequest {
       1,
       BATCH_MAX_CONCURRENCY
     ),
+    retryFailed,
   };
 }
 
