@@ -195,7 +195,14 @@ export function normalizeActivateInput(body: Record<string, unknown>): { id: str
 /** 校验停用项目的请求体：id 可省略（不传 = 停用所有启用项目），传了必须是合法 UUID */
 export function normalizeDeactivateInput(body: Record<string, unknown>): { id?: string } {
   const raw = optionalString(body.id, "id");
-  const id = raw ? raw : undefined;
+  // 空字符串是 GUI"字段存在但没选值"的常见序列化结果；如果静默当成"不传"，
+  // 一个 UI 小失误就会把全部项目停掉——明确报错，让调用方自己决定是省略 id 还是传 UUID
+  if (raw !== undefined && raw === "") {
+    throw new MailRequestError(
+      "id 不能是空字符串：要停用全部启用项目请省略 id 字段，要停用单个项目请传合法 UUID"
+    );
+  }
+  const id = raw || undefined;
   if (id && !UUID_PATTERN.test(id)) {
     throw new MailRequestError("id 必须是合法的 UUID（不传表示停用所有启用项目）");
   }
