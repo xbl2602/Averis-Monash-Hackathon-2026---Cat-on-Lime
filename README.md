@@ -152,4 +152,6 @@ docker compose up --build
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：① extraction 的 REST/MCP 之前把 PDF 按 UTF-8 直接读（现在统一走格式解析）；② Next 打包器会丢 `pdf.worker.mjs` 导致服务端 PDF 解析失败（已把 `pdf-parse`/`pdfjs-dist` 声明为 `serverExternalPackages`）
 - LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库），Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）
-- 第二阶段（进行中，详见 [PHASE2_SPEC.md](PHASE2_SPEC.md)）：**config 配置中心**（GUI 可调、敏感值 AES-256-GCM 加密、读开放/写口令保护）、**mail 占位接口**（Gmail 连接状态 + 多 Supabase 项目切换）、**import 文档上传**（单件/多选/文件夹、校验链、内容哈希去重、按内容识别 SI/BL、原文件存 Storage）。新增 5 张表与 `uploads` bucket；写操作需要 `.env.example` 里的 `ADMIN_TOKEN`，加密需要 `ENCRYPTION_MASTER_KEY`
+- 第二阶段（功能已合并，详见 [PHASE2_SPEC.md](PHASE2_SPEC.md)）：**config 配置中心**（GUI 可调、敏感值 AES-256-GCM 加密、读开放/写口令保护）、**mail 占位接口**（Gmail 连接状态 + 多 Supabase 项目切换与停用恢复）、**import 文档上传**（单件/多选/文件夹、校验链、内容哈希去重、按内容识别 SI/BL、原文件存 Storage）。新增 4 张业务表与 `uploads` bucket（均已启用 RLS）。
+  - **线上写入需要配置**：Vercel 环境变量里补上 `ENCRYPTION_MASTER_KEY` 和 `ADMIN_TOKEN`（值在团队本地 `.env.local` 里，复制过去即可，不要外发）；不配置时读取接口正常、写操作会返回可读的拒绝提示
+  - GUI（配置页/上传页）由队友A负责接入，接口契约见 [SHARED_INTERFACES.md](SHARED_INTERFACES.md) 的 config / mail / import 章节

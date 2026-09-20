@@ -276,6 +276,12 @@ interface RunBatchSummary {
 请求头 `x-admin-token: <ADMIN_TOKEN>`；`ADMIN_TOKEN` 未配置时**拒绝所有写操作**（安全默认）。
 读取接口全部开放（裁判/访客自由查看）。实现见 [`lib/shared/admin-guard.ts`](lib/shared/admin-guard.ts)。
 
+**GUI 做写操作的两种推荐路径**（token 不进浏览器）：
+1. Server Action / 服务端代码直接调本仓库的 logic 函数（如 `upsertConfig()`）——同一 app 内最省事，推荐
+2. 服务端 fetch REST 接口时注入 `process.env.ADMIN_TOKEN`（如 Route Handler / Server Action 里）
+
+不要在浏览器端直连写接口（否则需要把 token 下发给浏览器，违背保护初衷；读取接口可以随便在浏览器直连）。
+
 ## mail 模块（Gmail / 多 Supabase 项目，第二阶段占位）
 
 `app/features/mail/`：**本阶段是预留接口，不做真实 OAuth 链路**（见 PHASE2_SPEC 第 0 节）。
