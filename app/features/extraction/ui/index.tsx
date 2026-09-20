@@ -1,13 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { describeApiError, describeNetworkError, type ApiErrorInfo } from "../../../_components/api-error";
+import { ErrorNotice } from "../../../_components/error-notice";
+import { Icon } from "../../../_components/icon";
+import { JsonResult } from "../../../_components/json-result";
+import { Notice } from "../../../_components/notice";
 
 const EXAMPLE_ATTACHMENT = "attachments/email_004_SI.txt";
 
 export function ExtractionPanel() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   async function runExample() {
     setLoading(true);
@@ -22,35 +27,41 @@ export function ExtractionPanel() {
           documentType: "SI",
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "请求失败");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(describeApiError(res.status, data));
+        return;
+      }
       setResult(JSON.stringify(data, null, 2));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误");
+    } catch {
+      setError(describeNetworkError());
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-        这里目前是占位实现（永远返回空对象），还没有接真正的抽取逻辑。
-        负责人可以在 <code>app/features/extraction/logic/index.ts</code> 里替换。
+    <div className="space-y-5">
+      <Notice title="How it reads a document">
+        Label-based rules read the fields first, so &ldquo;Load Port&rdquo; and &ldquo;Port of Loading&rdquo; land in the
+        same field. A model is only asked for fields the rules could not find. Supports PDF, Word, Excel and text files.
+      </Notice>
+
+      <div className="card flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+        <div>
+          <h2 className="text-lg font-bold">Try it on a sample attachment</h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            Extracts the fields from <span className="font-mono">{EXAMPLE_ATTACHMENT}</span>.
+          </p>
+        </div>
+        <button onClick={runExample} disabled={loading} className="btn btn-primary !px-7 !py-3">
+          <Icon name="play" size={16} />
+          {loading ? "Extracting…" : "Run extraction"}
+        </button>
       </div>
-      <button
-        onClick={runExample}
-        disabled={loading}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
-      >
-        {loading ? "运行中..." : `对样例附件 ${EXAMPLE_ATTACHMENT} 运行抽取`}
-      </button>
-      {error && <p className="text-sm text-red-600">出错了：{error}</p>}
-      {result && (
-        <pre className="overflow-auto rounded-md bg-gray-100 p-4 text-sm dark:bg-gray-900">
-          {result}
-        </pre>
-      )}
+
+      {error && <ErrorNotice error={error} />}
+      {result && <JsonResult data={result} />}
     </div>
   );
 }

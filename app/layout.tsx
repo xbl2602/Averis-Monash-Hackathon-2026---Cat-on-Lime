@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { THEME_INIT_SCRIPT } from "./_components/theme";
 
-// 全局字体：展示用无衬线 + 小标签用等宽字体，呼应品牌视觉规范
+// Global fonts: sans-serif for display text, monospace for small labels
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-jakarta",
@@ -19,7 +20,8 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Shipping Doc Verifier",
-  description: "Averis x Monash Hackathon 2026 — 航运单证核验：邮件分类、字段抽取、BL/SI 比对一次跑通。",
+  description:
+    "Classify shipping emails, extract shipment fields from SI and BL attachments, and catch mismatches before a Bill of Lading is finalized.",
 };
 
 export default function RootLayout({
@@ -27,10 +29,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 根布局只提供字体和全局样式，不再固定导航/容器——
-  // 各个区域（营销首页 / 控制台 / 功能页）各自决定自己的外壳，见对应 layout.tsx
+  // The root layout only provides fonts, global styles and the theme bootstrap.
+  // Each area (landing page / dashboard / feature pages) supplies its own shell.
+  // The inline script sets data-theme before first paint, so React must not
+  // complain that <html> differs from the server markup (suppressHydrationWarning).
   return (
-    <html lang="zh" className={`${jakarta.variable} ${jetbrains.variable}`}>
+    <html lang="en" className={`${jakarta.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

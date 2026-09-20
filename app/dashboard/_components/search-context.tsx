@@ -10,8 +10,8 @@ type SearchContextValue = {
 const SearchContext = createContext<SearchContextValue | null>(null);
 
 /**
- * 顶栏搜索框和主内容区的功能卡片之间共享的搜索关键词——纯前端过滤，
- * 不发请求，所以不需要走 /lib/llm 或 Supabase。
+ * Search keyword shared between the top bar's search box and the module cards on the overview page.
+ * Pure front-end filtering, no requests, so it needs neither /lib/llm nor Supabase.
  */
 export function SearchProvider({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState("");
@@ -21,6 +21,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
 export function useSearch() {
   const ctx = useContext(SearchContext);
-  if (!ctx) throw new Error("useSearch 必须在 SearchProvider 内部使用");
+  if (!ctx) throw new Error("useSearch must be used inside a SearchProvider");
   return ctx;
 }
