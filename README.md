@@ -102,6 +102,10 @@
 
 *全景图：三个入口调的是同一套 `logic/`（模块清单见上文 Features 表），不是三套流程。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
 
+<p align="center"><img src="docs/architecture-demo.gif" alt="架构动效：trace 光点走漏斗" width="620" /></p>
+
+*动效版：上面全景图的 trace 走一遍（录自 `docs/diagrams/architecture-showcase.html`，双击可在本地交互播）。*
+
 **约束是硬性的，不是建议**：模块之间不能互相 import 对方 `logic/` 内部实现，跨模块契约必须先写进 [`docs/SHARED_INTERFACES.md`](docs/SHARED_INTERFACES.md)；数据流方向固定成"分类 → 抽取 → 比对"单向管道，不允许反向调用（细节见 [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md)）；一个文件混装路由+业务逻辑+数据库操作，或者超过约 300 行，就要按 `logic/api/mcp/ui` 拆开。这些规则记在 [`CLAUDE.md`](CLAUDE.md) 里，是团队里每个人的 AI 编程工具都要遵守的执行规范，不是写完就不看的文档。
 
 ## ⚙️ Engine Design：规则优先，模型兜底，人工兜底的兜底
@@ -343,6 +347,10 @@ npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
 <p align="center"><img src="docs/diagrams/encryption.png" alt="加密图：主密钥只在环境变量，库里只存密文" width="440" /></p>
 
 *加密图：主密钥只在环境变量（永不进库/进 git/回显），库里只有密文，加密和解密用同一把 key，实现在 `lib/shared/crypto.ts`。源码见 [`docs/diagrams/encryption.mmd`](docs/diagrams/encryption.mmd)。*
+
+<p align="center"><img src="docs/encryption-demo.gif" alt="加密动效：写入链与读取链" width="440" /></p>
+
+*动效版：写入链→读取链走一遍（录自 `docs/diagrams/encryption-showcase.html`）。*
 
 ## 产出并自检提交文件
 
