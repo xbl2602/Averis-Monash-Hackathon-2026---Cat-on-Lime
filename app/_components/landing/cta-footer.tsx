@@ -1,31 +1,5 @@
 import Link from "next/link";
 import { BrandMark } from "../brand-mark";
-import { Icon } from "../icon";
-import { Reveal } from "../reveal";
-
-export function FinalCta() {
-  return (
-    <section className="mx-auto max-w-6xl px-5 pb-20">
-      <Reveal>
-        <div className="card flex flex-col items-start justify-between gap-6 p-8 sm:flex-row sm:items-center sm:p-10">
-          <div>
-            <h2 className="text-2xl font-bold sm:text-3xl">Ready to check your first shipment?</h2>
-            <p className="mt-2 text-sm text-fg-muted">Run the full pipeline on the sample inbox, or try a single step.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard" className="btn btn-primary !px-7 !py-3.5">
-              Open the app
-              <Icon name="arrowRight" size={16} />
-            </Link>
-            <Link href="/features/verification" className="btn btn-glass !px-7 !py-3.5">
-              Run the pipeline
-            </Link>
-          </div>
-        </div>
-      </Reveal>
-    </section>
-  );
-}
 
 export function Footer() {
   return (

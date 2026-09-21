@@ -156,7 +156,7 @@
 
 ## 5. MCP tool（给 AI agent 用，不是 GUI）
 
-共 11 个，地址与握手见 README「REST API 与 MCP Server」一节。读工具 8 个、写工具 3 个（写工具按 MCP 规范必须显式声明否则一律要口令）。
+共 28 个（2026-09-21 新增人工复核闭环 16 个 + sandbox 1 个之后的准确数），地址与握手见 README「REST API 与 MCP Server」一节。读工具 17 个、写工具 11 个（写工具按 MCP 规范必须显式声明否则一律要口令）。
 
 | 工具 | 读/写 | 状态 |
 |---|---|---|
@@ -168,6 +168,8 @@
 | `sync_gmail` | 写（一律需口令） | **占位** |
 | `list_uploaded_documents` | 读 | 实做 |
 | `classify_uploaded_document` | 写 | 实做 |
+| `run_adhoc_test`（sandbox，评委自带 SI/BL 临时测试） | 读（不写库） | 实做 |
+| 人工复核闭环，四模块（`<m>` = classification/extraction/comparison/pipeline）各 4 个：`list_<m>_review`（读）/ `get_<m>_review_history`（读）/ `apply_<m>_review_action`（写）/ `undo_<m>_review_action`（写） | 读×2 写×2 每模块，共 16 个 | 实做（详见 §2.7） |
 
 ## 6. 已知的文档不一致（2026-09-21 已全部修复，见 TODO.md P2-6）
 
@@ -320,3 +322,14 @@
 ### 8.4 唯一一个真正"接口也没准备好"的点——分类"没把握但没失败"没有落库
 
 图上 Main 页的"Check"标签页，如果本意是"分类置信度不够、需要人工看一眼"（区别于 §2.7 review 闭环里已覆盖的"分类彻底失败降级"），**这个数据现在拿不到**：`classifyEmailHybrid` 算出的置信度/`needs_review` 只在单条实时调用时临时返回一次，批量流水线跑完不会把它存进 `verification_results`，所以列表/统计接口都查不到"哪些邮件分类没把握"。这不是"没接 GUI"，是**数据库这层就没留这一列**，要做的话得先加一列 schema 改动、再改批量流水线写入逻辑——真正需要操作者新写后端代码的点，跟前面几条"接口都在只是没人调"性质不一样。详见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「人工复核闭环」一节的"已知缺口"。
+
+## 9. 落地页滚动叙事运维笔记（队友A交付，2026-09-21）
+
+首页 `/` 现在是"一张纸折成纸飞机、沿航线飞过 5 个场景"的滚动驱动页面（GSAP + Lenis + SVG，无 WebGL）。完整设计规格见 [`LANDING_REDESIGN_PROMPT.md`](LANDING_REDESIGN_PROMPT.md)。**只涉及前端文件**：`app/page.tsx`、`app/_components/scroll/`、`app/_components/landing/`、`app/globals.css`、`app/_components/marketing-nav.tsx`，没有碰任何 `logic/api/mcp`。
+
+- **演示保险开关（写进彩排手册）**：投影/演示机卡顿时，地址后加 `?motion=off`（如 `/?motion=off`）→ 变成普通竖排页面，内容一样、没有飞机和动画。系统开了"减少动态效果"、窄屏（<768px）也会自动走降级版本（窄屏保留右下角小飞机）。
+- **调飞行路线**：`/?debug=path` 会把飞机航线画成粉色虚线；航点在 `app/_components/scroll/flight-waypoints.ts`（视口比例坐标）。
+- **调场景时长**：`app/_components/scroll/scene-config.ts`（单位 vh，页面 CSS 高度和飞机时间线都读这一份，改一处即可）。
+- **主题**：滚动时页面 亮 → 黄昏 → 暗 → 亮，只在"访客没手动选过主题且系统是亮色"时生效；点右上角开关或系统是暗色，就整页固定该主题（手动选择永远优先）。
+- **文案**：所有落地页文案集中在 `app/_components/landing/content.ts`，场景只决定摆在哪，不改字。
+- **页面高度依赖 vh**：`.scene` 的高度 = (pin + 100)vh，改 `pin` 数值要和 `scene-config.ts` 同步（场景组件已直接读它）。
