@@ -5,4 +5,4 @@
  * 但导出函数不应该为了一个字符串把整个 pipeline（连带附件解析重依赖）拖进函数包。
  * 改规则的实质改动时在这里手动 +1（原位置：lib/shared/pipeline.ts 的注释）。
  */
-export const PIPELINE_LOGIC_VERSION = "v7-2026-09-22";
+export const PIPELINE_LOGIC_VERSION = "v8-2026-09-22";

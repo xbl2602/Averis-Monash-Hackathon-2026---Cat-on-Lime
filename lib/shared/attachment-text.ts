@@ -89,9 +89,39 @@ async function parsePdf(content: Buffer): Promise<string> {
   }
 }
 
+/**
+ * docx → 纯文字。不用 mammoth.extractRawText：它会把段落内的软换行（Word 里 Shift+Enter，XML 是 <w:br/>）
+ * 直接丢掉、前后两段文字无缝粘在一起——实测 "APRIL FINE PAPER TRADING" + 换行 + "ON BEHALF OF ..."
+ * 变成 "TRADINGON BEHALF"、"CLIFFORD PAPER INC" + "70 EAST STREET" 变成 "INC70 EAST"，
+ * 公司名于是连着地址一起被抽出来，和 BL 一比就是假的 MISMATCH（扰动测试 pt13 大部分失败都是这个）。
+ * 公司名/地址分行写正是 Word 单证最常见的写法，所以改走 HTML：<br> 保留成换行，段落/单元格之间
+ * 空一行（和 extractRawText 的段落口径一致，下游"标签在上一行、值在下一行"的解析不受影响）。
+ */
 async function parseDocx(content: Buffer): Promise<string> {
-  const result = await mammoth.extractRawText({ buffer: content });
-  return result.value;
+  const result = await mammoth.convertToHtml(
+    { buffer: content },
+    // 图片对抽字段没用，别把它们转成 base64 塞进 HTML 里白占内存
+    { convertImage: mammoth.images.imgElement(async () => ({ src: "" })) }
+  );
+  return docxHtmlToText(result.value);
+}
+
+function docxHtmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|h[1-6]|li|td|th|tr|table)>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function parseXlsx(content: Buffer): Promise<string> {
@@ -102,7 +132,11 @@ async function parseXlsx(content: Buffer): Promise<string> {
         row
           .map((cell) => formatCellValue(cell))
           .join(" ")
-          .replace(/\s+/g, " ")
+          // 只合并横向空白，保留单元格内的换行（Excel 里 Alt+Enter）：之前用 \s+ 把换行也压成空格，
+          // "公司名\n地址" 被拼成一行，公司名连着地址一起被抽出来，和 BL 一比就是假的 MISMATCH
+          // （2026-09-22 扰动测试 pt7 实测，和 docx 的 <w:br/> 是同一类问题）。
+          .replace(/[^\S\n]+/g, " ")
+          .replace(/ *\n[\s]*/g, "\n")
           .trim()
       )
       .filter((line) => line.length > 0);
