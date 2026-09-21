@@ -77,9 +77,11 @@ function isInDefaultQueue(targetKind: ReviewTargetKind, row: OverviewQueueRow): 
           row.review_reason === "unreadable")
       );
     case "classification":
-      // 分类的"置信度<0.85"目前没有持久化到 verification_results（只有单文档接口即时返回，
-      // 见 DECISION_LOG 决策30旁注 / TODO.md P1-1），这里只能覆盖"全模型失败降级"这一种情况。
-      return provider.startsWith("degraded/");
+      // 2026-09-22 修复：分类"置信度<0.85"现在会落库成 review_reason=low_confidence_classification
+      // （见 lib/shared/pipeline.ts 的 applyClassificationConfidence），这里覆盖两种情况：
+      // 全模型失败降级（provider 前缀 "degraded/"），以及 Jev 给了结果但没把握。
+      // 注意：这次修复只对之后新跑的结果生效，旧数据要重新跑一遍流水线才会补上这个标记。
+      return provider.startsWith("degraded/") || row.review_reason === "low_confidence_classification";
     case "pipeline":
       return row.processing_status === "failed" || provider.includes("degraded");
   }

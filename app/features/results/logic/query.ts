@@ -17,6 +17,7 @@ const VIEW_COLUMNS = [
   "email_id",
   "from_address",
   "subject",
+  "body",
   "attachment_paths",
   "category",
   "comparison_status",
@@ -40,6 +41,7 @@ interface OverviewRow {
   email_id: string;
   from_address: string | null;
   subject: string | null;
+  body: string | null;
   attachment_paths: string[] | null;
   category: string | null;
   comparison_status: string | null;
@@ -177,6 +179,7 @@ function toResultRow(row: OverviewRow): ResultRow {
     email_id: row.email_id,
     from: row.from_address ?? "",
     subject: row.subject ?? "",
+    body: row.body ?? "",
     attachment_paths: row.attachment_paths ?? [],
     category: (row.category as EmailCategory | null) ?? null,
     comparison_status: (row.comparison_status as ComparisonStatus | null) ?? null,

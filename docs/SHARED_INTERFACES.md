@@ -90,7 +90,7 @@ interface ExtractDocumentResult {
 
 ```ts
 type ComparisonStatus = "OK" | "MISMATCH" | "NEEDS_REVIEW";
-type ReviewReason = "wrong_doc_type" | "missing_attachment" | "unreadable" | "missing_value";
+type ReviewReason = "wrong_doc_type" | "missing_attachment" | "unreadable" | "missing_value" | "low_confidence_classification";
 
 interface EmailVerificationResult {
   category: EmailCategory;
@@ -109,7 +109,7 @@ interface EmailVerificationResult {
 
 `lib/shared/pipeline.ts` 是唯一拼"分类 → 抽取 → 比对"顺序的地方：
 
-- `runEmailPipeline`：单封邮件 → `EmailVerificationResult`，同时负责 4 种"拿不准"判定（missing_attachment / wrong_doc_type / unreadable / missing_value）
+- `runEmailPipeline`：单封邮件 → `EmailVerificationResult`，同时负责 5 种"拿不准"判定（missing_attachment / wrong_doc_type / unreadable / missing_value / low_confidence_classification）
 - 附件配对：文件名 `_SI`/`_BL` 优先；有缺位时按内容识别补缺（关键词规则 → 判不出才问模型链），同一附件不会被两边抢用（2026-09-21，决策 26）
 - 失败降级：分类/比对任一模型环节失败都不会让整封邮件崩——分类走 provider 链 + 尽力规则兜底（`engine=degraded`）、比对走保守口径（`rules-degraded`）；`retry_failed` 可一键重算这些邮件（2026-09-21，决策 25）
 - `runBatchPipeline`：批量（限量并发、单封失败隔离）
@@ -186,7 +186,7 @@ interface ResultListResponse {
   groupBy: "category" | "comparison_status" | null;
   groups: { key: string; count: number }[] | null;
   items: {
-    email_id: string; from: string; subject: string; attachment_paths: string[];
+    email_id: string; from: string; subject: string; body: string; attachment_paths: string[];
     category: EmailCategory | null;                 // 未处理时为 null
     comparison_status: ComparisonStatus | null;
     review_reason: ReviewReason | null;
@@ -202,6 +202,8 @@ interface ResultListResponse {
 }
 ```
 
+`body`（2026-09-22 新增）：邮件正文原文，来自 `raw_emails.body`，视图 `verification_overview` 之前没选出来——复核详情页要看邮件内容才能判断，只看抽取字段不够。
+
 统计响应（`get_stats`）：
 
 ```ts
@@ -215,6 +217,13 @@ interface StatsResponse {
   last_updated_at: string | null;
 }
 ```
+
+**2026-09-22 修复**：`total_emails`/`processed`/`by_category`/`by_status` 等这些数字现在会先按 email_id 排除
+`pt<N>_` 前缀的行（`scripts/perturb-generate.mjs` 生成的内部扰动测试数据，灌进了和 demo 共用的 Supabase
+项目里，见 DECISION_LOG）。之前 Overview 首页会出现"卡片写 520 但 Coverage 写 3000+"这种误导人的不一致，
+就是因为这里把内部回归测试的几千行也算了进去。这个统计口径现在恒等于"官方样例那 520 封"，不受团队什么时候
+跑了多少轮内部扰动测试影响；`/features/results`、`/features/results/conflicts` 等列表/搜索接口不受影响，
+仍然能查到全部数据（含扰动测试行），只有这个 Overview 用的汇总统计做了排除。
 
 冲突对响应：`{ total, limit, offset, sortBy, order, items }`，其中每条 item 是
 `{ email_id, from, subject, si_file, bl_file, other_files, status, review_reason, defect_fields, defect_count, si_values, bl_values, si_evidence, bl_evidence, updated_at }`（`si_evidence/bl_evidence` 为字段级出处，2026-09-21 新增）。
@@ -332,13 +341,14 @@ MISMATCH 必有缺陷无原因、NEEDS_REVIEW 必有原因无缺陷、OK 都没�
 **队列默认过滤（异常驱动，`include_ok=true` 才看全部）**，各模块口径不同：
 - `comparison`：`comparison_status ∈ {MISMATCH, NEEDS_REVIEW}`
 - `extraction`：`comparison_status=NEEDS_REVIEW` 且 `review_reason ∈ {missing_value, wrong_doc_type, unreadable}`
-- `classification`：`model_provider` 的分类器分段 = `degraded`（即"全模型失败降级"）
+- `classification`：`model_provider` 的分类器分段 = `degraded`（"全模型失败降级"）**或** `review_reason = low_confidence_classification`（Jev 给了结果但置信度 < 0.85）
 - `pipeline`：`processing_status=failed` 或 `model_provider` 含 `degraded`
 
-**已知缺口**：分类的"Jev 置信度 < 0.85 但没有全失败"这种拿不准，目前**没有持久化**到 `verification_results`
-（`classifyEmailHybrid` 算出的 `needs_review` 只在单文档接口即时返回，批量流水线没有存这个信号），所以
-classification 复核队列目前只覆盖"降级"这一种情况，不覆盖"低置信度但 Jev 正常返回"这种。要补齐需要在
-`verification_results` 加一列持久化分类置信度/needs_review，这是一次单独的 schema 改动，未包含在本轮范围内。
+**2026-09-22 修复**：分类的"Jev 置信度 < 0.85 但没有全失败"这种拿不准，之前**没有持久化**到 `verification_results`
+（`classifyEmailHybrid` 算出的 `needs_review` 只在单文档接口即时返回，批量流水线算完就丢了），导致复核队列里完全没有
+"系统无法判断邮件类型"的入口。现在 `lib/shared/pipeline.ts` 的 `applyClassificationConfidence` 会把这种情况落库成
+`review_reason=low_confidence_classification`，`isInDefaultQueue` 的 classification 分支也加了这条判断。
+**注意**：这只对之后新跑的结果生效，已有的 3288 行历史数据不会自动补上，要重新跑一遍流水线（勾选"Recalculate everything"）才会有这个标记。
 
 错误：参数错/一致性校验不过 400；口令错 401；未配置 `ADMIN_TOKEN` 403；查无邮件 404；
 乐观锁冲突（`expected_updated_at` 不匹配，或撤销的不是最新动作）409；其余 500。

@@ -50,6 +50,23 @@ function DecisionCard({ item }: { item: ReviewQueueItem }) {
   );
 }
 
+/** The actual email text. Without this a reviewer can only see extracted fields, not judge the source. */
+function EmailBody({ row }: { row: ResultRow | null }) {
+  if (!row) return null;
+  return (
+    <details open className="group rounded-2xl border border-line bg-sunken">
+      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
+        <Icon name="mail" size={16} className="text-accent-strong" />
+        Email content
+        <Icon name="chevronDown" size={16} className="ml-auto text-fg-faint transition group-open:rotate-180" />
+      </summary>
+      <div className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words border-t border-line px-4 py-3 font-mono text-xs leading-relaxed text-fg-muted">
+        {row.body || "(empty body)"}
+      </div>
+    </details>
+  );
+}
+
 function Evidence({ module, item, row }: { module: ReviewModule; item: ReviewQueueItem; row: ResultRow | null }) {
   if (module === "pipeline") {
     return (
@@ -66,9 +83,13 @@ function Evidence({ module, item, row }: { module: ReviewModule; item: ReviewQue
     );
   }
   if (module === "classification") {
-    return (
+    return item.review_reason === "low_confidence_classification" ? (
+      <Notice title="The model was not confident about this category">
+        A category was chosen, but the model&rsquo;s own confidence was below the threshold. Read the message below and confirm it or pick the right one.
+      </Notice>
+    ) : (
       <Notice title="Every model failed on this email">
-        The category shown is a best-effort guess from simple rules. Read the message, then confirm it or pick the right category. <span className="font-mono">{row?.from}</span>
+        The category shown is a best-effort guess from simple rules. Read the message below, then confirm it or pick the right category.
       </Notice>
     );
   }
@@ -143,6 +164,8 @@ export function ReviewDetail({
         </div>
         <ReasonNote reason={item.review_reason} />
       </header>
+
+      {rows.loading && !row ? <p className="text-sm text-fg-faint">Loading the email…</p> : <EmailBody row={row} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-line bg-sunken p-4">

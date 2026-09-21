@@ -41,6 +41,7 @@ export const REASON_LABELS: Record<ReviewReason, string> = {
   missing_attachment: "An SI or BL attachment is missing",
   unreadable: "A document could not be read",
   missing_value: "A required field has no value",
+  low_confidence_classification: "Not sure which category this email belongs to",
 };
 
 export function reasonLabel(reason: string | null | undefined): string {

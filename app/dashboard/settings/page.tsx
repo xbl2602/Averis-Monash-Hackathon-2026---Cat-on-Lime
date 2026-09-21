@@ -72,13 +72,19 @@ export default function SettingsPage() {
           <ConnectionsSection />
           <AccountSection />
 
-          {/* Deliberately not a SectionCard and not in the nav above — this is an internal
-              tool for the team/judges, not a product page. See UI_GUIDE.md §2.10. */}
+          {/* Deliberately not a SectionCard and not in the nav above — these are internal
+              tools for the team/judges, not product pages. See UI_GUIDE.md §2.10. */}
           <p className="px-1 text-xs text-fg-faint">
             <Link href="/features/devmode" className="underline decoration-dotted underline-offset-2 hover:text-fg-muted">
               Developer mode
             </Link>{" "}
             — reset or restore the shared database. Internal tool, not part of the product.
+          </p>
+          <p className="px-1 text-xs text-fg-faint">
+            <Link href="/features/jev-lab" className="underline decoration-dotted underline-offset-2 hover:text-fg-muted">
+              Model lab (Jev)
+            </Link>{" "}
+            — compare Jev against Claude on one email. Engineering tool, not a verification feature.
           </p>
         </div>
       </div>

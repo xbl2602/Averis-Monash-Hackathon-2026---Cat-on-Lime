@@ -22,6 +22,7 @@ export interface ResultRow {
   email_id: string;
   from: string;
   subject: string;
+  body: string;
   attachment_paths: string[];
   category: EmailCategory | null;
   comparison_status: ComparisonStatus | null;

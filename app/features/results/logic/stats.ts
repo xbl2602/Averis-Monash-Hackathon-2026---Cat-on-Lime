@@ -10,7 +10,15 @@ import type { StatsSummary } from "./types";
 
 const NOT_PROCESSED = "NOT_PROCESSED";
 
+// 扰动测试集（scripts/perturb-generate.mjs）的邮件 id 固定是 "pt<N>_<原id>"（约定见该脚本头部注释），
+// 灌进了和正式 demo 共用的 Supabase 项目里，为了少让项目休眠（见 DECISION_LOG）。
+// 它们是内部回归测试数据，不是官方样例，公开 Overview 页的头部数字如果把这些也算进去，
+// 会出现"卡片写 520 但 Coverage 写 3000+"这种误导人的不一致——这里按 email_id 前缀滤掉，
+// 让这个统计口径始终对应"官方样例那 520 封"，不受团队什么时候跑了多少轮内部测试影响。
+const PERTURBATION_ID_PATTERN = /^pt\d+_/;
+
 interface StatsRow {
+  email_id: string;
   processed: boolean | null;
   processing_status: string | null;
   category: string | null;
@@ -22,15 +30,16 @@ interface StatsRow {
 
 export async function getStats(): Promise<StatsSummary> {
   const client = getReadClient();
-  const rows = await fetchAllRows<StatsRow>((from, to) =>
+  const allRows = await fetchAllRows<StatsRow>((from, to) =>
     client
       .from(OVERVIEW_VIEW)
       .select(
-        "processed,processing_status,category,comparison_status,defect_fields,model_provider,updated_at"
+        "email_id,processed,processing_status,category,comparison_status,defect_fields,model_provider,updated_at"
       )
       .order("email_id", { ascending: true })
       .range(from, to)
   );
+  const rows = allRows.filter((row) => !PERTURBATION_ID_PATTERN.test(row.email_id));
 
   const byCategory: Record<string, number> = {};
   for (const category of EMAIL_CATEGORIES) byCategory[category] = 0;

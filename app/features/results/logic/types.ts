@@ -68,6 +68,8 @@ export interface ResultRow {
   email_id: string;
   from: string;
   subject: string;
+  /** 邮件正文原文（复核详情页要用来判断，不只看抽取出的字段），非未处理邮件也有值 */
+  body: string;
   attachment_paths: string[];
   /** 未处理的邮件，下面这些结果字段都是 null / 空 */
   category: EmailCategory | null;

@@ -20,7 +20,9 @@ const TILES: FeatureTile[] = [
   { href: "/features/comparison", tag: "Step 03", title: "SI / BL comparison", desc: "Compare two documents field by field, or type in your own values to see how the engine judges them.", icon: "compare", accent: "var(--color-halo)" },
   { href: "/features/sandbox", tag: "Try it", title: "Try your own files", desc: "Drop in your own SI and BL. Nothing is saved and no database is needed.", icon: "sparkles", accent: "var(--color-indigo)", isNew: true },
   { href: "/features/import", tag: "Tools", title: "Documents", desc: "Upload documents into the shared pool, see how each one was identified, and file the unknown ones.", icon: "folder", accent: "var(--color-mint)", isNew: true },
-  { href: "/features/jev-lab", tag: "Lab", title: "Model lab (Jev)", desc: "Try the Jev structured-decision model on a sample email and compare it with Claude.", icon: "flask", accent: "var(--color-royal)" },
+  // Model lab (Jev) is deliberately not a tile here: it's an internal engineering comparison
+  // tool, not a shipping-document-verification feature. Still reachable at /features/jev-lab
+  // (linked from Settings) for the team/judges who want to see it.
 ];
 
 const SURFACES: { icon: IconName; title: string; detail: string }[] = [

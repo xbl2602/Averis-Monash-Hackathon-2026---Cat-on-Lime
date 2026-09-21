@@ -53,7 +53,7 @@ create table if not exists public.verification_results (
   ),
   comparison_status text check (comparison_status = any (array['OK', 'MISMATCH', 'NEEDS_REVIEW'])),
   review_reason text check (
-    review_reason = any (array['wrong_doc_type', 'missing_attachment', 'unreadable', 'missing_value'])
+    review_reason = any (array['wrong_doc_type', 'missing_attachment', 'unreadable', 'missing_value', 'low_confidence_classification'])
   ),
   defect_fields jsonb not null default '[]'::jsonb,
   has_defect boolean,
@@ -122,7 +122,8 @@ select
   r.extracted_si,
   r.extracted_bl,
   r.evidence_si,
-  r.evidence_bl
+  r.evidence_bl,
+  e.body
 from public.raw_emails e
 left join public.verification_results r on r.email_id = e.email_id;
 

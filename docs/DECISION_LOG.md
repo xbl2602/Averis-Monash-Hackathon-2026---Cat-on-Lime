@@ -525,3 +525,76 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   短语校验逻辑单独写了一个隔离的临时脚本测试（错短语/缺字段/大小写不对/尾随空格/短语用错接口
   全部正确抛错，逐字匹配才通过），测完即删，**没有对生产数据库实际执行 wipe/restore**——这类
   操作的"测试"本身就是它要防的风险，留给操作者自己决定何时真正触发。
+
+### 决策 35：一批 UIUX+后端联合 bug 修复——GUI 给队友A/队友B试用后的真实反馈（提交日）
+
+- **背景**：devmode GUI 上线后队友试用整个网站，一次性报了 10 个问题，操作者明确要求"UIUX 和后端一起
+  修"（这轮临时扩大授权到 UI，和决策34"仅此一次"的性质一样，只对这批 bug 生效，不改变长期分工）。
+  逐条排查后发现全部是可以定位到根因的真 bug，不是产品方向分歧，所以直接修，没有再逐条问操作者。
+- **① Overview 页 "520 Sample emails ready" 和 Coverage "3288 email verified" 对不上**：查了 Supabase
+  才发现库里真实有 3288 行，`pt1`~`pt14` 前缀占了 2768 行——是 `scripts/perturb-generate.mjs`
+  扰动测试集（P1-10，决策记录见更早的 TODO），灌进了和 demo 共用的正式 Supabase 项目（决策34的
+  "共用项目避免休眠"决策的副作用）。这些是内部回归测试数据，不是官方样例，Overview 首页却把它们也
+  算进了统计。**修法**：`app/features/results/logic/stats.ts` 按 `email_id` 前缀 `pt\d+_` 过滤掉这些
+  行，让 Overview 的头部数字恒等于官方样例 520 封；`/features/results`、conflicts 等列表/搜索接口
+  不受影响，仍能查到全部数据（调试/复核时能用）。**没有删除这些扰动测试数据本身**——它们是有效的
+  内部回归测试留档（对应 `private/perturb-runs/` 的分析结果），只是不该出现在公开 Overview 的头部
+  统计里；是否要清库留给操作者自己决定。
+- **② "Full pipeline" 页指示不清、"Fallback model" 措辞误导**：查了 `lib/shared/llm-chain.ts` 确认
+  系统其实有真正的多模型链式兜底（首选模型失败会自动按顺序试下一个配置了 key 的 provider），但 UI
+  上的单选下拉框标着"Fallback model"，看起来像"只支持兜底到一个模型"。改成"Preferred model"并在
+  提示文字里说清楚"失败会自动试其它已配置的模型"；同时改了"Emails to process"→"How many to run
+  this time"、"Specific email IDs"→"Only these email IDs"，并补充说明"就算列了具体 ID，上面这个
+  数字仍然是这次运行的上限"（查 `app/features/pipeline/logic/index.ts` 的 `toRun.slice(0,
+  resolved.limit)` 确认了这条真实存在但没写清楚的行为）。设置页同一个控件同步改名。
+- **③ 搜索精确 ID（如 `email_065`）搜不到**：真 bug，根因在 `app/features/results/logic/db.ts` 的
+  `sanitizeSearchTerm`——把 LIKE 通配符 `%`/`_` 和 PostgREST 语法字符一起直接删掉，而不是转义。
+  邮件 ID 全是 `email_001` 这种带下划线的格式，搜索词里的下划线被替换成空格后，永远匹配不上任何
+  真实 email_id。改法：`sanitizeSearchTerm` 只清理真正会破坏 PostgREST `or()` 语法的字符
+  （`,()"\\`），`ilikeFragment` 改成把 `%`/`_` 转义成字面量（`\%`/`\_`）而不是直接拿掉。
+- **④ Conflicts 页默认全展开，希望和落地页卡片一样默认收起**：`ConflictCard` 加了本地展开状态，
+  默认 `false`，标题栏（email id/主题/差异字段数）始终可见，点击才展开 SI/BL 逐字段对比，复用了
+  Conflicts 导出面板已有的 `.expand` CSS 动画类，不是新写一套。
+- **⑤ 抽取字段把标签文字也解析进值里**：真 bug，查了扰动测试集 `pt5`（标签同义词替换，用来测试
+  "标签换个说法还认得出来"）产出的 `pt5_email_065` 才复现——`Consignee Name (Non-Negotiable): X`
+  这种带 "Name" 限定词的复合标签，`label-parser.ts` 的 `consumeLabel` 只认识"括号注释"/"毛重"/
+  "intermediate consignee"三种要剥掉的修饰，不认识单独的 "Name"，导致解析出 `"Name (Non-Negotiable):
+  X"` 这种带标签残留的脏值。加了一条新规则：`name` 后面紧跟冒号或左括号时才当限定词剥掉（避免误吃
+  真的以 "Name" 开头的公司名）。**顺带查证**：用户截图里 "Port of discharge" 一栏 SI/BL 不一致
+  （`BUSAN, SOUTH KOREA (VNSGN)`，港口名和 UN/LOCODE 对不上）**不是 bug**——直接读了
+  `data/sample/attachments/email_065_{SI,BL}.txt` 原始文件，这个不一致就写在官方样例数据里，是
+  故意设计的比对测试用例，系统正确地把它判成了 MISMATCH。
+- **⑥ 复核队列默认把"系统判断没问题"的邮件也显示出来**：真 bug，`review-workspace.tsx` 里
+  `useState<QueueFilters>({ ...DEFAULT_QUEUE_FILTERS, includeOk: initialEmail !== "" })`——凡是带
+  `?email=` 深链接进来（比如从 Conflicts 点"Review this one"），就会把 `includeOk` 悄悄设成
+  `true` 并留在持久筛选状态里，而深链接定位具体那条数据其实已经由另一个单独的 effect 处理了，这行
+  完全是多余的、还会把默认视图弄乱。删掉这个多余的初始值，改回统一用 `DEFAULT_QUEUE_FILTERS`
+  （`includeOk: false`）。这个也是"点了 Review this one 感觉页面被打断/切换了"那条反馈的根因——
+  查过 `review/page.tsx` 确认深链接落地的模块（`comparison`）和来源一致，没有模块跳转的 bug，
+  真正的"意外变化"就是这个 includeOk 泄漏。
+- **⑦ 复核队列没有"系统无法判断邮件类型"的入口**：真缺口，`classifyEmailHybrid` 早就算出了
+  `needs_review`（Jev 置信度 < 0.85），但 `runEmailPipeline` 从来没用过这个字段就直接丢弃了——
+  这正是 `docs/REVIEW_SPEC.md` 决策31②记录的已知缺口，这次操作者当场拍板要修，不再往后拖。新增
+  `review_reason` 取值 `low_confidence_classification`（连带改了 `verification_results` 的 CHECK
+  约束，见 `scripts/phase4-body-and-review-reason-migration.sql`），`pipeline.ts` 新增
+  `applyClassificationConfidence`：Jev 给出结果但没把握、且流程本来判 OK 时，改判 NEEDS_REVIEW；
+  `isInDefaultQueue` 的 classification 分支同步识别这个新原因。**"全模型失败降级"那条路径不改**
+  （已经靠 `model_provider` 前缀单独进队列，工作正常）。**只对之后新跑的结果生效**，已有 3288 行
+  历史数据要重新跑一遍流水线（"Recalculate everything"）才会补上这个标记，没有做批量回填。
+- **⑧ 复核详情页点开邮件不显示邮件内容，没法凭内容判断**：真缺口，`verification_overview` 视图
+  本来就没选 `raw_emails.body` 这一列（`raw_emails` 表里其实一直都有这份数据）。加了一个新
+  migration 把 `body` 追加到视图最后一列（`CREATE OR REPLACE VIEW` 不能改已有列的顺序/名字，
+  只能在末尾追加，实测踩过一次才发现），`ResultRow`/`ResultList` 类型和 `/features/results/api`
+  同步带上这个字段，`ReviewDetail` 新增一个默认展开的"Email content"折叠块显示原文。这个改动让
+  所有复核模块（不只是分类）都能在做决定前先看到邮件正文，不只看抽取出的字段。
+- **⑨ "Model lab (Jev)"该不该算产品功能**：操作者判断后拍板隐藏——它是给团队自己对比 Jev 和
+  Claude 判断质量的工程调试工具（页面本身也没有 `logic/api/mcp`，只有一个 `ui/`，从没打算暴露成
+  REST/MCP 能力），不是航运单证核验场景里操作团队会用到的东西。从 `NAV_GROUPS`（主导航）和
+  Dashboard 的 `TILES`（首页卡片墙）里都去掉，页面本身保留（`/features/jev-lab` 还能直接访问，
+  加了 `robots: noindex`），在 Settings 页底部补一行和 devmode 一样风格的小字链接，方便团队自己
+  找到它，不对外当成正式功能宣传。
+- **验证**：全部改完后 `npm run typecheck`、`npm run build` 通过；起 `npm start` 对着真实生产
+  Supabase 项目实测：`/features/results/api/stats` 返回 `total_emails: 520`（之前是 3288）；
+  `?q=email_065` 和 `?q=pt5_email_065` 都能精确命中；结果行里带上了真实的 `body` 内容；直接跑了
+  修好的 `label-parser.ts` 对着 `pt5_email_065` 的真实 SI 原文和一段未扰动的原始标签格式两种输入，
+  确认新规则修好了坏例、没有破坏原本就工作正常的解析路径（回归检查）。

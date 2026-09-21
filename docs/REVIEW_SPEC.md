@@ -386,12 +386,13 @@ export interface ReviewQueueItem {
    REST/MCP 走的是和 `pipeline`/`mail`/`import` 完全一致的现成写法（请求头 `x-admin-token` +
    `getWriteAccess`）。在没有 GUI 去用它之前先建这套 cookie 机制，是"为还不存在的需求预先设计"，
    违反 CLAUDE.md 的通用规则第1条。**等队友A真正做复核页 GUI 时再补**，到时候 REST/MCP 的口令方式不变。
-2. **分类的复核队列只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"**。
-   原因：后者这个信号（`classifyEmailHybrid` 算出的 `needs_review`）目前只在单文档接口即时返回，
-   没有持久化进 `verification_results`——批量流水线跑完之后这个信号就丢了。要接上需要给
-   `verification_results` 加一列（比如 `classification_confidence` 或 `classification_needs_review`），
-   这是一次独立的 schema/pipeline 改动，涉及表结构，按规范要操作者确认后再做，不在这轮"补齐复核闭环"
-   的范围内。已同步记在 `docs/SHARED_INTERFACES.md`「人工复核闭环」一节和 `docs/TODO.md`。
+2. ~~分类的复核队列只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"~~
+   **2026-09-22 已修复**：裁判/队友实测后报了这个 bug（复核队列没有"系统无法判断邮件类型"的入口），
+   操作者当场确认后加了新的 `review_reason=low_confidence_classification`（`REVIEW_REASONS` 第5个值，
+   连带改了 `verification_results` 的 CHECK 约束），`lib/shared/pipeline.ts` 新增
+   `applyClassificationConfidence` 把这个信号落库，`isInDefaultQueue` 的 classification 分支同步加了判断。
+   见 `scripts/phase4-body-and-review-reason-migration.sql`、`docs/SHARED_INTERFACES.md`「人工复核闭环」一节。
+   注意：只对之后新跑的结果生效，已有历史数据要重新跑一遍流水线才会补上标记。
 3. **MCP 只做了 4 个只读/写 tool（list/history/apply/undo），没有单独的 bulk tool**——这个其实不是偏差，
    第 8 节的 MCP 契约表本来就只定义了这 4 种，批量操作按表格字面意思只留在 REST。
 4. **实测中发现并修了一个真实 bug**：`lib/shared/review/store.ts` 最初用 PostgREST 的

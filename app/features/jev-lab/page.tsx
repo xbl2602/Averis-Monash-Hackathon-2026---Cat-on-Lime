@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { PageHeader } from "../../_components/page-header";
 import { listEmailOptions } from "../../_lib/email-options";
 import { JevLabPanel } from "./ui";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Model lab (Jev) · Shipping Doc Verifier",
+  // Engineering comparison tool, not a product page: left out of the main nav (see nav-items.ts).
+  robots: { index: false, follow: false },
+};
 
 export default async function JevLabPage() {
   const options = await listEmailOptions();

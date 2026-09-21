@@ -24,7 +24,7 @@
 
 ### [x] P1-1 人工复核闭环——后端（REST+MCP）已做完，GUI 留给队友A
 - **做了什么**：没有做"最小版"，而是按 `docs/REVIEW_SPEC.md` 把四个模块（classification/extraction/comparison/pipeline）的 REST（`api/review/{route,history,undo,bulk}`）+ MCP（4 tool × 4 模块 = 16 个）都接完了，共用层在 `lib/shared/review/`（`store`/`actions`/`normalize`/`merge`/`rerun`/`http`/`mcp`/`types`，8 个文件）；`scripts/review-schema.sql` 两张表已建并应用到正式 Supabase 项目；results 导出已接 `applyOverridesToSubmission`（`X-Review-Pending`/`X-Review-Deferred` 响应头）。**没做 GUI**（按要求）。
-- **三处偏差**（详细原因见 `docs/REVIEW_SPEC.md` 第15节 / `DECISION_LOG.md` 决策31）：① 没建 httpOnly cookie 会话——GUI 不做，REST/MCP 沿用现有 `x-admin-token` 口径，等做 GUI 时再补；② classification 复核队列目前只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"（这个信号目前没持久化进 `verification_results`，需要单独一次 schema 改动，需要操作者确认，未包含在这轮）；③ MCP 没做独立 bulk tool（批量只走 REST，符合 REVIEW_SPEC §8 原定范围，不算真偏差）。
+- **三处偏差**（详细原因见 `docs/REVIEW_SPEC.md` 第15节 / `DECISION_LOG.md` 决策31）：① 没建 httpOnly cookie 会话——GUI 不做，REST/MCP 沿用现有 `x-admin-token` 口径，等做 GUI 时再补；② ~~classification 复核队列目前只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"~~ **2026-09-22 已修复，见决策35⑦**：新增 `review_reason=low_confidence_classification`，`pipeline.ts` 新增 `applyClassificationConfidence` 落库这个信号；③ MCP 没做独立 bulk tool（批量只走 REST，符合 REVIEW_SPEC §8 原定范围，不算真偏差）。
 - **实测中发现并修了一个真 bug**：`listOverrides` 原来用 PostgREST 的 `.in()` 传几百个 email_id 会被判 400（URL 太长）；改成按 `target_kind` 整表取回再在内存过滤，问题消失。
 - **验收**：本地 `next dev` 对 comparison 模块实测 confirm/correct/undo/bulk（含失败隔离）/ 乐观锁 409 / 一致性校验 400 / 导出叠加头随动作变化，全部通过；测试数据已清空不留库里；`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations`（白名单已更新）均通过。
 - **注意**：没有任何地方读取/引用 `ground_truth`。
@@ -82,6 +82,25 @@
 - **决策记录**：`DECISION_LOG.md` 决策32。
 - **验收**：用真实样例文件（已知有差异的 email_004 SI/BL）当"评委自己的文档"喂给 sandbox 接口，结果和正式流水线完全一致；错误路径（坏扩展名/坏base64/超限/缺文件）都返回可读错误。`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations` 均通过。
 - **还没做**：批量测试集版本（一次上传一整批邮件+附件跑整箱）——操作者明确说"两个都要，先做单条"，批量版视时间决定；sandbox 的 GUI 页面（`docs/UI_GUIDE.md` §2.8 已写好交接说明，归队友A）。
+
+### [x] 提交日：一批 UIUX+后端联合 bug 修复（队友试用整站后的 10 条真实反馈）
+- **做了什么**：Overview 页统计口径排除内部扰动测试数据（不再把 3288 混进"520 官方样例"的头部数字）；
+  搜索精确 email ID 匹配不上的真 bug（下划线被误当 LIKE 通配符删掉）；抽取解析把 "Consignee Name
+  (Non-Negotiable):" 这类复合标签的 "Name" 限定词残留进值里的真 bug；复核队列默认泄漏显示"系统判断
+  没问题"邮件的真 bug；复核队列一直缺"系统无法判断邮件类型"的入口（决策31②记录的已知缺口，这次正式
+  补上）；复核详情页新增邮件正文展示（之前完全看不到邮件内容，没法判断）；Conflicts 卡片改成默认收起；
+  "Fallback model"改名"Preferred model"并说清楚真实的多模型链式兜底行为；Full pipeline 页补充说明
+  "上限数字对指定 ID 同样生效"；Model lab (Jev) 从主导航/首页卡片墙隐藏（判断为工程调试工具，不是
+  产品功能）。
+- **决策记录**：`DECISION_LOG.md` 决策35（10 条逐一记录根因和修法）。
+- **数据库改动**：`scripts/phase4-body-and-review-reason-migration.sql`（`verification_overview`
+  视图追加 `body` 列；`verification_results.review_reason` 的 CHECK 约束新增
+  `low_confidence_classification`），已应用到正式 Supabase 项目。
+- **验收**：`npm run typecheck`、`npm run build` 通过；起 `npm start` 对真实生产数据实测 stats/搜索/
+  body 字段；单独跑脚本验证 label-parser 修复且无回归。
+- **还没做**（如实说明，不是这轮范围）：3288 行历史数据里 `pt1`~`pt14` 的扰动测试记录本身没有清理
+  （只是不再算进 Overview 统计），是否要清库留操作者决定；`low_confidence_classification` 只对之后
+  新跑的结果生效，历史数据要重新跑一遍流水线才会补上标记，没有做批量回填（避免悄悄消耗 LLM 调用额度）。
 
 ---
 

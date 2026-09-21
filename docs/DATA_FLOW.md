@@ -49,7 +49,7 @@
 
 `lib/shared/pipeline.ts` 是**唯一**知道"先分类、再抽取、最后比对"这个顺序的地方：
 
-- `runEmailPipeline`：跑一封邮件 → 组装成 `EmailVerificationResult`，并负责 4 种"拿不准"的判定（缺附件 / 类型不对 / 读不了 / 字段缺失）
+- `runEmailPipeline`：跑一封邮件 → 组装成 `EmailVerificationResult`，并负责 5 种"拿不准"的判定（缺附件 / 类型不对 / 读不了 / 字段缺失 / 分类没把握）
 - `runBatchPipeline`：批量处理，用 `mapWithConcurrencyLimit` 限量并发；单封失败单独记录，不拖垮整批
 - `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据（内容没变、引擎版本没变就不重算）
 

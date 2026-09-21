@@ -32,7 +32,12 @@ function useQueueCounts(refreshKey: number): Partial<Record<ReviewModule, number
 
 export function ReviewWorkspace({ providers, initialEmail, initialModule }: { providers: ProviderOption[]; initialEmail: string; initialModule: ReviewModule }) {
   const [module, setModule] = useState<ReviewModule>(initialModule);
-  const [filters, setFilters] = useState<QueueFilters>({ ...DEFAULT_QUEUE_FILTERS, includeOk: initialEmail !== "" });
+  // Deliberately NOT includeOk:true just because a deep link is present: the effect below already
+  // fetches that one item on its own (with includeOk:true scoped to just that lookup). Setting it
+  // here too used to leak into the persistent queue filters, silently showing "OK" items by default
+  // whenever you arrived via a "Review this one" link — surprising, since this page's whole point
+  // is to show only what needs a person.
+  const [filters, setFilters] = useState<QueueFilters>(DEFAULT_QUEUE_FILTERS);
   const [selected, setSelected] = useState<ReviewQueueItem | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);

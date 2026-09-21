@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Icon } from "../../../_components/icon";
 import { ReasonNote, StatusBadge } from "../../../_components/results/badges";
 import { CompareView } from "../../../_components/results/compare-view";
@@ -21,6 +22,9 @@ function amendmentText(pair: ConflictPair): string {
 
 export function ConflictCard({ pair, index }: { pair: ConflictPair; index: number }) {
   const toast = useToast();
+  // Collapsed by default, same idea as the landing page's report card: lead with the badge/count,
+  // not a wall of every field — you decide which emails are worth opening, not the page for you.
+  const [open, setOpen] = useState(false);
 
   async function copyAmendment() {
     try {
@@ -33,7 +37,7 @@ export function ConflictCard({ pair, index }: { pair: ConflictPair; index: numbe
 
   return (
     <article style={{ "--i": Math.min(index, 8) } as React.CSSProperties} className="card animate-rise stagger space-y-4 p-5 sm:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full flex-wrap items-start justify-between gap-3 text-left">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm font-bold text-accent-strong">{pair.email_id}</span>
@@ -45,21 +49,30 @@ export function ConflictCard({ pair, index }: { pair: ConflictPair; index: numbe
             {pair.from} · {relativeTime(pair.updated_at)}
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end">
-          <span className="text-3xl font-extrabold text-bad">{pair.defect_count}</span>
-          <span className="text-[11px] text-fg-faint">{pair.defect_count === 1 ? "field differs" : "fields differ"}</span>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex flex-col items-end">
+            <span className="text-3xl font-extrabold text-bad">{pair.defect_count}</span>
+            <span className="text-[11px] text-fg-faint">{pair.defect_count === 1 ? "field differs" : "fields differ"}</span>
+          </div>
+          <Icon name="chevronDown" size={18} className={`mt-1 shrink-0 text-fg-faint transition duration-300 ${open ? "rotate-180" : ""}`} />
         </div>
-      </header>
+      </button>
 
-      <CompareView
-        si={pair.si_values}
-        bl={pair.bl_values}
-        defectFields={pair.defect_fields}
-        siEvidence={pair.si_evidence}
-        blEvidence={pair.bl_evidence}
-        siTitle={pair.si_file ? `SI · ${pair.si_file.split("/").pop()}` : "SI (reference)"}
-        blTitle={pair.bl_file ? `BL · ${pair.bl_file.split("/").pop()}` : "Draft BL"}
-      />
+      <div className="expand" data-open={open}>
+        <div>
+          <div className="pb-1">
+            <CompareView
+              si={pair.si_values}
+              bl={pair.bl_values}
+              defectFields={pair.defect_fields}
+              siEvidence={pair.si_evidence}
+              blEvidence={pair.bl_evidence}
+              siTitle={pair.si_file ? `SI · ${pair.si_file.split("/").pop()}` : "SI (reference)"}
+              blTitle={pair.bl_file ? `BL · ${pair.bl_file.split("/").pop()}` : "Draft BL"}
+            />
+          </div>
+        </div>
+      </div>
 
       <footer className="flex flex-wrap items-center justify-end gap-3">
         {pair.defect_fields.length > 0 && (

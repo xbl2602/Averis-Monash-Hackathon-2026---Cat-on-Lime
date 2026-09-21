@@ -92,7 +92,7 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
 
         <div className="grid gap-5 md:grid-cols-2">
           <label className="block text-sm">
-            <span className="mb-2 block font-semibold">Fallback model</span>
+            <span className="mb-2 block font-semibold">Preferred model</span>
             <select value={provider} onChange={(e) => setProviderChoice(e.target.value)} className="field">
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -101,30 +101,34 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
                 </option>
               ))}
             </select>
-            <span className="mt-1.5 block text-xs text-fg-faint">Rules run first; the model only steps in when they can&rsquo;t settle a field.</span>
+            <span className="mt-1.5 block text-xs text-fg-faint">
+              Rules run first and settle most fields without any model. When one is needed, this model goes first; if it fails or has no key, the app automatically tries the other configured models next, in order.
+            </span>
           </label>
 
           {saving ? (
             <label className="block text-sm">
-              <span className="mb-2 block font-semibold">Emails to process (1 to 520)</span>
+              <span className="mb-2 block font-semibold">How many to run this time (1 to 520)</span>
               <input type="number" min={1} max={520} value={limitChoice ?? "50"} onChange={(e) => setLimitChoice(e.target.value)} className="field" />
-              <span className="mt-1.5 block text-xs text-fg-faint">Long runs stop at a time limit; run again to carry on, finished ones are skipped.</span>
+              <span className="mt-1.5 block text-xs text-fg-faint">A cap on this one run, not the whole inbox. Long runs stop at a time limit; run again to carry on, finished ones are skipped.</span>
             </label>
           ) : (
             <label className="block text-sm">
               <span className="mb-2 flex justify-between font-semibold">
-                Emails to process <span className="font-mono text-fg-muted">{limit}</span>
+                How many to run this time <span className="font-mono text-fg-muted">{limit}</span>
               </span>
               <input type="range" min={1} max={PREVIEW_MAX} value={limit} onChange={(e) => setLimitChoice(e.target.value)} className="mt-3 h-2 w-full cursor-pointer accent-[var(--accent)]" />
-              <span className="mt-2.5 block text-xs text-fg-faint">Public previews are capped at 20 emails per run.</span>
+              <span className="mt-2.5 block text-xs text-fg-faint">A cap on this one run. Public previews are capped at 20 emails per run either way.</span>
             </label>
           )}
         </div>
 
         <label className="block text-sm">
-          <span className="mb-2 block font-semibold">Specific email IDs (optional)</span>
+          <span className="mb-2 block font-semibold">Only these email IDs (optional)</span>
           <input value={emailIdsText} onChange={(e) => setEmailIdsText(e.target.value)} placeholder="email_004, email_107" className="field font-mono !text-xs" />
-          <span className="mt-1.5 block text-xs text-fg-faint">Leave empty to run the first emails in the inbox.</span>
+          <span className="mt-1.5 block text-xs text-fg-faint">
+            Leave empty to run the first emails in the inbox instead. The cap above still applies even when you list IDs here — list more IDs than the cap and only the first ones (after already-finished ones are skipped) run this time.
+          </span>
         </label>
 
         <details className="group rounded-2xl border border-line bg-sunken">

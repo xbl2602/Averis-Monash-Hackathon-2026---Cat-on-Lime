@@ -17,12 +17,12 @@ export function ProcessingSection({ providers }: { providers: ProviderOption[] }
       title="Processing defaults"
       description="Starting values for the Full pipeline page. You can still change them for each run."
     >
-      <SettingRow label="Fallback model" hint="Used when the rules can't settle a field. Rules always run first.">
+      <SettingRow label="Preferred model" hint="Rules always run first and settle most fields on their own. When a model is needed, this one goes first; the app automatically tries the other configured models next, in order, if it fails.">
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
           className="field sm:w-72"
-          aria-label="Fallback model"
+          aria-label="Preferred model"
         >
           {textProviders.map((p) => (
             <option key={p.id} value={p.id}>

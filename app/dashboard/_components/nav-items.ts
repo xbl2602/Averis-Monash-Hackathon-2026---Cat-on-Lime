@@ -30,7 +30,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/features/classification", label: "Email classification", icon: "mail" },
       { href: "/features/extraction", label: "Field extraction", icon: "list" },
       { href: "/features/comparison", label: "SI / BL comparison", icon: "compare" },
-      { href: "/features/jev-lab", label: "Model lab (Jev)", icon: "flask" },
+      // Model lab (Jev) is deliberately left out of the nav: it is an engineering comparison
+      // tool (Jev vs Claude), not a shipping-document-verification feature a judge/operator
+      // would use. The page still works at /features/jev-lab; see the Settings page link.
     ],
   },
   {

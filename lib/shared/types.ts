@@ -30,11 +30,16 @@ export const COMPARISON_STATUSES = ["OK", "MISMATCH", "NEEDS_REVIEW"] as const;
 export type ComparisonStatus = (typeof COMPARISON_STATUSES)[number];
 
 // 拿不准的原因（status 是 NEEDS_REVIEW 时必须给一个）
+// low_confidence_classification：2026-09-21 新增——Jev 给了分类结果但置信度 < 0.85（见
+// classification/logic/index.ts 的 JEV_CONFIDENCE_THRESHOLD）。之前这个信号算出来了但从没落库，
+// 复核队列里"系统无法判断邮件类型"这种情况完全没有入口（只覆盖了"全部模型失败"那一种），见
+// DECISION_LOG 决策31②、TODO.md P1-1。
 export const REVIEW_REASONS = [
   "wrong_doc_type",
   "missing_attachment",
   "unreadable",
   "missing_value",
+  "low_confidence_classification",
 ] as const;
 export type ReviewReason = (typeof REVIEW_REASONS)[number];
 

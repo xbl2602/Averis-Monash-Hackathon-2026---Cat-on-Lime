@@ -2,15 +2,16 @@
  * 编排层（pipeline）：把"分类 → 抽取 → 比对"串成唯一的一条线（见 DATA_FLOW.md）。
  * 网页、REST API、MCP、评测脚本要"跑一封/一整箱"都应该走这里，不要在别处重新拼顺序。
  *
- * 这里同时负责 4 种"拿不准"的判定（对应官方的 review_reason）：
+ * 这里同时负责 5 种"拿不准"的判定（对应官方的 review_reason）：
  * - missing_attachment：邮件里说"请核对 SI 和 draft BL"，但附件缺失
  *   （注意："请把 draft BL 发来检查"只是索取文件，没有可核对内容，基准算 OK）
  * - wrong_doc_type：附件不是 SI/BL（如商业发票/装箱单/产地证）
  * - unreadable：附件读不出文字（扫描件/损坏文件）
  * - missing_value：关键字段缺失（如占位符 TBA / N/A / ____MT）
+ * - low_confidence_classification：Jev 给了分类结果但置信度 < 0.85（见 applyClassificationConfidence）
  */
 import { createHash } from "node:crypto";
-import { classifyEmailHybrid } from "@/app/features/classification/logic";
+import { classifyEmailHybrid, type HybridClassificationResult } from "@/app/features/classification/logic";
 import { compareDocumentsHybrid } from "@/app/features/comparison/logic";
 import { extractFields } from "@/app/features/extraction/logic";
 import type { LLMProvider } from "@/lib/llm";
@@ -78,7 +79,7 @@ export async function runEmailPipeline(
 
   if (classification.category !== "BL_COMPARISON") {
     return {
-      result: buildOk(classification.category),
+      result: applyClassificationConfidence(classification, buildOk(classification.category)),
       meta,
       extracted,
       evidence,
@@ -88,9 +89,12 @@ export async function runEmailPipeline(
   const { siDoc, blDoc } = await resolveDocumentPair(input.attachments, options.textProvider);
 
   if (!siDoc || !blDoc) {
-    const result = emailAsksForComparison(input.email.body)
-      ? buildReview(classification.category, "missing_attachment")
-      : buildOk(classification.category);
+    const result = applyClassificationConfidence(
+      classification,
+      emailAsksForComparison(input.email.body)
+        ? buildReview(classification.category, "missing_attachment")
+        : buildOk(classification.category)
+    );
     return { result, meta, extracted, evidence };
   }
 
@@ -134,13 +138,13 @@ export async function runEmailPipeline(
   const comparison = await compareDocumentsHybrid({ si: si.fields, bl: bl.fields });
   meta.comparer = comparison.engine;
   return {
-    result: {
+    result: applyClassificationConfidence(classification, {
       category: classification.category,
       status: comparison.status,
       review_reason: null,
       defect_fields: comparison.defect_fields,
       has_defect: comparison.has_defect,
-    },
+    }),
     meta,
     extracted,
     evidence,
@@ -271,4 +275,23 @@ function buildReview(
     defect_fields: [],
     has_defect: false,
   };
+}
+
+/**
+ * Jev 分类给了结果但置信度低于阈值时（engine==="jev" && needs_review），
+ * 如果流程本来判定 OK，改成 NEEDS_REVIEW，让"系统对邮件分类没把握"这件事在复核队列里有入口
+ * ——这个信号 classifyEmailHybrid 早就算出来了（见 classification/logic/index.ts），
+ * 之前一直被这里丢掉没用上（DECISION_LOG 决策31②记录的已知缺口）。
+ * "全部模型失败"（engine==="degraded"）不在这里处理：那种情况已经靠 model_provider
+ * 前缀 "degraded/" 单独进复核队列（见 lib/shared/review/store.ts），不需要再改 status。
+ * 已经是 MISMATCH / 其它原因的 NEEDS_REVIEW 不覆盖，保留更具体的原因。
+ */
+function applyClassificationConfidence(
+  classification: HybridClassificationResult,
+  result: EmailVerificationResult
+): EmailVerificationResult {
+  if (classification.engine === "jev" && classification.needs_review && result.status === "OK") {
+    return { ...result, status: "NEEDS_REVIEW", review_reason: "low_confidence_classification" };
+  }
+  return result;
 }

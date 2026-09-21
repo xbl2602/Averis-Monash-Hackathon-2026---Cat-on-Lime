@@ -38,15 +38,22 @@ export async function fetchAllRows<T>(
 }
 
 /**
- * 净化关键词搜索词，避免把 PostgREST 的过滤语法字符（, ( ) " \）带进去导致解析错误；
- * 顺带去掉了 LIKE 通配符 % _，让搜索就是普通子串匹配。
+ * 净化关键词搜索词，避免把 PostgREST 的过滤语法字符（, ( ) " \）带进去导致解析错误。
+ * 不在这里处理 LIKE 通配符 % _——那两个字符要留给 ilikeFragment 转义成字面量，
+ * 不能在这里直接删掉：邮件 ID 全是 email_001 这种带下划线的格式，之前把 _ 也一起过滤掉，
+ * 导致搜索 "email_065" 之类精确 ID 时下划线被替换成空格、永远匹配不上（真 bug，已修）。
  */
 export function sanitizeSearchTerm(value: string): string | null {
-  const cleaned = value.replace(/[,()"\\%_]/g, " ").trim();
+  const cleaned = value.replace(/[,()"\\]/g, " ").trim();
   return cleaned === "" ? null : cleaned;
 }
 
-/** 拼 PostgREST or() 里的 ilike 片段（列名来自本模块白名单，不是用户输入） */
+/**
+ * 拼 PostgREST or() 里的 ilike 片段（列名来自本模块白名单，不是用户输入）。
+ * % 和 _ 是 LIKE 的通配符，用户搜索词里出现的话要转义成字面量，否则 "_" 会匹配任意单字符——
+ * 邮件 ID 全是 email_001 这种带下划线的格式，不转义就没法精确搜索。
+ */
 export function ilikeFragment(column: string, term: string): string {
-  return `${column}.ilike.%${term}%`;
+  const escaped = term.replace(/[%_]/g, (ch) => `\\${ch}`);
+  return `${column}.ilike.%${escaped}%`;
 }

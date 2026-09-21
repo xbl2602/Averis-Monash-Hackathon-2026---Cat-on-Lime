@@ -115,7 +115,8 @@ export function parseDocumentFieldsWithEvidence(text: string): ParsedDocumentFie
   return { fields: found, evidence };
 }
 
-// 把标签后面紧贴的修饰（括号注释、毛重(KGS) 这类、/Intermediate Consignee 写法）剥掉
+// 把标签后面紧贴的修饰（括号注释、毛重(KGS) 这类、/Intermediate Consignee 写法、
+// "Name"/"Name (Non-Negotiable)" 这类限定词）剥掉
 function consumeLabel(rest: string): string {
   let s = rest;
   for (let guard = 0; guard < 8; guard++) {
@@ -123,6 +124,9 @@ function consumeLabel(rest: string): string {
     s = s.replace(/^\s*[\(（][^\)）]*[\)）]/, " ");
     s = s.replace(/^\s*毛重[^:：()]*/u, " ");
     s = s.replace(/^\s*\/?\s*intermediate consignee/i, " ");
+    // "Consignee Name (Non-Negotiable): X" / "Notify ... Name: X" 这类同义改写会在主标签词后面
+    // 多一个 "Name" 限定词——只有紧跟着冒号或括号时才当限定词吃掉，避免误吃真的以 "Name" 开头的值
+    s = s.replace(/^\s*name\b(?=\s*[:：(（])/i, " ");
     if (s === before) break;
   }
   return s.replace(/^[\s:：;]+/, "").trim();
