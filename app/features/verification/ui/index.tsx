@@ -42,7 +42,9 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
   const selectedProvider = providers.find((p) => p.id === provider);
   // Saving is only possible with write access; without it the page stays a preview, as the public demo must
   const saving = save && unlocked;
-  const limit = saving ? Number(limitChoice ?? "50") : Math.min(Number(limitChoice ?? savedLimit), PREVIEW_MAX);
+  // Default to "the whole inbox" once saving, not some arbitrary smaller number — the obvious
+  // expectation for "run it for real" is "run all 520", not a partial batch you have to type in.
+  const limit = saving ? Number(limitChoice ?? "520") : Math.min(Number(limitChoice ?? savedLimit), PREVIEW_MAX);
 
   async function run(event?: FormEvent) {
     event?.preventDefault();
@@ -69,15 +71,34 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
   return (
     <div className="space-y-6">
       <form onSubmit={run} className="card space-y-6 p-6 sm:p-8">
+        {!unlocked && (
+          <Notice tone="info" title="This page is open to everyone as a try-it-out preview">
+            Anyone visiting this site can try the pipeline here, but only on the first 20 emails and without saving anything — that limit exists so a public demo can&rsquo;t rack up model costs or overwrite real data by accident. Unlock write access in the top bar to run it for real, on all 520 emails, and save the results.
+          </Notice>
+        )}
+
         <div role="radiogroup" aria-label="Run mode" className="grid gap-3 sm:grid-cols-2">
           {[
             { value: false, icon: "eye" as const, title: "Preview", desc: "Calculate and show. Nothing is saved. Open to everyone, up to 20 emails." },
-            { value: true, icon: "database" as const, title: "Save to database", desc: unlocked ? "Store every result so it shows up in Results, Conflicts and the export." : "Needs write access. Unlock it in the top bar first." },
+            { value: true, icon: "database" as const, title: "Save to database", desc: unlocked ? "The real run: process the inbox and store every result so it shows up in Results, Conflicts and the export." : "Needs write access. Unlock it in the top bar first." },
           ].map((mode) => {
             const active = save === mode.value;
             const disabled = mode.value && !unlocked;
             return (
-              <button key={mode.title} type="button" role="radio" aria-checked={active} disabled={disabled} onClick={() => setSave(mode.value)} className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${active ? "border-accent bg-accent/10 shadow-md" : "border-line bg-sunken hover:border-line-strong"}`}>
+              <button
+                key={mode.title}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={disabled}
+                onClick={() => {
+                  setSave(mode.value);
+                  // Fresh default for whichever mode you land on, instead of carrying over a
+                  // number typed for the other mode (a preview-sized 15 leaking into "save", say).
+                  setLimitChoice(null);
+                }}
+                className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${active ? "border-accent bg-accent/10 shadow-md" : "border-line bg-sunken hover:border-line-strong"}`}
+              >
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${active ? "bg-accent text-white" : "bg-accent/12 text-accent-strong"}`}>
                   <Icon name={disabled ? "lock" : mode.icon} size={20} />
                 </span>
@@ -109,8 +130,10 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
           {saving ? (
             <label className="block text-sm">
               <span className="mb-2 block font-semibold">How many to run this time (1 to 520)</span>
-              <input type="number" min={1} max={520} value={limitChoice ?? "50"} onChange={(e) => setLimitChoice(e.target.value)} className="field" />
-              <span className="mt-1.5 block text-xs text-fg-faint">A cap on this one run, not the whole inbox. Long runs stop at a time limit; run again to carry on, finished ones are skipped.</span>
+              <input type="number" min={1} max={520} value={limitChoice ?? "520"} onChange={(e) => setLimitChoice(e.target.value)} className="field" />
+              <span className="mt-1.5 block text-xs leading-relaxed text-fg-faint">
+                Defaults to the whole inbox. Emails already processed with the current model version are skipped automatically, so re-running with 520 after a first pass is cheap — it only does the ones still missing or changed. Want to force a full redo instead (e.g. after switching models)? Turn on &ldquo;Recalculate everything&rdquo; under Advanced below.
+              </span>
             </label>
           ) : (
             <label className="block text-sm">
@@ -178,6 +201,11 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
             </span>
           )}
         </div>
+        {saving && (
+          <p className="text-xs leading-relaxed text-fg-faint">
+            One click processes as many as it can in about 30 seconds, since each email may need a live model call. If 520 don&rsquo;t finish in that window, the summary below will say how many are left and give you a &ldquo;Continue&rdquo; button — click it (or just run again) until it reports none left.
+          </p>
+        )}
       </form>
 
       {loading && (

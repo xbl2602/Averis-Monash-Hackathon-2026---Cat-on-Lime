@@ -66,7 +66,9 @@ export default async function DashboardPage() {
         aside={
           <HeroAside
             items={[
-              { icon: "inbox", label: "Sample emails ready", value: sampleCount },
+              // "Official sample size", not "ready to run" — this is a fixed fact about the dataset
+              // (data/sample/), unrelated to how many the Full pipeline page processes on any one click.
+              { icon: "inbox", label: "Official sample size", value: sampleCount },
               { icon: "cpu", label: `Models ready of ${LLM_PROVIDERS.length}`, value: configuredCount },
               { icon: "layers", label: "Core steps in every run", value: 3 },
             ]}
