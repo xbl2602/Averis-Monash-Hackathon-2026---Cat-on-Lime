@@ -2,7 +2,7 @@
 
 import { Icon, type IconName } from "../../../_components/icon";
 import { fullDate, relativeTime } from "../../../_lib/format";
-import { ACTION_LABELS, type ReviewActionRow } from "./review-api";
+import { ACTION_LABELS, REVIEW_STATE_META, type ReviewActionRow } from "./review-api";
 
 const ACTION_ICON: Record<string, IconName> = {
   confirm: "checkCircle",
@@ -14,6 +14,12 @@ const ACTION_ICON: Record<string, IconName> = {
   rerun: "refresh",
   undo: "undo",
 };
+
+/** A successful re-run clears the decision it outranks (a decision before, none after): name the one it replaced. */
+function replacedDecision(action: ReviewActionRow): string | null {
+  if (action.action_type !== "rerun" || !action.before_state || action.after_state) return null;
+  return REVIEW_STATE_META[action.before_state.review_state]?.label ?? action.before_state.review_state;
+}
 
 /** Every action ever taken on this item, newest first, drawn as a vertical timeline that fills in from the top. */
 export function HistoryTimeline({ actions, loading }: { actions: ReviewActionRow[]; loading: boolean }) {
@@ -34,6 +40,7 @@ export function HistoryTimeline({ actions, loading }: { actions: ReviewActionRow
               {relativeTime(action.created_at)} · {action.actor}
             </span>
           </div>
+          {replacedDecision(action) && <p className="mt-1 text-xs text-fg-muted">The new system answer replaced the earlier decision ({replacedDecision(action)}).</p>}
           {(action.note || action.reason) && <p className="mt-1 break-words rounded-xl bg-sunken px-3 py-2 text-xs text-fg-muted">{action.note ?? action.reason}</p>}
         </li>
       ))}

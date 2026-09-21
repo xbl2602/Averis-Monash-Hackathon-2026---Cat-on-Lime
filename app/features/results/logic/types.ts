@@ -232,7 +232,8 @@ export interface ExportDocument {
   /**
    * scope=submission 时：人工复核覆盖真的改掉了引擎结论的 email_id（合并结果 ≠ 系统结果）。
    * 覆盖是合法功能，所以不影响 incomplete；但提交文件里"哪几条不是引擎自己算的"必须看得见，
-   * 否则一条测试时随手点的更正就能悄悄改掉判对的结果（2026-09-22 真实发生过，见 DECISION_LOG 决策36）。
+   * 否则一条人工更正就能悄悄改掉判对的结果（2026-09-22 真实发生过：email_004 先被更正成 OK、再被重跑，
+   * 旧规则下重跑不清除人工结论，于是那条更正一直压在提交上，见 DECISION_LOG 决策36/37）。
    */
   overriddenIds: string[];
   /** 文件内容本体：HTTP 直接作为响应体，MCP 作为 text 返回 */

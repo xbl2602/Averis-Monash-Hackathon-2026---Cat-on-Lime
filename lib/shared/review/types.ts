@@ -127,6 +127,11 @@ export interface ApplyReviewActionRequest {
 export interface ApplyReviewActionResult {
   item: ReviewQueueItem;
   action: ReviewActionRow;
+  /**
+   * 只有 rerun 会带：这次重跑成功后，哪几个模块上原有的人工结论被新的系统结论取代、清掉了
+   * （空数组 = 没有清掉任何东西，比如重跑失败，或者本来就没有人工结论）。见 REVIEW_SPEC §4.5。
+   */
+  replaced_decisions?: ReviewTargetKind[];
 }
 
 export interface UndoReviewActionRequest {

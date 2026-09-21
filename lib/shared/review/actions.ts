@@ -15,11 +15,13 @@ import {
   getOverride,
   getQueueItem,
   deleteOverride,
+  deleteOverrideIfUnchanged,
   insertAction,
   newBatchId,
   upsertOverride,
 } from "./store";
 import {
+  REVIEW_TARGET_KINDS,
   isReviewDisposition,
   type ApplyReviewActionRequest,
   type ApplyReviewActionResult,
@@ -126,28 +128,88 @@ async function finish(
   return { item, action };
 }
 
+/**
+ * 重跑：后做的动作说了算（REVIEW_SPEC §4.5，2026-09-22 改）。
+ *
+ * 重跑成功 = 系统对这封邮件重新给出了结论，而之前的人工决定都是针对旧结论做的，所以一律让位：
+ * 四个模块上这封邮件的人工结论都清掉（重跑会把分类、抽取、比对全部重算一遍，不只是发起重跑的这个模块），
+ * 每清掉一条都在它自己模块的历史里记一笔 rerun（before=旧结论、after=null），在那个模块点"撤销"就能拿回来。
+ * 重跑失败 = 没有新结论可以接替，人工决定原样保留。
+ *
+ * 为什么改：旧规则是"重跑不清除人工结论"，操作者实测先把 email_004 更正成 OK、再点重跑，
+ * 系统重新算出了（正确的）MISMATCH，但那条更正仍然压在提交文件上，而页面上看不出来。
+ */
 async function finishRerun(
   targetKind: ReviewTargetKind,
   request: ApplyReviewActionRequest,
   existing: ReviewOverride | null,
   batchId: string | null
 ): Promise<ApplyReviewActionResult> {
-  const outcome = await rerunSingleEmail(request.email_id, request.payload?.provider);
+  const emailId = request.email_id;
+  const decisionsBefore = await loadDecisionsBefore(targetKind, emailId, existing);
+  const outcome = await rerunSingleEmail(emailId, request.payload?.provider);
+
+  const replaced: ReviewTargetKind[] = [];
+  if (outcome.ok) {
+    for (const [kind, decision] of decisionsBefore) {
+      // 比较-删除：重跑期间有人刚存的新决定（updated_at 变了）不是这次要取代的，留着
+      if (await deleteOverrideIfUnchanged(kind, emailId, decision.updated_at)) replaced.push(kind);
+    }
+  }
+  // 一次重跑清掉了多个模块的结论时，这几条审计记录共用一个 batch_id，方便追溯是同一次重跑
+  const sharedBatch = batchId ?? (replaced.some((kind) => kind !== targetKind) ? newBatchId() : null);
+
+  for (const kind of replaced) {
+    if (kind === targetKind) continue;
+    await insertAction({
+      target_kind: kind,
+      email_id: emailId,
+      action_type: "rerun",
+      before_state: decisionsBefore.get(kind) ?? null,
+      after_state: null,
+      undo_of: null,
+      reason: null,
+      note: `从 ${targetKind} 复核页发起的重跑。${outcome.summary}`,
+      actor: "admin",
+      batch_id: sharedBatch,
+    });
+  }
+
+  const ownReplaced = replaced.includes(targetKind);
+  // 没清掉时按库里的现状记（可能是重跑期间别人刚存的新决定），这样撤销这条 rerun 不会把它踩掉
+  const ownState = ownReplaced ? existing : await getOverride(targetKind, emailId);
+  const keptBecauseChanged = outcome.ok && existing !== null && !ownReplaced;
   const action = await insertAction({
     target_kind: targetKind,
-    email_id: request.email_id,
+    email_id: emailId,
     action_type: "rerun",
-    before_state: existing,
-    after_state: existing, // rerun 不改 override，只重算系统结果
+    before_state: ownState,
+    after_state: ownReplaced ? null : ownState,
     undo_of: null,
     reason: request.reason ?? null,
-    note: outcome.summary,
+    note: keptBecauseChanged ? `${outcome.summary}（重跑期间这条人工结论被改过，保留了新的那条）` : outcome.summary,
     actor: "admin",
-    batch_id: batchId,
+    batch_id: sharedBatch,
   });
-  const item = await getQueueItem(targetKind, request.email_id);
-  if (!item) throw new ReviewNotFoundError(`样例数据里没有邮件 ${request.email_id}`);
-  return { item, action };
+  const item = await getQueueItem(targetKind, emailId);
+  if (!item) throw new ReviewNotFoundError(`样例数据里没有邮件 ${emailId}`);
+  return { item, action, replaced_decisions: replaced };
+}
+
+/** 重跑前这封邮件在各模块上当前生效的人工结论（发起重跑的模块已经读过了，直接复用） */
+async function loadDecisionsBefore(
+  targetKind: ReviewTargetKind,
+  emailId: string,
+  existing: ReviewOverride | null
+): Promise<Map<ReviewTargetKind, ReviewOverride>> {
+  const entries = await Promise.all(
+    REVIEW_TARGET_KINDS.map(
+      async (kind) => [kind, kind === targetKind ? existing : await getOverride(kind, emailId)] as const
+    )
+  );
+  const decisions = new Map<ReviewTargetKind, ReviewOverride>();
+  for (const [kind, decision] of entries) if (decision) decisions.set(kind, decision);
+  return decisions;
 }
 
 async function doConfirm(

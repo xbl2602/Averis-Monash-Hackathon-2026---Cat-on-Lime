@@ -75,7 +75,9 @@ export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: st
     name: `apply_${targetKind}_review_action`,
     description:
       `对${moduleLabel}的一封邮件应用人工复核动作（会写库）：` +
-      `confirm 确认系统结论 / correct 修正 / disposition 分拣去向 / defer 搁置 / undefer 恢复 / note 备注 / rerun 重跑。`,
+      `confirm 确认系统结论 / correct 修正 / disposition 分拣去向 / defer 搁置 / undefer 恢复 / note 备注 / rerun 重跑。` +
+      `rerun 成功时，这封邮件此前在所有模块上的人工结论都会被新的系统结论取代并清掉（返回 replaced_decisions 列出是哪几个模块，` +
+      `每条都留在各自历史里，可用 undo 拿回）；rerun 失败则什么都不清。`,
     inputSchema: {
       email_id: z.string(),
       action: z.enum(REVIEW_ACTION_TYPES),

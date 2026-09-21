@@ -240,7 +240,7 @@ Supabase 项目，见 DECISION_LOG 决策34/35）。判定规则只有一份：`
 - 文件名在响应头 `Content-Disposition`；`scope=submission` 时用一组响应头判断是否覆盖了全部 520 封（完整性 fail-closed）：
   - `X-Export-Incomplete`：任意一项异常即 `true`（Expected-Source 非 sample、条数 ≠ 分母、有缺失、有过期版本、有失败行）
   - `X-Export-Expected-Source`：`sample` = 分母锚定官方样例清单（data/sample/inbox 的文件名）；`db-fallback` = 清单读不到、降级用数据库总数——**此时即使 `Missing=0` 也按不完整处理**
-  - `X-Review-Overridden` / `X-Review-Overridden-Ids`（2026-09-22 新增）：人工复核覆盖**真的改掉了引擎结论**的条数和 email_id。覆盖是合法功能，所以**不影响 `incomplete`**，但提交文件里"哪几条不是引擎自己算的"必须看得见——实测发生过：一条测试时随手点的"更正"把 email_004 判对的 MISMATCH 悄悄换成了 OK，导出文件里完全看不出来（见 DECISION_LOG 决策36）
+  - `X-Review-Overridden` / `X-Review-Overridden-Ids`（2026-09-22 新增）：人工复核覆盖**真的改掉了引擎结论**的条数和 email_id。覆盖是合法功能，所以**不影响 `incomplete`**，但提交文件里"哪几条不是引擎自己算的"必须看得见——实测发生过：email_004 先被人工"更正"成 OK、之后又被重跑，旧规则下重跑不清除人工结论，于是那条更正把判对的 MISMATCH 悄悄换成了 OK，导出文件里完全看不出来（见 DECISION_LOG 决策36/37；重跑规则已改）
   - `X-Export-Missing` / `X-Export-Missing-Ids`：清单里有、导出里没有的 email_id（头里最多列 20 个）
   - `X-Export-Stale` / `X-Export-Stale-Ids`：有结果但 `logic_version` 与当前引擎版本不一致的 email_id（旧版本结果需要重跑）
   - `X-Export-Invalid` / `X-Export-Invalid-Ids`（2026-09-21 新增）：行内字段自相矛盾（MISMATCH 没有缺陷清单、NEEDS_REVIEW 却带缺陷或缺原因、OK 带缺陷/原因）的 email_id；有任意一条时 `incomplete` 也为 true
@@ -341,7 +341,14 @@ dry_run 不写库，所以预览结果不会累积；要看 520 封完整体用�
 MISMATCH 必有缺陷无原因、NEEDS_REVIEW 必有原因无缺陷、OK 都没有，否则 400）/ `extracted_si`+`extracted_bl`（抽取字段修正）/
 `disposition`（分拣去向，六选一）/ `provider`（仅 `rerun` 用，指定重跑用哪个模型）。
 
-响应形状：`{ item: ReviewQueueItem, action: ReviewActionRow }`（undo 同形状）；bulk 是
+**`rerun` 的语义（2026-09-22 改，后做的动作说了算，见 REVIEW_SPEC §4.5 / 决策37）**：重跑**成功**时，这封邮件此前在
+**全部四个模块**上的人工结论都被新的系统结论取代、清掉，每条都在各自模块的历史里记一行 `rerun`
+（`before_state`=旧结论、`after_state`=null），在那个模块撤销就能拿回；重跑**失败**（结果行落成 `failed`，HTTP 仍是 200）
+什么都不清。流水线的批量运行（`POST /features/pipeline/api`、MCP `run_batch`）不碰人工结论。
+
+响应形状：`{ item: ReviewQueueItem, action: ReviewActionRow, replaced_decisions? }`（undo 同形状，不带最后一项）；
+`replaced_decisions: ReviewTargetKind[]` 只有 `rerun` 会带，列出被清掉的是哪几个模块（空数组 = 什么都没清）；
+判断重跑失败看 `item.processing_status === "failed"`。bulk 是
 `{ batch_id, succeeded: string[], failed: { email_id, error }[] }`。类型定义见 `lib/shared/review/types.ts`。
 
 **队列默认过滤（异常驱动，`include_ok=true` 才看全部）**，各模块口径不同：

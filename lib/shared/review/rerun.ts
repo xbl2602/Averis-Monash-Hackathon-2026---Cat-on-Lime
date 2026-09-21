@@ -2,7 +2,8 @@
  * 复核动作"重跑"：对单封邮件重新跑一次流水线并 upsert 结果表。
  * 复用 lib/shared/pipeline.ts + sample-inputs.ts + verification-store.ts，
  * 不复制引擎顺序逻辑（见 docs/REVIEW_SPEC.md §2）。
- * 重跑不清除已有 override——人此前可能已修正过，见 §4.5。
+ * 这里只负责"重算并落库"；重跑成功后清掉旧人工结论（后做的动作说了算）在 actions.ts 的
+ * finishRerun 里做，见 §4.5。
  */
 import { isLLMProvider, type LLMProvider } from "@/lib/llm";
 import { computeInputHash, runEmailPipeline } from "@/lib/shared/pipeline";

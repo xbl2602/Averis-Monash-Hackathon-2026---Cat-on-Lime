@@ -249,6 +249,29 @@ export async function deleteOverride(targetKind: ReviewTargetKind, emailId: stri
   if (error) throw new Error(`删除 review_overrides 失败：${error.message}`);
 }
 
+/**
+ * 比较-删除：只有这一行的 updated_at 还是调用方当初读到的那个值才删，返回是否真的删掉了。
+ * 给"重跑成功后清掉旧的人工结论"用（actions.ts 的 finishRerun）：重跑要跑好几秒，这期间
+ * 如果有人刚存了一个新决定，它不是重跑要取代的那个，不能被一起删掉。条件交给数据库判断，
+ * 不是"先查一下没变再删"。
+ */
+export async function deleteOverrideIfUnchanged(
+  targetKind: ReviewTargetKind,
+  emailId: string,
+  expectedUpdatedAt: string
+): Promise<boolean> {
+  const supabase = getWriteClient();
+  const { data, error } = await supabase
+    .from("review_overrides")
+    .delete()
+    .eq("target_kind", targetKind)
+    .eq("email_id", emailId)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("email_id");
+  if (error) throw new Error(`删除 review_overrides 失败：${error.message}`);
+  return (data ?? []).length > 0;
+}
+
 export async function insertAction(
   row: Omit<ReviewActionRow, "id" | "created_at">
 ): Promise<ReviewActionRow> {

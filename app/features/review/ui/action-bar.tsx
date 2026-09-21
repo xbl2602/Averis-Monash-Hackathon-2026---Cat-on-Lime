@@ -7,7 +7,7 @@ import type { EmailCategory, ResultRow } from "../../../_lib/contracts";
 import type { ProviderOption } from "../../../_lib/provider-options";
 import { CATEGORY_META } from "../../../_lib/labels";
 import { CorrectForm } from "./correct-forms";
-import { DISPOSITION_LABELS, type ApplyReviewActionRequest, type ReviewDisposition, type ReviewModule, type ReviewQueueItem } from "./review-api";
+import { DISPOSITION_LABELS, REVIEW_STATE_META, type ApplyReviewActionRequest, type ReviewDisposition, type ReviewModule, type ReviewQueueItem } from "./review-api";
 
 type Panel = "correct" | "defer" | "disposition" | "note" | "rerun" | null;
 
@@ -148,7 +148,10 @@ export function ActionBar({
               </option>
             ))}
           </select>
-          <p className="text-xs text-fg-faint">A re-run refreshes the system answer. Anything you already corrected stays in place.</p>
+          {item.override && (
+            <p className="text-xs font-semibold text-warn">This replaces your current decision here ({REVIEW_STATE_META[item.override.review_state].label}) with the new system answer.</p>
+          )}
+          <p className="text-xs text-fg-faint">The system works this email out again from scratch, and the newest action wins: if the re-run succeeds, it replaces every earlier decision on this email, in this tab and the others. Each one stays in the history, and Undo last brings it back. If the re-run fails, nothing is replaced.</p>
         </MiniForm>
       )}
     </div>

@@ -173,7 +173,7 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
               <input type="checkbox" checked={force} disabled={!saving} onChange={(e) => setForce(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
               <span>
                 <span className="block font-semibold">Recalculate everything</span>
-                <span className="mt-0.5 block text-xs text-fg-faint">Ignore saved results and redo them. Only when saving.</span>
+                <span className="mt-0.5 block text-xs text-fg-faint">Ignore saved results and redo them. Only when saving. Decisions made in the Review queue are kept; to replace one with a fresh system answer, re-run that email from the Review queue.</span>
               </span>
             </label>
           </div>

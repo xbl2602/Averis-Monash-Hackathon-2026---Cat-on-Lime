@@ -232,8 +232,20 @@ export interface ReviewQueueItem {
 ### 4.5 重跑 rerun
 
 - 单个 `email_id` + 可选 `provider`，调 `lib/shared/review/rerun.ts`：复用 `runEmailPipeline` 重算并 upsert `verification_results`。
-- 重跑成功**不清除**已有 override（人此前可能已修正）；UI 需提示"重跑会刷新系统结论，但你的修改仍在"。
-- 重跑失败按 `failed` 落库（复用现有失败路径），返回可读错误。
+- **后做的动作说了算（2026-09-22 改，见 DECISION_LOG 决策37）**：重跑**成功**时，这封邮件此前在**全部四个模块**上的
+  人工结论都被新的系统结论取代、从 `review_overrides` 清掉——重跑会把分类/抽取/比对全部重算一遍，之前的人工决定都是针对旧结论做的。
+  - 每清掉一条，都在它**自己模块**的 `review_actions` 里追加一行 `rerun`（`before_state`=旧结论、`after_state`=null），
+    所以在那个模块点"撤销"就能拿回来；一次重跑清掉多个模块时，这几行共用一个 `batch_id`。
+  - 清除用"比较-删除"（`store.ts` 的 `deleteOverrideIfUnchanged`，条件是 `updated_at` 仍是重跑前读到的值）：
+    重跑要跑好几秒，这期间有人刚存的新决定不是这次要取代的，不会被一起删掉。
+  - 响应多带一个 `replaced_decisions: ReviewTargetKind[]`，列出被清掉的是哪几个模块（空数组 = 什么都没清）。
+  - UI 在重跑表单里提前说明；该项已有人工结论时，额外标出"会取代你当前的决定"；时间线上把"被取代的是哪条决定"写出来。
+- 重跑**失败**按 `failed` 落库（复用现有失败路径），返回可读错误，**不清任何人工结论**（没有新结论可以接替）；
+  UI 按结果给黄色提示，不再显示成功。
+- **只管单封重跑**：流水线页的批量运行（Run and save / Recalculate everything / Retry failed、MCP `run_batch`）
+  不碰人工结论——批量操作不应该悄悄抹掉一批人工复核成果；页面上写明了"要取代某条人工决定，去复核队列单独重跑那一封"。
+- ~~旧规则：重跑成功**不清除**已有 override（人此前可能已修正）~~。操作者实测"先更正、再重跑"时，预期重跑会取代更正；
+  旧规则让那条更正继续压在提交文件上，而页面上看不出来（email_004：更正成 OK → 重跑算出正确的 MISMATCH → 提交里仍是 OK）。
 
 ### 4.6 撤销 undo
 
@@ -406,3 +418,9 @@ export interface ReviewQueueItem {
    清空，不留在共享数据库里；`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations`
    （已更新写 tool 白名单，新增 8 个）均通过。GUI（第 9 节）与其余模块的 defer/undefer 细节界面化
    仍是队友A的待办。
+6. **2026-09-22 改了 §4.5 的重跑规则**（操作者提出的产品预期，不是实现偏差）：从"重跑不清除人工结论"改成
+   "后做的动作说了算"——单封重跑成功会取代这封邮件在四个模块上的全部人工结论（留审计、可撤销），失败则不动；
+   批量运行仍不碰人工结论。起因是 email_004 的实际操作顺序"更正 → 重跑"在旧规则下让错误的更正留在了提交文件里。
+   验收：对官方样例 email_015 实测"两个模块各存一条决定 → 从 comparison 重跑 → 两条都被清、各自历史各多一行
+   rerun 且共用 batch_id → 两边分别撤销都能拿回 → 比较-删除拒绝过期时间戳 → 系统结果本身不变"，15 项全过，
+   测试记录事后已清掉。
