@@ -1,0 +1,12 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#EDE9FE",
+    "primaryBorderColor": "#4F46E5",
+    "primaryTextColor": "#1E1B4B",
+    "secondaryColor": "#F5F3FF",
+    "tertiaryColor": "#FFFFFF",
+    "lineColor": "#4F46E5",
+    "fontFamily": "Plus Jakarta Sans, Segoe UI, Microsoft YaHei, PingFang SC, sans-serif"
+  }
+}

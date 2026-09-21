@@ -1,0 +1,13 @@
+%% 源码：README 写保护节加密图 + docs/diagrams/encryption.png。
+%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/encryption.mmd -o docs/diagrams/encryption.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% 口径见 lib/shared/crypto.ts 头注释：主密钥永不进库/进 git/回显；读接口只给掩码；加解密用同一把 key。
+%% block 网格写法（flowchart 里两个无入边节点会被竖叠，排不成一行，只能用 block 锁格子）。
+block-beta
+  columns 2
+  IN["敏感值<br/>LLM key 等"] K["主密钥<br/>只在环境变量"]
+  E["服务端加密<br/>AES-256-GCM"] DB["app_config 表<br/>只存密文"]
+  D["用时服务端解密<br/>读接口只给掩码"]:2
+  IN --> E
+  K --> E
+  E --> DB
+  DB --> D

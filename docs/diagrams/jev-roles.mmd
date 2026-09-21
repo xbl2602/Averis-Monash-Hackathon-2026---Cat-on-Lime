@@ -1,0 +1,8 @@
+%% 源码：README Engine 节 Jev 分工图 + docs/diagrams/jev-roles.png。
+%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/jev-roles.mmd -o docs/diagrams/jev-roles.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% 口径见 docs/DECISION_SPEC.md §2.3/§4.2：Jev 只做 choice/noul，从不生成自然语言；阈值 0.85。
+flowchart TB
+    Q["拿不准的问题<br/>规则判不了"] --> J["Jev：结构化决策<br/>choice / noul + 置信度"]
+    Q --> T["文本 LLM：开放兜底<br/>抽取补缺 / 分类链"]
+    J --> C["≥0.85 采信<br/>低于 0.85 进人工队列"]
+    T --> U["只试配了 key 的<br/>逐个试到成功"]

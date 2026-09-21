@@ -106,7 +106,7 @@ npm install && npm run dev
 
 ![全景图：三个入口调用核心三件套与支撑模块，共享lib公共区，状态落Supabase](docs/diagrams/architecture.png)
 
-*全景图：8 个 feature 插件的归属（短名，全称见上文 Features 表）。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
+*全景图：入口→核心三件套/支撑模块→lib 公共区→Supabase（短名，全称见上文 Features 表）。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
 
 **约束是硬性的，不是建议**：模块之间不能互相 import 对方 `logic/` 内部实现，跨模块契约必须先写进 [`docs/SHARED_INTERFACES.md`](docs/SHARED_INTERFACES.md)；数据流方向固定成"分类 → 抽取 → 比对"单向管道，不允许反向调用（细节见 [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md)）；一个文件混装路由+业务逻辑+数据库操作，或者超过约 300 行，就要按 `logic/api/mcp/ui` 拆开。这些规则记在 [`CLAUDE.md`](CLAUDE.md) 里，是团队里每个人的 AI 编程工具都要遵守的执行规范，不是写完就不看的文档。
 
@@ -344,7 +344,7 @@ npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
 
 ![加密图：主密钥只在环境变量，库里只存密文，读接口只给掩码](docs/diagrams/encryption.png)
 
-*加密图：主密钥只在环境变量（永不进库/进 git/回显），库里只有密文，实现在 `lib/shared/crypto.ts`。源码见 [`docs/diagrams/encryption.mmd`](docs/diagrams/encryption.mmd)。*
+*加密图：主密钥只在环境变量（永不进库/进 git/回显），库里只有密文，加密和解密用同一把 key，实现在 `lib/shared/crypto.ts`。源码见 [`docs/diagrams/encryption.mmd`](docs/diagrams/encryption.mmd)。*
 
 ## 产出并自检提交文件
 
