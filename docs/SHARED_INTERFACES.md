@@ -376,6 +376,11 @@ target_kind 的覆盖会进最终提交格式（`extraction`/`pipeline` 的覆�
 | `GET /features/config/api` | 读全部配置（`?category=llm|pipeline|storage|mail|general` 过滤） | 开放 |
 | `PUT /features/config/api` | 批量写：`{ updates: [{ key, value }] }`（value=null 删除该行，回到 env/默认） | 需 `x-admin-token` |
 | `POST /features/config/api/test` | 测试连接：`{ target }` → `{ ok, detail }` | 需 `x-admin-token` |
+| `POST /features/config/api/verify` | 只校验 `x-admin-token` 对不对，不读不写任何数据 → `{ ok: true }` | 需 `x-admin-token` |
+
+`verify` 是 2026-09-21 补的：GUI 之前借用"带空更新列表的 `PUT`"（口令对时返回 400）当校验口令的手段，
+会在浏览器控制台留一行误导性的 400；`verify` 口令对直接 200，专门给"要不要显示写权限已解锁"这种场景用，
+不产生副作用。
 
 读响应每项形如 `{ key, category, value, is_secret, has_value, source: "db"|"env"|"default"|"unset", updated_at }`。
 配置项清单和环境变量对应关系见 [PHASE2_SPEC.md](PHASE2_SPEC.md) 第 3.2 节。

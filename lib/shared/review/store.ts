@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseClient, getSupabaseServiceClient } from "@/lib/shared/supabase";
 import type { ComparedField, ComparisonStatus, EmailCategory, ReviewReason } from "@/lib/shared/types";
+import { ReviewStoreUnavailableError } from "./errors";
 import {
   type ReviewActionRow,
   type ReviewAuditActionType,
@@ -15,6 +16,33 @@ import {
   type ReviewQueueItem,
   type ReviewTargetKind,
 } from "./types";
+
+/**
+ * 包一层 getSupabaseClient/getSupabaseServiceClient：没配置 Supabase 时统一抛
+ * ReviewStoreUnavailableError（映射 503），而不是让原始的通用 Error 掉进
+ * request-errors.ts 的"未知错误"兜底变成 500 + 不可读文案——results 模块的
+ * `getReadClient()`（app/features/results/logic/db.ts）就是这个模式，这里对齐它，
+ * 修正队友A在接 GUI 时发现的"没配数据库时，review 是 500，别的模块是 503"不一致。
+ */
+function getReadClient() {
+  try {
+    return getSupabaseClient();
+  } catch (err) {
+    throw new ReviewStoreUnavailableError(
+      err instanceof Error ? err.message : "Supabase 只读客户端初始化失败"
+    );
+  }
+}
+
+function getWriteClient() {
+  try {
+    return getSupabaseServiceClient();
+  } catch (err) {
+    throw new ReviewStoreUnavailableError(
+      err instanceof Error ? err.message : "Supabase 服务端客户端初始化失败"
+    );
+  }
+}
 
 // 队列一次最多取这么多行再在内存里筛选/分页（和 verification-store.ts 的 loadStoredVerificationRows
 // 用同一个量级：样例数据 3288 行，一次读完比拼 SQL 过滤简单，量级也扛得住）
@@ -74,7 +102,7 @@ export async function listReviewQueue(
   targetKind: ReviewTargetKind,
   options: ListQueueOptions = {}
 ): Promise<{ total: number; items: ReviewQueueItem[] }> {
-  const supabase = getSupabaseClient();
+  const supabase = getReadClient();
   const { data, error } = await supabase
     .from("verification_overview")
     .select(OVERVIEW_COLUMNS)
@@ -134,7 +162,7 @@ export async function getQueueItem(
   targetKind: ReviewTargetKind,
   emailId: string
 ): Promise<ReviewQueueItem | null> {
-  const supabase = getSupabaseClient();
+  const supabase = getReadClient();
   const { data, error } = await supabase
     .from("verification_overview")
     .select(OVERVIEW_COLUMNS)
@@ -150,7 +178,7 @@ export async function getOverride(
   targetKind: ReviewTargetKind,
   emailId: string
 ): Promise<ReviewOverride | null> {
-  const supabase = getSupabaseClient();
+  const supabase = getReadClient();
   const { data, error } = await supabase
     .from("review_overrides")
     .select("*")
@@ -175,7 +203,7 @@ export async function listOverrides(
 ): Promise<Map<string, ReviewOverride>> {
   const map = new Map<string, ReviewOverride>();
   if (emailIds && emailIds.length === 0) return map;
-  const supabase = getSupabaseClient();
+  const supabase = getReadClient();
   const { data, error } = await supabase
     .from("review_overrides")
     .select("*")
@@ -193,7 +221,7 @@ export async function listOverrides(
 export async function upsertOverride(
   row: Omit<ReviewOverride, "created_at" | "updated_at"> & { updated_at: string }
 ): Promise<ReviewOverride> {
-  const supabase = getSupabaseServiceClient();
+  const supabase = getWriteClient();
   const { data, error } = await supabase
     .from("review_overrides")
     .upsert(row, { onConflict: "target_kind,email_id" })
@@ -204,7 +232,7 @@ export async function upsertOverride(
 }
 
 export async function deleteOverride(targetKind: ReviewTargetKind, emailId: string): Promise<void> {
-  const supabase = getSupabaseServiceClient();
+  const supabase = getWriteClient();
   const { error } = await supabase
     .from("review_overrides")
     .delete()
@@ -216,7 +244,7 @@ export async function deleteOverride(targetKind: ReviewTargetKind, emailId: stri
 export async function insertAction(
   row: Omit<ReviewActionRow, "id" | "created_at">
 ): Promise<ReviewActionRow> {
-  const supabase = getSupabaseServiceClient();
+  const supabase = getWriteClient();
   const { data, error } = await supabase
     .from("review_actions")
     .insert(row)
@@ -230,7 +258,7 @@ export async function listActions(
   targetKind: ReviewTargetKind,
   emailId: string
 ): Promise<ReviewActionRow[]> {
-  const supabase = getSupabaseClient();
+  const supabase = getReadClient();
   const { data, error } = await supabase
     .from("review_actions")
     .select("*")
