@@ -485,3 +485,43 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   `format=csv`，人工核对了字段值转义（含逗号的地址被正确加引号）、字段拆行逻辑（同一封邮件多个
   defect field 拆成多行）；确认 `scope=submission&format=csv` 仍返回 400，不会被新格式绕过。
   `npm run typecheck` 通过。
+
+### 决策 34：新增"开发者模式"（devmode）——数据库清空/恢复，明确不是产品功能
+
+- **背景**：操作者要求加一个"开发者模式"，给团队/评委在验证阶段用，主要是清空数据库、增删改
+  这类测试用的破坏性操作；同时明确要求：① MCP/API 绝对不能有这种破坏性能力被自动调用；
+  ② 不管文档还是 GUI 都要非常明显地标注"这不是正式功能，是开发/验证用途"。三个关键取舍点由
+  操作者拍板：执行范围="线上本地都开，共用现在这个正式 Supabase 项目"（理由：避免项目因为长期
+  没有读写而被 Supabase 免费层判定为"休眠"，但必须配一个恢复按钮兜底）；操作范围="全量清空所有
+  （数据）表"；GUI 归属="操作者只做后端接口，页面留给队友A"。
+- **决策**：新增 `app/features/devmode/`（独立 feature 文件夹），只有 `logic/` + `api/`，**没有
+  `mcp/`、没有注册进 `app/core/mcp-server/tools.ts`**——这是唯一没有对应 MCP tool 的写能力模块，
+  和"每个模块都要三个入口"的一般原则刻意不一致，因为这类操作按用户要求绝不能被 AI agent 自动调用。
+  三个端点：
+  - `GET /features/devmode/api`：只读，返回七张核验数据表（`raw_emails`/`parsed_attachments`/
+    `verification_results`/`review_overrides`/`review_actions`/`uploaded_documents`/
+    `llm_call_cache`）各自的行数，给 GUI 展示"现在库里有多少数据"用。
+  - `POST /features/devmode/api/wipe`：按外键依赖顺序（子表先、`raw_emails` 最后）依次清空这七张
+    表；遇到某张表删除失败就停止，不继续删后面的表（避免半清空状态更难排查）。
+  - `POST /features/devmode/api/restore`：先调 wipe 的同一套清空逻辑，再从 `data/sample/` 重新
+    导入官方样例（新增 `lib/shared/sample-import.ts`，复用 `lib/shared/inbox.ts` 读文件 +
+    `attachment-text.ts` 解析 + `mapWithConcurrencyLimit` 控制并发，和 CLI 脚本
+    `scripts/import-sample-data.mjs` 走同一批共享基础设施，避免两处解析出不一致的指纹）。恢复后
+    `verification_results` 是空的——刻意不在这个接口里顺带跑一遍批量流水线，因为那要真实消耗
+    LLM 调用额度，不应该悄悄藏在一个"重置数据"按钮背后。
+  - **明确排除** `app_config`/`mail_accounts`/`supabase_projects` 三张表：这些是 LLM/Supabase
+    连接配置，不是核验数据，清掉会破坏系统本身的可用性，跟"重置测试数据"是两回事。
+- **两道安全门槛**（对应"绝不能被自动调用/意外触发"的要求）：① 和其它写操作一样要
+  `x-admin-token`；② 新增请求体确认短语——`wipe` 要求逐字匹配 `"WIPE ALL DATA"`，`restore` 要求
+  `"RESTORE SAMPLE DATA"`，两个接口的短语不同、不能互相代用，防止"口令已经存在某个脚本/剪贴板
+  里，手滑触发"这种场景。GUI 那边额外要求：警示条必须持续可见（不是弹一次就消失）、破坏性按钮要
+  求用户手动打字输入确认短语（不能是"确认吗？是/否"这种一键点掉的弹窗）——已经在 `UI_GUIDE.md`
+  §2.9 写清楚，交给队友A实现，优先级排在人工复核 GUI 之后。
+- **文档隔离**：这一节不进 `SHARED_INTERFACES.md` 的正常端点速查表，单独开一节并加 ⚠️ 标记；
+  README 只在"当前状态"加一行事实性说明，不做成营销卖点，避免让评委觉得这是要展示的产品能力。
+- **验证**：`npm run typecheck`、`npm run build` 通过（三个路由都正常生成）；`npm run
+  test:mcp-annotations` 确认总数仍是 28，devmode 没有引入任何 MCP tool；本地起 `next dev` 用真实
+  admin token 测试 `GET /features/devmode/api`（无口令 401、带口令 200 并返回真实行数）；确认
+  短语校验逻辑单独写了一个隔离的临时脚本测试（错短语/缺字段/大小写不对/尾随空格/短语用错接口
+  全部正确抛错，逐字匹配才通过），测完即删，**没有对生产数据库实际执行 wipe/restore**——这类
+  操作的"测试"本身就是它要防的风险，留给操作者自己决定何时真正触发。

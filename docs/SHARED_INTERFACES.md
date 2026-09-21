@@ -481,6 +481,25 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 
 `run_adhoc_test`（只读——不写任何库，用完即丢），参数/返回与上面的 REST 端点一一对应。
 
+## ⚠️ 开发者模式（devmode，仅内部使用，破坏性操作——不是产品功能）
+
+> 这一节和上面所有模块不是同一性质：上面都是"航运单证核验"业务的一部分；这里是给团队/评委在
+> 验证阶段重置数据库用的运维工具，**故意不放进正常的端点速查表里**，避免被当成产品能力误用。
+> **绝对不做成 MCP tool**——这类操作只能靠人手动点按钮/发请求确认，不能被任何 AI agent 自动调用。
+> 任何调用这两个接口的 GUI 页面，必须持续显示醒目警示（不是弹一次就消失的提示），文案至少要
+> 表达"这是开发者模式，不是正式功能，操作不可逆"，这是产品要求，不是可选的美化建议。
+
+| 路径 | 作用 | 保护 |
+|---|---|---|
+| `GET /features/devmode/api` | 查看 `raw_emails`/`parsed_attachments`/`verification_results`/`review_overrides`/`review_actions`/`uploaded_documents`/`llm_call_cache` 七张表各自的行数（只读，不改数据） | 需要 `x-admin-token` |
+| `POST /features/devmode/api/wipe` | **不可逆**：按依赖顺序清空上面七张表的全部行 | 需要 `x-admin-token` **且**请求体 `{ "confirm": "WIPE ALL DATA" }` 逐字匹配 |
+| `POST /features/devmode/api/restore` | **不可逆**：先清空七张表，再从 `data/sample/` 重新导入官方样例（`raw_emails`/`parsed_attachments`），恢复到"刚导入、还没跑过流水线"的状态；`verification_results` 恢复后是空的，需要之后手动再跑一次批量流水线（有意不在这个接口里顺带跑，避免悄悄消耗 LLM 调用额度） | 需要 `x-admin-token` **且**请求体 `{ "confirm": "RESTORE SAMPLE DATA" }` 逐字匹配 |
+
+- **不动**：`app_config` / `mail_accounts` / `supabase_projects` 三张表——这些是 LLM/Supabase 连接配置，不是核验数据，清掉会破坏系统本身能不能连上数据库，跟"重置测试数据"是两回事。
+- **两道门槛，缺一不可**：`x-admin-token` 和其它写操作一样；额外的 `confirm` 短语是为了防止"口令已经存在某个脚本/剪贴板里，手滑触发"这种场景——两个接口的短语不同，不能互相代用。
+- **没有备份/撤销机制**：`wipe` 清掉的 `review_overrides`/`review_actions`（人工复核记录）没有任何地方能找回；`restore` 能找回官方样例邮件本身，但同样找不回复核记录。调用前想清楚。
+- 详细设计理由见 [`DECISION_LOG.md`](DECISION_LOG.md) 决策34；GUI 交接说明（含警示文案的具体要求）见 [`UI_GUIDE.md`](UI_GUIDE.md)。
+
 ## 环境变量约定
 
 见 [`.env.example`](.env.example)，新增需要的环境变量时同步更新那个文件（不要把真实 key 提交进 git）。

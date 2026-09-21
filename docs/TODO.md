@@ -98,3 +98,4 @@
 - [x] 三种部署文件齐备（`Dockerfile` / `docker-compose.yml` / `next.config.mjs` standalone）
 - [x] 已把 `docs/REVIEW_SPEC.md` 登记进 `docs/README.md`
 - [x] 导出新增 `format=csv`（响应 2026-09-21 workshop 业务方明确要的"SI/BL值+为什么mismatch"表格，见 `docs/HISTORY.md` Workshop 2、`docs/DECISION_LOG.md` 决策33）。`scope=conflicts` 是一行一个待改字段的 amendment list；`submission` 仍只认 json。README/UI_GUIDE 已同步
+- [x] 开发者模式后端（数据库清空/恢复，仅内部/评委验证用，见 `docs/DECISION_LOG.md` 决策34）：`app/features/devmode/` 三个端点（状态查询/清空/恢复），双门槛（口令+确认短语逐字匹配），刻意不注册 MCP tool。**GUI 还没做**——`docs/UI_GUIDE.md` §2.9 写了硬性要求（持续可见警示条、打字确认而非一键弹窗），交给队友A，优先级低于人工复核 GUI

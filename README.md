@@ -30,7 +30,7 @@
   <img src="docs/demo.gif" width="800" alt="demo" />
 </p>
 
-<!-- 图占位说明：docs/banner.png（宽横幅）、docs/demo.gif（10秒录屏：打开线上地址点 Run preview，Win 用 ScreenToGif / Mac 用 Gifski）。架构图/引擎图已经改成正文里的 Mermaid，GitHub 会直接原生渲染，不依赖额外的图片文件。 -->
+<!-- 图占位说明：docs/banner.png（宽横幅）、docs/demo.gif（10秒录屏：打开线上地址点 Run preview，Win 用 ScreenToGif / Mac 用 Gifski）。架构图/引擎图用 docs/diagrams/ 下的 PNG 直接展示，.mmd 是源码（改图后按文件头注释里的命令重渲染），slides 直接拿 PNG 不用重画。 -->
 
 <details>
 <summary><b>📖 目录</b></summary>
@@ -100,62 +100,27 @@ npm install && npm run dev
 
 设计上的一句话总结：**入口薄、插件肥、核心小**。Web/REST/MCP 只是三层很薄的适配器；每个功能模块自己拥有完整的业务逻辑；`lib/` 和 `app/core` 只放真正跨模块共享的东西。新增能力 = 新建一个文件夹，不需要改老代码——第二阶段的 config/mail/import/results/review/sandbox 六个模块都是这么加进来的，没有一次是靠"改已有文件"实现的。
 
-```mermaid
-flowchart LR
-    subgraph doors["一套 logic，三个入口"]
-        UI["Web UI<br/>响应式，手机+电脑"]
-        REST["REST API<br/>读全开放 · 写要口令"]
-        MCP["MCP Server<br/>Streamable HTTP · 28 个 tool"]
-    end
-    subgraph features["Feature 插件（app/features/*/logic）"]
-        CLS["classification<br/>规则 → Jev → LLM链 → 降级"]
-        EXT["extraction<br/>格式解析器 → 规则 → LLM兜底"]
-        CMP["comparison<br/>规范化精确比 → Jev复核 → 保守口径"]
-        PIPE["pipeline（编排层）<br/>有界并发 · 增量 · 30s deadline"]
-        RES["results（只读）<br/>查询/统计/冲突/导出"]
-        REVIEW["人工复核闭环<br/>confirm/correct/defer/undo/bulk"]
-        SANDBOX["sandbox<br/>评委自带文档即测 · 不写库"]
-        CFG["config · mail · import<br/>加密配置中心 · 上传校验链"]
-    end
-    subgraph shared["公共区 lib/"]
-        LLM["lib/llm<br/>6 provider 统一适配 + Jev"]
-        CACHE["llm_call_cache<br/>sha256 指纹缓存"]
-        CONC["concurrency<br/>有界并发工具"]
-        SEC["crypto + write-policy<br/>AES-256-GCM · 口令保护"]
-    end
-    subgraph data["Supabase"]
-        DB[("raw_emails · parsed_attachments<br/>verification_results<br/>review_overrides · review_actions<br/>+ 只读视图 verification_overview")]
-    end
-    UI --> features
-    REST --> features
-    MCP --> features
-    features --> shared
-    shared --> DB
-```
+![理念图：入口薄、插件肥、核心小，新能力等于新建一个文件夹](docs/diagrams/plugin-concept.png)
+
+*理念图：新能力 = 新建一个文件夹（自带 logic/api/mcp/ui），不改老代码。config / mail / import / results / review / sandbox 六个模块都是这么加进来的。源码见 [`docs/diagrams/plugin-concept.mmd`](docs/diagrams/plugin-concept.mmd)。*
+
+![全景图：三个入口调用核心三件套与支撑模块，共享lib公共区，状态落Supabase](docs/diagrams/architecture.png)
+
+*全景图：8 个 feature 插件的归属（短名，全称见上文 Features 表）。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
 
 **约束是硬性的，不是建议**：模块之间不能互相 import 对方 `logic/` 内部实现，跨模块契约必须先写进 [`docs/SHARED_INTERFACES.md`](docs/SHARED_INTERFACES.md)；数据流方向固定成"分类 → 抽取 → 比对"单向管道，不允许反向调用（细节见 [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md)）；一个文件混装路由+业务逻辑+数据库操作，或者超过约 300 行，就要按 `logic/api/mcp/ui` 拆开。这些规则记在 [`CLAUDE.md`](CLAUDE.md) 里，是团队里每个人的 AI 编程工具都要遵守的执行规范，不是写完就不看的文档。
-
-> 上面这张图和下面「Engine Design」的流程图都在 [`docs/diagrams/`](docs/diagrams) 下配了品牌配色的 PNG 导出版（`architecture.png` / `engine-fallback-chain.png`），slides 里要用架构图直接拿现成的，不用重画。
 
 ## ⚙️ Engine Design：规则优先，模型兜底，人工兜底的兜底
 
 判断逻辑的设计哲学是 **rules-first, models-second, humans-last**——和"直接调一次 LLM 祈祷它别出错"正好相反。以分类模块为例：
 
-```mermaid
-flowchart LR
-    A[邮件输入] --> B{高精度规则<br/>能判定?}
-    B -- 能 --> Z1["输出结果<br/>engine: rules"]
-    B -- 不能 --> C{"Jev 结构化判断<br/>(置信度 ≥ 0.85?)"}
-    C -- 是 --> Z2["输出结果<br/>engine: jev"]
-    C -- 否 / Jev不可用 --> D["文本 LLM 链<br/>Gemini→DeepSeek→OpenAI→Claude→LMStudio<br/>只试配了 key 的，单次超时不盲重试"]
-    D -- 成功 --> Z3["输出结果<br/>engine: llm"]
-    D -- 全部失败 --> E["尽力规则兜底<br/>engine: degraded"]
-    Z2 -.-> F
-    E --> F[标记 needs_review]
-    F --> G[进入人工复核队列]
-    G -->|"confirm / correct / disposition"| H[(review_overrides<br/>+ review_actions 审计日志)]
-    H --> I[导出/结果查询自动叠加人工结论]
-```
+![引擎降级链：规则 → Jev（≥0.85 直接采信，<0.85 输出+标复核）→ 文本 LLM 链 → 尽力兜底，标复核的进人工复核队列](docs/diagrams/engine-fallback-chain.png)
+
+*图：判定口径以 [`docs/DECISION_SPEC.md`](docs/DECISION_SPEC.md) §2 为准；链顺序 gemini→deepseek→openai→claude→lmstudio（只试配了 key 的，首选排最前）。源码见 [`docs/diagrams/engine-fallback-chain.mmd`](docs/diagrams/engine-fallback-chain.mmd)。注意 Jev 低置信是直接输出+标复核，不会再进文本链。*
+
+![分工图：Jev做结构化决策，文本LLM做开放兜底](docs/diagrams/jev-roles.png)
+
+*分工图：Jev 只做结构化决策（choice/noul + 置信度），从不生成自然语言文本；开放问题走文本 LLM。源码见 [`docs/diagrams/jev-roles.mmd`](docs/diagrams/jev-roles.mmd)。*
 
 几个关键设计决定（每条都在 [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) 里有编号记录，不是临时拍脑袋）：
 
@@ -232,6 +197,10 @@ npm run build && npm start
 | Web UI | `/` `/features/sandbox` | 响应式，手机+电脑，队友A负责 `ui/` |
 | REST API | 见下文表格 | 读开放，写要 `x-admin-token` |
 | MCP Server | `/core/mcp-server` | Streamable HTTP，无状态，共 28 个 tool |
+
+![多入口图：三层共用同一套logic，区别只在谁来调和要不要口令](docs/diagrams/entries.png)
+
+*多入口图：三层都是同一套 `logic/`，区别只在"谁来调、要不要口令"。源码见 [`docs/diagrams/entries.mmd`](docs/diagrams/entries.mmd)。*
 
 ## 环境要求
 
@@ -373,6 +342,10 @@ npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
 - 用 MCP 客户端连写 tool 时，把口令配在客户端的 headers 里（各客户端写法不同，例如 `mcp-remote --header "x-admin-token: <ADMIN_TOKEN>"`，或客户端自定义 header 配置），不要把口令下发给浏览器
 - `ADMIN_TOKEN` 已在 Vercel（production + preview）和本地 `.env.local` 配好；换环境部署时记得补
 
+![加密图：主密钥只在环境变量，库里只存密文，读接口只给掩码](docs/diagrams/encryption.png)
+
+*加密图：主密钥只在环境变量（永不进库/进 git/回显），库里只有密文，实现在 `lib/shared/crypto.ts`。源码见 [`docs/diagrams/encryption.mmd`](docs/diagrams/encryption.mmd)。*
+
 ## 产出并自检提交文件
 
 ```bash
@@ -480,6 +453,7 @@ curl -sD headers.txt -o submission.json \
 - 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（共 28 个 tool）
 - 人工复核闭环（P1-1）REST+MCP 已就绪（四模块 confirm/correct/disposition/defer/undefer/note/rerun/undo/bulk），GUI 未做，见 [REVIEW_SPEC.md](docs/REVIEW_SPEC.md)
 - sandbox 接口（评委自带 SI/BL 文档临时测试，不写库不需要 Supabase）已就绪
+- 内部"开发者模式"后端已就绪（数据库清空/恢复成官方样例状态，**不是产品功能**，仅供团队/评委验证用；口令+确认短语双重门槛，刻意不接 MCP，详见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「开发者模式」）；GUI 未做
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：见「Challenges We Solved」第 1、2 条
