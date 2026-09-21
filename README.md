@@ -36,13 +36,13 @@
 <summary><b>📖 目录</b></summary>
 
 - [✨ Features](#-features)
-- [⚡ Try it —— 30 秒看到它跑起来](#-try-it--30-秒看到它跑起来不用配任何-key)
+- [⚡ Try it —— 先看线上 demo](#-try-it--先看线上-demo)
 - [🎯 Why It's Different](#-why-its-different)
 - [🏗️ Architecture](#️-architecture)
 - [⚙️ Engine Design：规则优先，模型兜底，人工兜底的兜底](#️-engine-design规则优先模型兜底人工兜底的兜底)
 - [🛳 Self Hosting —— 一份代码，三种跑法](#-self-hosting--一份代码三种跑法)
 - [🧰 Tech Stack](#-tech-stack)
-- [📦 Ecosystem —— 同一套 logic，三种出口](#-ecosystem--同一套-logic三种出口)
+- [📦 Ecosystem —— 同一套 logic，三种调法](#-ecosystem--同一套-logic三种调法)
 - [环境要求 / 数据导入 / 数据库初始化 / 本地评测](#环境要求)
 - [REST API 与 MCP Server](#rest-api-与-mcp-server)
 - [评委体验与写保护](#评委体验与写保护重要)
@@ -50,9 +50,9 @@
 - [环境变量说明](#环境变量说明)
 - [项目结构](#项目结构)
 - [🧗 Challenges We Solved](#-challenges-we-solved)
-- [🗺️ Roadmap](#️-roadmap)
-- [📐 Rubric Coverage（对照官方评分细则）](#-rubric-coverage对照官方评分细则)
-- [🙈 Honest Limits（诚实声明：我们没做什么）](#-honest-limits诚实声明我们没做什么)
+- [🗺️ 决赛增添功能](#️-决赛增添功能)
+- [📐 评分对照](#-评分对照)
+- [⚖️ 设计取舍](#️-设计取舍)
 - [当前状态](#当前状态)
 - [🤝 Contributing](#-contributing)
 - [📝 License](#-license)
@@ -66,19 +66,13 @@
 | SI / BL确认 / 发票询问 / 一般询问 / 垃圾 | shipper / consignee / notify party / POL / POD / 箱量 / 重量 | SI vs BL 字段级差异 + 拿不准提示人工介入 |
 | 规则优先 + Jev 判断 + LLM 兜底 | TXT / PDF / XLSX / DOCX 统一解析 | 缺陷字段 0 漏报 0 误报，全量 520/520 |
 
-## ⚡ Try it —— 30 秒看到它跑起来（不用配任何 key）
+## ⚡ Try it —— 先看线上 demo
 
-**线上最快**：直接打开 https://hackathonaveris.vercel.app ，进"Full pipeline 预览页"点 Run preview，或者用你自己的 SI/BL 文档试："Sandbox" 页（`/features/sandbox`）不写库、不需要任何配置。
+**评审请直接用线上地址**：https://hackathonaveris.vercel.app（评审期间保持在线）—— 进"Full pipeline 预览页"点 Run preview；想拿自己的 SI/BL 文档试：进"Sandbox"页（`/features/sandbox`），不写库、不需要任何配置。
 
-**自己电脑上跑，只要两条命令**：
+预览不需要配任何 key：规则引擎优先，预览用的是仓库自带的样例数据（不落库）。**历史结果统计/冲突列表/导出提交文件**这些依赖数据库的功能，读的是线上已经导入好的数据，打开即看。
 
-```bash
-npm install && npm run dev
-```
-
-打开 http://localhost:3000 ，点"Run preview"就能看到分类→抽取→比对真的跑起来——**这一步完全不需要填任何 key**，因为规则引擎优先、且预览用的是仓库自带的样例数据（不落库）。Docker 同理，见下文"Self Hosting"，也是两条命令、不用填 key。
-
-如果还想看**历史结果统计/冲突列表/导出提交文件**这些依赖数据库的功能，才需要 Supabase 的 `URL` / `ANON_KEY`（见下文「本地开发」）——这两个不是敏感信息（Supabase 的 anon key 设计上就是给浏览器用的、只读），可以直接问操作者要现成的，不需要自己注册 Supabase 账号。
+> 本地 / Docker 说明（可移植性证明，不是主要用法）：同一份代码不绑定 Vercel，任何机器 `npm install && npm run dev`（或 `docker compose up --build`，步骤见下文"Self Hosting"）都能跑起来。评审不需要在本地跑——线上地址就是最终交付形态。
 
 ## 🎯 Why It's Different
 
@@ -98,15 +92,15 @@ npm install && npm run dev
 
 ## 🏗️ Architecture
 
-设计上的一句话总结：**入口薄、插件肥、核心小**。Web/REST/MCP 只是三层很薄的适配器；每个功能模块自己拥有完整的业务逻辑；`lib/` 和 `app/core` 只放真正跨模块共享的东西。新增能力 = 新建一个文件夹，不需要改老代码——第二阶段的 config/mail/import/results/review/sandbox 六个模块都是这么加进来的，没有一次是靠"改已有文件"实现的。
+一句话总结：**一切都是插件**。前端页面、后端模块都是可自由增删改的插件——每个功能自带 `logic/api/mcp/ui` 四层，只通过 [`SHARED_INTERFACES.md`](docs/SHARED_INTERFACES.md) 里约定好的接口跟别的模块对接，从不直接碰别人的内部实现。Web / REST / MCP 三个入口只是同一套 `logic/` 的三种薄适配（下图是一个漏斗，不存在"三套流程"）。config / mail / import / results / review / sandbox 六个模块都是新建文件夹接入的，没有一次靠改老代码。
 
-![理念图：入口薄、插件肥、核心小，新能力等于新建一个文件夹](docs/diagrams/plugin-concept.png)
+<p align="center"><img src="docs/diagrams/plugin-concept.png" alt="理念图：入口薄、插件肥、核心小" width="380" /></p>
 
 *理念图：新能力 = 新建一个文件夹（自带 logic/api/mcp/ui），不改老代码。config / mail / import / results / review / sandbox 六个模块都是这么加进来的。源码见 [`docs/diagrams/plugin-concept.mmd`](docs/diagrams/plugin-concept.mmd)。*
 
-![全景图：三个入口调用核心三件套与支撑模块，共享lib公共区，状态落Supabase](docs/diagrams/architecture.png)
+<p align="center"><img src="docs/diagrams/architecture.png" alt="架构漏斗图：三个入口共用同一套logic，再经lib公共区落Supabase" width="620" /></p>
 
-*全景图：入口→核心三件套/支撑模块→lib 公共区→Supabase（短名，全称见上文 Features 表）。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
+*全景图：三个入口调的是同一套 `logic/`（模块清单见上文 Features 表），不是三套流程。源码见 [`docs/diagrams/architecture.mmd`](docs/diagrams/architecture.mmd)；做 slides 直接拿 PNG，不用重画。*
 
 **约束是硬性的，不是建议**：模块之间不能互相 import 对方 `logic/` 内部实现，跨模块契约必须先写进 [`docs/SHARED_INTERFACES.md`](docs/SHARED_INTERFACES.md)；数据流方向固定成"分类 → 抽取 → 比对"单向管道，不允许反向调用（细节见 [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md)）；一个文件混装路由+业务逻辑+数据库操作，或者超过约 300 行，就要按 `logic/api/mcp/ui` 拆开。这些规则记在 [`CLAUDE.md`](CLAUDE.md) 里，是团队里每个人的 AI 编程工具都要遵守的执行规范，不是写完就不看的文档。
 
@@ -114,11 +108,11 @@ npm install && npm run dev
 
 判断逻辑的设计哲学是 **rules-first, models-second, humans-last**——和"直接调一次 LLM 祈祷它别出错"正好相反。以分类模块为例：
 
-![引擎降级链：规则 → Jev（≥0.85 直接采信，<0.85 输出+标复核）→ 文本 LLM 链 → 尽力兜底，标复核的进人工复核队列](docs/diagrams/engine-fallback-chain.png)
+<p align="center"><img src="docs/diagrams/engine-fallback-chain.png" alt="引擎降级链：规则、Jev、文本LLM链、尽力兜底" width="680" /></p>
 
 *图：判定口径以 [`docs/DECISION_SPEC.md`](docs/DECISION_SPEC.md) §2 为准；链顺序 gemini→deepseek→openai→claude→lmstudio（只试配了 key 的，首选排最前）。源码见 [`docs/diagrams/engine-fallback-chain.mmd`](docs/diagrams/engine-fallback-chain.mmd)。注意 Jev 低置信是直接输出+标复核，不会再进文本链。*
 
-![分工图：Jev做结构化决策，文本LLM做开放兜底](docs/diagrams/jev-roles.png)
+<p align="center"><img src="docs/diagrams/jev-roles.png" alt="分工图：Jev做结构化决策，文本LLM做开放兜底" width="520" /></p>
 
 *分工图：Jev 只做结构化决策（choice/noul + 置信度），从不生成自然语言文本；开放问题走文本 LLM。源码见 [`docs/diagrams/jev-roles.mmd`](docs/diagrams/jev-roles.mmd)。*
 
@@ -190,17 +184,19 @@ npm run build && npm start
 
 **诚实声明：没用什么**——无单元测试框架（质量靠 `tsc --noEmit` + 4 个自研自检脚本：MCP 握手冒烟、加密自检、MCP 注解检查、520 封全量评测）；无 ORM、无状态管理库、无组件库（Supabase SDK 直调、React 自带 state、自研 Tailwind 组件）；Python 只存在于官方题目包（数据生成器/评分脚本），产品运行时是纯 JS/TS。这些是 4 天工期下有意的减法，写出来是因为评委问起来时，真实答案比假装什么都有更可信。
 
-## 📦 Ecosystem —— 同一套 logic，三种出口
+## 📦 Ecosystem —— 同一套 logic，三种调法
 
-| 出口 | 地址 | 说明 |
+在 AI agent 和高度自动化的场景里，一个只能被人点的网页是不够的：业务系统要能调（REST API）、AI agent 要能调（MCP tools），三者共用同一套 `logic/`、行为完全一致。批量入口带**有界并发**（同时只跑几封，做完再补）+ 单条失败隔离，适合接自动化流水线定时跑——不会因为一封坏邮件拖垮整批，也不会把 LLM 限流打满。
+
+| 调用方 | 入口 | 说明 |
 |---|---|---|
-| Web UI | `/` `/features/sandbox` | 响应式，手机+电脑，队友A负责 `ui/` |
-| REST API | 见下文表格 | 读开放，写要 `x-admin-token` |
-| MCP Server | `/core/mcp-server` | Streamable HTTP，无状态，共 28 个 tool |
+| 人 | Web UI（`/`、`/features/sandbox`） | 响应式，手机+电脑 |
+| 程序 | REST API（见下文表格） | 读开放，写要 `x-admin-token` |
+| AI agent | MCP Server（`/core/mcp-server`） | Streamable HTTP，无状态，共 28 个 tool |
 
-![多入口图：三层共用同一套logic，区别只在谁来调和要不要口令](docs/diagrams/entries.png)
+<p align="center"><img src="docs/diagrams/entries.png" alt="多入口图：三层共用同一套logic" width="560" /></p>
 
-*多入口图：三层都是同一套 `logic/`，区别只在"谁来调、要不要口令"。源码见 [`docs/diagrams/entries.mmd`](docs/diagrams/entries.mmd)。*
+*多入口图：区别只在"谁来调、要不要口令"，业务逻辑只有一套。源码见 [`docs/diagrams/entries.mmd`](docs/diagrams/entries.mmd)。*
 
 ## 环境要求
 
@@ -217,6 +213,8 @@ npm run import:data       # 增量导入（需要 .env.local 里填了 SUPABASE_
 ```
 
 每行都带内容指纹（`content_hash`）：重跑时**内容没变的行直接跳过**，只有变化的才会更新，所以随便跑、不怕重复。扫描件/损坏的 PDF 会标成 `unreadable` 先搁置，以后再处理（到时候重跑脚本即可自动补上）。
+
+另一条路是**开发者模式**（`/features/devmode` 页面，或直接调 `POST /features/devmode/api/wipe` / `/restore`）：清空核验数据表（不可逆）、或清空后从 `data/sample/` 重导入恢复成官方样例状态。需要 `x-admin-token` + 页面里手动打字输入确认短语双重确认，仅供内部/评委验证用，不是产品功能，故意不进主导航（细节见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「开发者模式」）。
 
 ## 数据库初始化（新环境 / 换 Supabase 项目必读）
 
@@ -342,7 +340,7 @@ npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
 - 用 MCP 客户端连写 tool 时，把口令配在客户端的 headers 里（各客户端写法不同，例如 `mcp-remote --header "x-admin-token: <ADMIN_TOKEN>"`，或客户端自定义 header 配置），不要把口令下发给浏览器
 - `ADMIN_TOKEN` 已在 Vercel（production + preview）和本地 `.env.local` 配好；换环境部署时记得补
 
-![加密图：主密钥只在环境变量，库里只存密文，读接口只给掩码](docs/diagrams/encryption.png)
+<p align="center"><img src="docs/diagrams/encryption.png" alt="加密图：主密钥只在环境变量，库里只存密文" width="440" /></p>
 
 *加密图：主密钥只在环境变量（永不进库/进 git/回显），库里只有密文，加密和解密用同一把 key，实现在 `lib/shared/crypto.ts`。源码见 [`docs/diagrams/encryption.mmd`](docs/diagrams/encryption.mmd)。*
 
@@ -400,19 +398,9 @@ curl -sD headers.txt -o submission.json \
 
 完整的架构规范和约束见 [CLAUDE.md](CLAUDE.md)；`docs/` 下所有文档的目录、权威状态与维护规则见 [docs/README.md](docs/README.md)。
 
-## 🧗 Challenges We Solved
+## 🗺️ 决赛增添功能
 
-四天工期里遇到的几个真实工程问题，写出来是因为"怎么发现的、根因是什么、怎么修的"比"最后能跑"更能说明工程能力：
-
-1. **PDF 在 Serverless / Docker 环境下解析失败，本地 `npm run dev` 却是好的。** 根因：Next.js 的打包器在生产构建时会丢掉 `pdf-parse`/`pdfjs-dist` 依赖的 `pdf.worker.mjs` 文件，本地开发模式不走同一套打包流程所以没暴露问题。修法：在 `next.config.mjs` 把这两个包声明为 `serverExternalPackages` 并显式 `outputFileTracingIncludes`，之后在 Vercel 和 Docker 镜像里都重新验证过。
-2. **人工复核导出链路在全量数据下返回 400。** 一开始用 PostgREST 的 `.in("email_id", [...几百个id])` 查询已复核记录，小数据测试没问题；接入全量 520+ 封邮件的真实导出请求后线上直接报 `Bad Request`。根因：`.in()` 的数组会被序列化进 URL 查询字符串，几百个值超出了 URL 长度限制。修法：改成拉取该类型的全部复核记录（这张表本身很小，只有真正被人工处理过的行）再在内存里按 `Set` 过滤，避免了"先查后判断"的方案在数据量上的隐患。
-3. **Vercel 环境变量不是实时生效的。** 给 DeepSeek 配了 API key 之后线上一直报"缺少环境变量"，一度怀疑是 key 本身有问题；后来确认根因是 Vercel 的环境变量改动只在**下一次部署**之后才会应用到正在运行的函数——配置的时间点晚于最近一次部署，所以还在用旧的运行时环境。这提醒我们：改了 Vercel 配置后，验证之前记得先触发一次新部署。
-4. **官方边界样本里的"空白占位符"没被规则识别。** 复验发现规则引擎会把 `???`、`TBC`、`____MT` 这类"形式上是文本、语义上是空值"的占位符当成真实字段值参与比对，一旦官方换测试数据的随机种子，这些占位符落在文本字段上就会产生假阳性 `MISMATCH`。这是决赛冲刺清单里标记为最高优先级的修复项（见下方 Roadmap 第一条）。
-5. **Jev 结构化决策模型不擅长数字比较。** 比对模块最初考虑让 Jev 统一判断"两个值是否等价"，实测后发现它在数字类字段上不够可靠。改为：数字字段（箱量、重量）用代码规范化后精确比对，只把"这两段文字说的是不是同一件事"这种语义等价判断交给 Jev，置信度阈值 0.85 是在样例集上校准到 0 假阳性 / 0 假阴性得出的，不是拍脑袋定的。
-
-## 🗺️ Roadmap
-
-按对评分和产品价值的优先级排列，来自 [`docs/FINALS_ROADMAP.md`](docs/FINALS_ROADMAP.md) 的决赛冲刺清单：
+初赛提交时功能冻结，下面是决赛阶段按优先级往里加的东西（每条都是新增/扩展一个模块，不动现有流程）。完整版见 [`docs/FINALS_ROADMAP.md`](docs/FINALS_ROADMAP.md)：
 
 - [ ] **空白占位符规则加固**（最高优先）—— 修复 Challenges 第 4 条，扩展占位符正则并同步抽取 prompt 与 `DECISION_SPEC.md`
 - [ ] **多种子回归评测** —— 用官方数据生成器换随机种子造新样例，提前在自己机器上按官方评分脚本的口径做一次"决赛模拟考"
@@ -423,9 +411,19 @@ curl -sD headers.txt -o submission.json \
 - [ ] **DCSA eBL 3.0 字段映射导出** —— 面向行业标准的方向性路线，目前只是路线图，不是"已集成"
 - [ ] **本地决策模型 Laya 的评估结论**：这次不接入——规则已经覆盖 520/520 样例邮件，真正需要模型兜底的调用量很小，接入本地决策模型的性价比在当前阶段不高；但 5 个具体接入点（新增 `lib/llm/laya.ts`、provider 注册位、门控条件、Docker profile、`.env.example` 条目）已经在决策记录里写清楚，将来做是"加一个文件"，不是"改架构"
 
-## 📐 Rubric Coverage（对照官方评分细则）
+## 🧗 Challenges We Solved
 
-初赛评分 = 技术 70 + 产品与影响力 30，最大单项是 Working Core Prototype（25 分）。下面是我们能直接展示的证据，映射到每一项官方评分点（同一份证据不重复计分到两项）：
+四天工期里遇到的几个真实工程问题，写出来是因为"怎么发现的、根因是什么、怎么修的"比"最后能跑"更能说明工程能力：
+
+1. **PDF 在 Serverless / Docker 环境下解析失败，本地开发时却是好的。** 根因：Next.js 的打包器在生产构建时会丢掉 `pdf-parse`/`pdfjs-dist` 依赖的 `pdf.worker.mjs` 文件，开发模式不走同一套打包流程所以没暴露问题。修法：在 `next.config.mjs` 把这两个包声明为 `serverExternalPackages` 并显式 `outputFileTracingIncludes`，之后在 Vercel 和 Docker 镜像里都重新验证过。
+2. **人工复核导出链路在全量数据下返回 400。** 一开始用 PostgREST 的 `.in("email_id", [...几百个id])` 查询已复核记录，小数据测试没问题；接入全量 520+ 封邮件的真实导出请求后线上直接报 `Bad Request`。根因：`.in()` 的数组会被序列化进 URL 查询字符串，几百个值超出了 URL 长度限制。修法：改成拉取该类型的全部复核记录（这张表本身很小，只有真正被人工处理过的行）再在内存里按 `Set` 过滤，避免了"先查后判断"的方案在数据量上的隐患。
+3. **Vercel 环境变量不是实时生效的。** 给 DeepSeek 配了 API key 之后线上一直报"缺少环境变量"，一度怀疑是 key 本身有问题；后来确认根因是 Vercel 的环境变量改动只在**下一次部署**之后才会应用到正在运行的函数——配置的时间点晚于最近一次部署，所以还在用旧的运行时环境。这提醒我们：改了 Vercel 配置后，验证之前记得先触发一次新部署。
+4. **官方边界样本里的"空白占位符"没被规则识别。** 复验发现规则引擎会把 `???`、`TBC`、`____MT` 这类"形式上是文本、语义上是空值"的占位符当成真实字段值参与比对，一旦官方换测试数据的随机种子，这些占位符落在文本字段上就会产生假阳性 `MISMATCH`。这是上方「决赛增添功能」第一条（最高优先修复项）。
+5. **Jev 结构化决策模型不擅长数字比较。** 比对模块最初考虑让 Jev 统一判断"两个值是否等价"，实测后发现它在数字类字段上不够可靠。改为：数字字段（箱量、重量）用代码规范化后精确比对，只把"这两段文字说的是不是同一件事"这种语义等价判断交给 Jev，置信度阈值 0.85 是在样例集上校准到 0 假阳性 / 0 假阴性得出的，不是拍脑袋定的。
+
+## 📐 评分对照（演示前自查用，非自评得分）
+
+官方初赛评分 = 技术 70 + 产品与影响力 30。这张表只说明"每一项我们准备了什么证据"，供上台前自查：
 
 | 官方评分项 | 分值 | 我们的证据 |
 |---|---|---|
@@ -437,23 +435,22 @@ curl -sD headers.txt -o submission.json \
 | Innovation & Solution Approach | 10 | 「Why It's Different」差异化对照表：规则优先混合引擎 + fail-closed 的 MCP 写保护 + 加密配置中心 |
 | Practical Value & Potential | 10 | 导出文件的 `decided_by` 透明度字段、完整性自检响应头、面向行业标准（DCSA eBL 3.0）的路线图 |
 
-## 🙈 Honest Limits（诚实声明：我们没做什么）
+## ⚖️ 设计取舍（为什么暂时不这么做）
 
-评分细则明确奖励"关键假设有清晰证据支撑"，所以诚实地说清楚边界比夸大更划算：
+下面每条都是有意的取舍，不是做不到——每条都写了"为什么当前解法更好"：
 
-- **公开云端 demo 连不上评委自己电脑上的本地 LM Studio**——这是 Vercel 无服务器架构的物理限制（云端机器访问不了你笔记本的 `localhost`），不是 bug；界面会给出可读提示而不是崩溃，只有本地/Docker 部署才能用本地模型
-- **扫描件 OCR 保持"演示模式默认关闭"**，只作预览建议值，绝不会改写系统对损坏/无法识别文档的 `unreadable` 判定
-- **数字字段不做容差匹配**——加容差会直接漏检官方注入的缺陷（比如集装箱数 ±1、重量 ±500kg 这类场景），所以数字比对坚持精确
-- **配置中心里 `provider_priority` / 阈值 / `pipeline.*` / `storage.*` 目前仍是展示项**，界面上能改但还没接到运行时决策，运行时用的是代码常量和环境变量（本 README 和配置页都如实标注了这一点）
+- **本地模型只在本地/Docker 部署里生效**——Vercel 的机器没有 GPU，也访问不到你笔记本的 `localhost`，这是无服务器平台的物理限制。分工因此很清楚：云端 demo 用云端模型（Gemini/Jev，已配好），想玩本地模型就在自己电脑跑（步骤见上文）。决赛 slide 里"接 GPU 云主机跑开源模型"就是这条的延伸路线。
+- **扫描件 OCR 只做"演示模式"且默认关闭**——OCR 读出来的字可能是错的，绝不能让它改写系统对损坏文档的 `unreadable` 判定：错了就标出来给人看，比"看起来识别了、实则给错答案"可信得多。
+- **数字字段（箱量/重量）不做模糊容差**——官方注入的缺陷恰恰是小量级差异（箱数 ±1、重量数百 kg），加了容差等于主动漏检；文字表述差异才需要语义判断，这部分交给 Jev（阈值 0.85，在样例集上校准到 0 误报 0 漏报）。
 
 ## 当前状态
 
 - 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
 - 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 只读视图 `verification_overview` + 内部缓存表 `llm_call_cache`，导入脚本支持增量
 - 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（共 28 个 tool）
-- 人工复核闭环（P1-1）REST+MCP 已就绪（四模块 confirm/correct/disposition/defer/undefer/note/rerun/undo/bulk），GUI 未做，见 [REVIEW_SPEC.md](docs/REVIEW_SPEC.md)
-- sandbox 接口（评委自带 SI/BL 文档临时测试，不写库不需要 Supabase）已就绪
-- 内部"开发者模式"后端已就绪（数据库清空/恢复成官方样例状态，**不是产品功能**，仅供团队/评委验证用；口令+确认短语双重门槛，刻意不接 MCP，详见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「开发者模式」）；GUI 未做
+- 人工复核闭环（P1-1）REST+MCP+GUI 全部就绪（四模块 confirm/correct/disposition/defer/undefer/note/rerun/undo/bulk，`/features/review` 一个页面按 tab 切换四模块），见 [REVIEW_SPEC.md](docs/REVIEW_SPEC.md)
+- sandbox 接口（评委自带 SI/BL 文档临时测试，不写库不需要 Supabase）已就绪，含 GUI（`/features/sandbox`）
+- 内部"开发者模式"后端 + GUI 已就绪（`/features/devmode`，数据库清空/恢复成官方样例状态，**不是产品功能**，仅供团队/评委验证用；持续可见警示条 + 打字确认短语 + 口令三重门槛，刻意不接 MCP，故意不进主导航，详见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「开发者模式」）
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：见「Challenges We Solved」第 1、2 条
