@@ -46,8 +46,8 @@
 
 ## 当前进度
 
-- [ ] C1 运行状态跨页面不丢失
-- [ ] C2 email_004 经 ground truth 校验，结论明确
-- [ ] C3 SI/BL 对照表不会被读串
-- [ ] C4 typecheck / build / mcp-annotations 全绿
-- [ ] C5 `docs/BUG_HUNT.md` 排查报告产出
+- [x] C1 运行状态跨页面不丢失 —— 功能已实现（`3410f93`），校验 #2 通过；**校验 #1 待操作者确认**：命令里写的 `dashboard-shell.tsx` 是错的位置，实际正确地挂在 `app/_components/providers.tsx`（DashboardShell 在 /dashboard 和 /features 两棵路由树里各渲染一份，放那里跨树切换照样丢）。按规则未自行修改标准。人工点击确认也待操作者做（项目里没有浏览器自动化）。
+- [x] C2 email_004 经 ground truth 校验，结论明确 —— 系统判对了；全量 520/520
+- [x] C3 SI/BL 对照表不会被读串 —— 每个值都带 SI/BL 标签，`sm:hidden` 已移除
+- [x] C4 typecheck / build / mcp-annotations 全绿
+- [x] C5 `docs/BUG_HUNT.md` 排查报告产出
