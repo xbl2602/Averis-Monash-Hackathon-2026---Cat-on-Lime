@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Icon, type IconName } from "../../_components/icon";
 import { listProviderOptions } from "../../_lib/provider-options";
+import { AccessSection } from "./_components/access-section";
 import { AccountSection } from "./_components/account-section";
 import { AppearanceSection } from "./_components/appearance-section";
+import { ConfigSection } from "./_components/config-section";
 import { ConnectionsSection } from "./_components/connections-section";
+import { DataSection } from "./_components/data-section";
+import { GmailSection } from "./_components/gmail-section";
 import { ModelsSection } from "./_components/models-section";
 import { ProcessingSection } from "./_components/processing-section";
 
@@ -18,6 +22,10 @@ const SECTIONS: { id: string; label: string; icon: IconName }[] = [
   { id: "appearance", label: "Appearance", icon: "palette" },
   { id: "processing", label: "Processing", icon: "sliders" },
   { id: "models", label: "Models", icon: "cpu" },
+  { id: "access", label: "Write access", icon: "lock" },
+  { id: "config", label: "Configuration", icon: "sliders" },
+  { id: "data", label: "Data sources", icon: "database" },
+  { id: "mail", label: "Gmail", icon: "mail" },
   { id: "connections", label: "Connections", icon: "plug" },
   { id: "account", label: "Account and data", icon: "user" },
 ];
@@ -56,6 +64,10 @@ export default function SettingsPage() {
           <AppearanceSection />
           <ProcessingSection providers={providers} />
           <ModelsSection providers={providers} />
+          <AccessSection />
+          <ConfigSection />
+          <DataSection />
+          <GmailSection />
           <ConnectionsSection />
           <AccountSection />
         </div>

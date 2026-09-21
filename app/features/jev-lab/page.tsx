@@ -1,13 +1,11 @@
-import { listSampleEmails } from "@/lib/shared/inbox";
 import { PageHeader } from "../../_components/page-header";
+import { listEmailOptions } from "../../_lib/email-options";
 import { JevLabPanel } from "./ui";
 
+export const dynamic = "force-dynamic";
+
 export default async function JevLabPage() {
-  const emails = await listSampleEmails();
-  const options = emails.map((email) => ({
-    email_id: email.email_id,
-    subject: email.subject,
-  }));
+  const options = await listEmailOptions();
 
   return (
     <div className="space-y-8">

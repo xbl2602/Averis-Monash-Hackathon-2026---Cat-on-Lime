@@ -3,28 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "../../_components/brand-mark";
-import { Icon, type IconName } from "../../_components/icon";
-
-const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/dashboard", label: "Overview", icon: "home" },
-  { href: "/features/verification", label: "Full pipeline", icon: "play" },
-  { href: "/features/classification", label: "Email classification", icon: "mail" },
-  { href: "/features/extraction", label: "Field extraction", icon: "list" },
-  { href: "/features/comparison", label: "SI / BL comparison", icon: "compare" },
-  { href: "/features/jev-lab", label: "Model lab (Jev)", icon: "flask" },
-];
-
-const SETTINGS_HREF = "/dashboard/settings";
-
-function isActive(pathname: string, href: string): boolean {
-  // "/dashboard" must only match itself, otherwise it would also light up on /dashboard/settings
-  if (href === "/dashboard") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
+import { Icon } from "../../_components/icon";
+import { NAV_GROUPS, SETTINGS_HREF, activeNavHref } from "./nav-items";
 
 export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const settingsActive = isActive(pathname, SETTINGS_HREF);
+  const activeHref = activeNavHref(pathname);
+  const settingsActive = pathname === SETTINGS_HREF;
+
+  let index = 0;
 
   return (
     <aside
@@ -37,29 +24,41 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate?: () =
         <span className="text-sm leading-tight">Shipping Doc Verifier</span>
       </Link>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3" aria-label="Main">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              aria-current={active ? "page" : undefined}
-              className={`group flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition ${
-                active ? "bg-accent/15 text-fg" : "text-fg-muted hover:bg-sunken hover:text-fg"
-              }`}
-            >
-              <Icon
-                name={item.icon}
-                size={20}
-                className={active ? "text-accent-strong" : "text-fg-faint transition group-hover:text-accent-strong"}
-              />
-              {item.label}
-              {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent-strong" />}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-3" aria-label="Main">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title}>
+            <div className="mb-1.5 px-4 font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">{group.title}</div>
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = item.href === activeHref;
+                const delay = index++;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    style={{ "--i": delay } as React.CSSProperties}
+                    className={`animate-rise stagger group flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition ${
+                      active ? "bg-accent/15 text-fg" : "text-fg-muted hover:bg-sunken hover:text-fg"
+                    }`}
+                  >
+                    <Icon
+                      name={item.icon}
+                      size={20}
+                      className={`transition duration-300 group-hover:scale-110 ${active ? "text-accent-strong" : "text-fg-faint group-hover:text-accent-strong"}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.badge && !active && (
+                      <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-strong">{item.badge}</span>
+                    )}
+                    {active && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" />}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="space-y-1 border-t border-line px-3 py-4">
@@ -76,18 +75,12 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate?: () =
           onClick={onNavigate}
           aria-current={settingsActive ? "page" : undefined}
           className={`group flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition ${
-            settingsActive
-              ? "bg-accent/15 text-fg"
-              : "border border-line bg-sunken text-fg hover:border-line-strong"
+            settingsActive ? "bg-accent/15 text-fg" : "border border-line bg-sunken text-fg hover:border-line-strong"
           }`}
         >
-          <Icon
-            name="gear"
-            size={22}
-            className="text-accent-strong transition duration-500 group-hover:rotate-90"
-          />
+          <Icon name="gear" size={22} className="text-accent-strong transition duration-500 group-hover:rotate-90" />
           Settings
-          <Icon name="arrowRight" size={16} className="ml-auto text-fg-faint" />
+          <Icon name="arrowRight" size={16} className="ml-auto text-fg-faint transition group-hover:translate-x-1" />
         </Link>
       </div>
     </aside>

@@ -1,65 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { describeApiError, describeNetworkError, type ApiErrorInfo } from "../../../_components/api-error";
-import { ErrorNotice } from "../../../_components/error-notice";
-import { Icon } from "../../../_components/icon";
-import { JsonResult } from "../../../_components/json-result";
+import { Icon, type IconName } from "../../../_components/icon";
 import { Notice } from "../../../_components/notice";
+import type { EmailOption } from "../../../_lib/attachments";
+import { CustomValues } from "./custom-values";
+import { FromEmail } from "./from-email";
 
-// Example data with a deliberate MISMATCH (consignee), to show what a flagged result looks like
-const EXAMPLE_SI = { shipper: "APRIL Fine Paper", consignee: "ABC Trading Co" };
-const EXAMPLE_BL = { shipper: "APRIL Fine Paper", consignee: "XYZ Trading Co" };
+const TABS: { key: "email" | "custom"; icon: IconName; label: string; desc: string }[] = [
+  { key: "email", icon: "mail", label: "A sample email", desc: "Read its SI and BL, then compare" },
+  { key: "custom", icon: "edit", label: "My own values", desc: "Type the fields and see the verdict" },
+];
 
-export function ComparisonPanel() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<ApiErrorInfo | null>(null);
-
-  async function runExample() {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch("/features/comparison/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ si: EXAMPLE_SI, bl: EXAMPLE_BL }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(describeApiError(res.status, data));
-        return;
-      }
-      setResult(JSON.stringify(data, null, 2));
-    } catch {
-      setError(describeNetworkError());
-    } finally {
-      setLoading(false);
-    }
-  }
+export function ComparisonPanel({ emails }: { emails: EmailOption[] }) {
+  const [tab, setTab] = useState<"email" | "custom">("email");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <Notice title="How it compares">
-        Values are normalised first, so case, punctuation and number formats don&rsquo;t cause false alarms. Wording
-        differences get a second look from the Jev model, while numbers are always compared exactly. When it can&rsquo;t
-        decide, the result is marked <span className="font-mono">NEEDS_REVIEW</span>.
+        Values are normalised first, so case, punctuation and number formats don&rsquo;t cause false alarms. Wording differences get a second look from the Jev model, while numbers are always compared exactly. When it can&rsquo;t decide, the result is marked <span className="font-mono">NEEDS_REVIEW</span>.
       </Notice>
 
-      <div className="card flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
-        <div>
-          <h2 className="text-lg font-bold">Try it on example data</h2>
-          <p className="mt-1 text-sm text-fg-muted">The consignee is deliberately different between the SI and the BL.</p>
-        </div>
-        <button onClick={runExample} disabled={loading} className="btn btn-primary !px-7 !py-3">
-          <Icon name="play" size={16} />
-          {loading ? "Comparing…" : "Run comparison"}
-        </button>
+      <div role="tablist" aria-label="Comparison input" className="grid gap-3 sm:grid-cols-2">
+        {TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} type="button" onClick={() => setTab(t.key)} className={`card card-hover flex items-center gap-4 p-4 text-left ${tab === t.key ? "!border-accent shadow-lg" : ""}`}>
+            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition ${tab === t.key ? "bg-accent text-white" : "bg-accent/12 text-accent-strong"}`}>
+              <Icon name={t.icon} size={24} />
+            </span>
+            <span>
+              <span className="block text-sm font-bold">{t.label}</span>
+              <span className="block text-xs text-fg-muted">{t.desc}</span>
+            </span>
+          </button>
+        ))}
       </div>
 
-      {error && <ErrorNotice error={error} />}
-      {result && <JsonResult data={result} />}
+      <div key={tab} className="animate-rise">{tab === "email" ? <FromEmail emails={emails} /> : <CustomValues />}</div>
     </div>
   );
 }

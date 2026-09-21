@@ -112,9 +112,9 @@
 
 上传侧约定：文件夹用 `<input webkitdirectory>` 拿列表后**按 3MB/批**切开逐个请求（整批超限返回 413）。
 
-### 2.7 人工复核（新，还没有界面——这是给你的下一块拼图）
+### 2.7 人工复核（后端 + GUI 均已实现：`/features/review`，2026-09-21）
 
-后端（REST+MCP）已实现，**GUI 还没人接**，是队友A当前最大的一块待做。完整设计（队列筛选、动作按钮、
+后端（REST+MCP）和 GUI 都做完了（四个模块一个页面、按 tab 切换，实现在 `app/features/review/ui/`）。下面的设计说明保留供参考。完整设计（队列筛选、动作按钮、
 时间线、口令、移动端）见 [`REVIEW_SPEC.md`](REVIEW_SPEC.md) 第 9 节；接口契约见
 [`SHARED_INTERFACES.md`](SHARED_INTERFACES.md)「人工复核闭环」一节。这里只列一页纸速查：
 
@@ -130,7 +130,7 @@
 `app/_components/review/`，REVIEW_SPEC §9 有写）。乐观锁：写操作可选带 `expected_updated_at`，
 冲突返回 409，前端应提示"这条已被别人改过"。
 
-### 2.8 Sandbox：评委自带 SI/BL 文档临时测试（新，还没有界面）
+### 2.8 Sandbox：评委自带 SI/BL 文档临时测试（已有界面：`/features/sandbox`，2026-09-21）
 
 | 方法 路径 | 一句话作用 | 口令 | 状态 |
 |---|---|---|---|
@@ -144,7 +144,23 @@
 这个页面**不需要口令、不需要 Supabase**，可以放在导航里独立一个入口（比如"Try your own"），
 也适合放进首页的产品介绍区旁边做一个"现在就试试"的 CTA。
 
-### 2.9 ⚠️ 开发者模式：数据库重置/恢复（新，还没有界面——产品要求必须有醒目警示）
+### 2.9 GUI 页面 ⇄ 接口对照（2026-09-21，全部已接）
+
+| 页面 | 用到的接口 |
+|---|---|
+| `/dashboard`（总览：实时统计、图表、待办提醒） | `results/api/stats` |
+| `/features/verification`（整箱流水线：预览 / 写库 / 重试失败与降级） | `pipeline/api`（`dry_run`、`email_ids`、`concurrency`、`force`、`retry_failed`）、`results/api/stats` |
+| `/features/results`（结果列表 + 导出） | `results/api`、`results/api/export`（`fetch`+读 `X-Export-*` 完整性头） |
+| `/features/results/conflicts`（冲突对、精确/容差数值搜索、按值搜索、复制修改请求） | `results/api/conflicts`、`results/api/export` |
+| `/features/review`（人工复核，四模块，含批量/撤销/历史） | `<m>/api/review`（GET/POST）、`review/history`、`review/undo`、`review/bulk` |
+| `/features/sandbox`（评委自带文档） | `sandbox/api` |
+| `/features/import`（上传 + 文档池 + 人工归类） | `import/api/upload`、`import/api/documents`（GET/PUT）、`documents/[id]` |
+| `/features/classification` `extraction` `comparison` `jev-lab`（可选任意样例邮件的工作台） | 各自的 `api`（comparison 的「样例邮件」模式 = 两次 extraction + 一次 comparison） |
+| `/dashboard/settings`（写权限、配置中心 + 连接测试、Supabase 项目、Gmail 状态） | `config/api`（GET/PUT）、`config/api/test`、`mail/api/gmail*`、`mail/api/supabase-projects*` |
+
+**没有数据库时**：读库的页面显示"请先连接数据库"的引导卡，不会报红字错误；预览、sandbox、三个单步工作台不依赖数据库，照常可用。
+
+### 2.10 ⚠️ 开发者模式：数据库重置/恢复（新，还没有界面——产品要求必须有醒目警示）
 
 **这个页面不是产品功能，是给团队/评委在验证阶段用的运维工具**（清空数据库、恢复成官方样例
 状态）。接口契约见 [`SHARED_INTERFACES.md`](SHARED_INTERFACES.md)「开发者模式」一节，这里只强调
@@ -162,10 +178,13 @@ GUI 层面的**硬性要求**（操作者原话："你需要特别明显注明..
 - 口令：这两个接口和其它写接口一样要 `x-admin-token`，页面上让用户手动输入，不落 `localStorage`。
 - 展示 `GET /features/devmode/api` 返回的各表行数，让用户操作前后都能看到"现在库里有多少数据"，
   操作完成后建议直接重新拉一次这个接口刷新展示，不要让用户自己猜有没有生效。
-- 优先级：这个页面**排在人工复核 GUI（§2.7）之后**，时间来不及可以先不做——后端接口已经就绪，
-  真要在评委面前清库/恢复，团队自己用 curl/Postman 带口令+确认短语调用也能做到同样的效果。
+- 优先级：这个页面**排在人工复核 GUI（已完成，见 §2.9 上面的对照表）之后**，时间来不及可以先不做——
+  后端接口已经就绪，真要在评委面前清库/恢复，团队自己用 curl/Postman 带口令+确认短语调用也能做到
+  同样的效果。
 
 ## 3. 口令怎么带（重要）
+
+> **GUI 实际做法（2026-09-21）**：操作者在顶栏 🔒 处手动输入口令，口令只存在该标签页的内存里（不进 localStorage / cookie，不回显），由浏览器作为 `x-admin-token` 直接发给写接口，服务端逐次校验。没有做 Server Action、没有 cookie 会话（REVIEW_SPEC §6 的方案）——那需要改 `app/core` 和 `lib/shared`（公共区，要操作者点头）。这是有意的偏差；如果之后要换成 cookie 会话，只需要改 `app/_components/admin/admin-provider.tsx` 一处。校验口令原来借用"空更新列表的 `PUT /features/config/api`"（口令对 → 400，错 → 401，没配 → 403，不写任何东西）——**2026-09-21 后端已加专用接口** `POST /features/config/api/verify`（口令对 → 200，不产生那行误导性的 400），`admin-provider.tsx` 换过去调用即可，不用改判断逻辑，只是把 400 换成 200。
 
 - 写接口统一请求头 `x-admin-token`；服务端口令存在环境变量 `ADMIN_TOKEN`（未配置 403，口令错 401）。
 - **不要在公开页面做"匿名可点、服务端自动注入口令"的入口**——那等于匿名可写库（见本文件第二部分 §4，硬性要求）。
@@ -280,6 +299,16 @@ GUI 层面的**硬性要求**（操作者原话："你需要特别明显注明..
 - `app/dashboard/page.tsx:2,54` 直读并解析全部样例邮件（`listSampleEmails()`）且没有 try/catch：样例数据缺失/损坏时该页可能 500。建议加兜底文案（"数据暂时读取失败"）而不是整页崩掉。
 - 首页 `page.tsx:266` 的"≤5 并发批量上限"与后端实际上限（`BATCH_MAX_CONCURRENCY = 8`）不一致，顺手校准即可。
 - 页面 provider 下拉的默认值建议 `gemini`（demo 兜底）；`lmstudio` 在云端不可用，可按环境隐藏或给出可读提示。
+
+### 给后端的两条观察——已修（2026-09-21 当天核对属实并修复）
+
+- ~~没配数据库时，results / config 的读接口返回 503，而复核队列 `GET .../review` 返回 500~~。
+  复现属实（根因：`lib/shared/review/store.ts` 直接裸调 `getSupabaseClient()`，抛出的普通
+  `Error` 落进 `request-errors.ts` 的未知错误兜底变 500）。已修：加 `getReadClient()`/
+  `getWriteClient()` 包装，统一抛 `ReviewStoreUnavailableError`（503）。GUI 那句"503，或 500
+  且文案含 Supabase"的兼容判断可以直接简化成只认 503。
+- ~~验证口令目前借用"空更新列表的 PUT"（400=口令对）~~。已加 `POST /features/config/api/verify`
+  （口令对 → 200，见本文件 §3 上方新注）。
 
 ## 7. 本轮后端新增（2026-09-21，已实现，GUI 可直接接）
 
