@@ -42,19 +42,20 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const trimmed = token.trim();
     if (!trimmed) return { ok: false as const, message: "Enter the admin token first." };
 
-    // A write request with an empty change list is a harmless way to ask "is this token accepted?":
-    // the server checks the token before anything else, so a wrong one answers 401/403 and a right
-    // one answers 400 (or 503 when no database is connected). Nothing is ever written.
-    const probe = await apiRequest<unknown>("/features/config/api", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", "x-admin-token": trimmed },
-      body: JSON.stringify({ updates: [] }),
+    // A dedicated, side-effect-free endpoint: 200 = accepted, 401 = wrong, 403 = writing is off.
+    // This used to fake an empty write to /features/config/api and read its 400 as "token was fine",
+    // which left a red 400 in the browser console on every successful unlock and tied unlocking to
+    // an unrelated endpoint's error semantics.
+    const probe = await apiRequest<unknown>("/features/config/api/verify", {
+      method: "POST",
+      headers: { "x-admin-token": trimmed },
     });
     if (!probe.ok && probe.status === 401) return { ok: false as const, message: "That token was not accepted." };
     if (!probe.ok && probe.status === 403) {
       return { ok: false as const, message: "Writing is switched off on this server because no admin token is configured." };
     }
     if (!probe.ok && probe.status === 0) return { ok: false as const, message: probe.error.message };
+    if (!probe.ok) return { ok: false as const, message: probe.error.message };
 
     tokenRef.current = trimmed;
     setUnlocked(true);
