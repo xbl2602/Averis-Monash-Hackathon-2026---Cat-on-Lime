@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Icon, type IconName } from "../../_components/icon";
 import { listProviderOptions } from "../../_lib/provider-options";
 import { AccessSection } from "./_components/access-section";
@@ -70,6 +71,15 @@ export default function SettingsPage() {
           <GmailSection />
           <ConnectionsSection />
           <AccountSection />
+
+          {/* Deliberately not a SectionCard and not in the nav above — this is an internal
+              tool for the team/judges, not a product page. See UI_GUIDE.md §2.10. */}
+          <p className="px-1 text-xs text-fg-faint">
+            <Link href="/features/devmode" className="underline decoration-dotted underline-offset-2 hover:text-fg-muted">
+              Developer mode
+            </Link>{" "}
+            — reset or restore the shared database. Internal tool, not part of the product.
+          </p>
         </div>
       </div>
     </div>
