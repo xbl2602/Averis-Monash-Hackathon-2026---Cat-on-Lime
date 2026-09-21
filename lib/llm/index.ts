@@ -49,8 +49,31 @@ export function isTextProvider(value: unknown): value is TextLLMProvider {
   return typeof value === "string" && (TEXT_PROVIDER_IDS as readonly string[]).includes(value);
 }
 
-/** 单次调用的超时（毫秒）：上游卡住时尽快失败，不做重试（见性能评审） */
+/** 单次调用的超时（毫秒）：上游卡住时尽快失败（见性能评审） */
 const LLM_CALL_TIMEOUT_MS = 20_000;
+
+/**
+ * 超时/暂时性错误的自动重试延迟（毫秒）。P1-2（2026-09-21）：只重试一次，
+ * 且只对"这次大概率是临时抖动"的错误重试（超时/限流/上游5xx/网络错误）；
+ * 401/403/400/422 这类"重试也没用"的错误不重试，直接失败。
+ * 这一层重试只发生在单个 provider 内部，不影响、也不替代 lib/shared/llm-chain.ts
+ * 的"跨 provider 换下一家"降级链——两者是叠加关系：先在本 provider 内重试一次，
+ * 仍失败才轮到降级链换下一个 provider。
+ */
+const RETRY_DELAY_MS = 2_000;
+
+function isRetryableUpstreamError(err: UpstreamServiceError): boolean {
+  return (
+    err.code === "timeout" ||
+    err.code === "rate_limited" ||
+    err.code === "upstream_error" ||
+    err.code === "network_error"
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export const LLM_PROVIDERS: { id: LLMProvider; label: string; cloudOnly: boolean }[] = [
   { id: "claude", label: "Claude (Anthropic)", cloudOnly: false },
@@ -173,10 +196,12 @@ function getModel(provider: LLMProvider): LanguageModel {
  * 统一的 LLM 调用入口。所有模块都应该通过这个函数调用 LLM，不要各自直接用 SDK。
  * 遵守"调试规范"：外部调用失败要能被上层感知（抛出有意义的错误），不在这里静默吞掉。
  *
- * 失败约定（2026-09-20 可靠性/安全评审）：
- * - 本地没配 key → LLMConfigError（可读，含环境变量名）
- * - 上游报错/超时 → UpstreamServiceError（message 只含 provider + 状态 + 稳定 code；
- *   原始错误详情只进 console.warn，不拼进 message、不原样回传）
+ * 失败约定（2026-09-20 可靠性/安全评审；2026-09-21 P1-2 加自动重试）：
+ * - 本地没配 key → LLMConfigError（可读，含环境变量名），不重试（配置问题重试也没用）
+ * - 上游超时/限流/5xx/网络错误 → 等 `RETRY_DELAY_MS` 后原样重试一次；仍失败才抛出
+ *   UpstreamServiceError（message 只含 provider + 状态 + 稳定 code；原始错误详情只进
+ *   console.warn，不拼进 message、不原样回传）
+ * - 401/403/400/422 这类确定性错误 → 不重试，直接抛出
  */
 export async function callLLM(
   provider: LLMProvider,
@@ -187,17 +212,34 @@ export async function callLLM(
     throw new LLMConfigError(unavailableProviderMessage(provider));
   }
   const model = getModel(provider);
-  try {
+
+  const attemptOnce = async (): Promise<string> => {
     const { text } = await generateText({
       model,
       system: options?.system,
       prompt,
-      // 单次调用 20s 超时：上游卡住时不拖着整个请求（不做重试）
+      // 单次调用 20s 超时：上游卡住时不拖着整个请求
       abortSignal: AbortSignal.timeout(LLM_CALL_TIMEOUT_MS),
     });
     return text;
-  } catch (err) {
-    throw toUpstreamServiceError(provider, err);
+  };
+
+  try {
+    return await attemptOnce();
+  } catch (firstErr) {
+    const firstUpstreamErr = toUpstreamServiceError(provider, firstErr);
+    if (!isRetryableUpstreamError(firstUpstreamErr)) {
+      throw firstUpstreamErr;
+    }
+    console.warn(
+      `[llm] ${provider} 首次调用失败（${firstUpstreamErr.code}），${RETRY_DELAY_MS}ms 后重试一次`
+    );
+    await delay(RETRY_DELAY_MS);
+    try {
+      return await attemptOnce();
+    } catch (secondErr) {
+      throw toUpstreamServiceError(provider, secondErr);
+    }
   }
 }
 

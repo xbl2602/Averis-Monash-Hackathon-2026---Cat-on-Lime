@@ -383,3 +383,52 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   results 列表与冲突对返回 `evidence_si/bl`、`si_evidence/bl_evidence`。
   DDL 已同步 `scripts/phase3-evidence-migration.sql`；表结构变更经操作者确认（2026-09-21）。
 - **验证**：tsc；迁移已应用并核实视图列；全量评测 520/520 不变。
+
+### 决策 30：`callLLM` 加同 provider 内自动重试一次，不动跨 provider 降级链（P1-2）
+
+- **背景**：操作者要求"LLM 可以增加自动重试，但是不能忽略 fallback"——之前 `lib/llm/index.ts`
+  的 `callLLM` 单次调用 20s 超时后直接失败，完全靠 `lib/shared/llm-chain.ts` 换下一个 provider
+  兜底；但有些失败是纯粹的临时抖动（网络毛刺、上游一次性 5xx），换 provider 之前先原地重试一次
+  更省事，也更符合"这次大概率会好"的直觉。
+- **决策**：`callLLM` 内部对超时（`isTimeoutError`）、限流（429）、上游 5xx、网络错误这四类
+  "重试大概率有用"的失败，等 2 秒后原样重试一次；对 401/403（认证错误）、400/422（请求本身不合法）
+  这两类"重试也不会变好"的失败不重试，直接抛出。只重试一次，不递归、不无限循环。
+- **两层降级关系（不是二选一，是叠加）**：`callLLM` 内部重试解决"同一个 provider 抖一下"；
+  `lib/shared/llm-chain.ts` 的跨 provider 降级链解决"这个 provider 真的不行，换下一个"；
+  两者顺序是先重试、重试也失败才换 provider，最后才是分类/比对各自的 `degraded` 兜底
+  （决策25）。`callJev` 不加这层重试，失败仍直接交给上层混合引擎转下一级，因为 Jev 的失败处理
+  策略本来就是"换引擎"而不是"同引擎再试一次"。
+- **验证**：`npm run typecheck` 通过；对外错误契约不变（仍是 `LLMConfigError` /
+  `UpstreamServiceError` 两种），重试过程只进 `console.warn`，不改变响应内容。
+
+### 决策 31：人工复核闭环后端落地（REST+MCP，四模块），GUI 留给队友A（P1-1）
+
+- **背景**：`docs/REVIEW_SPEC.md`（2026-09-20）设计已定但一直没实现——题目第④条"拿不准提示人工"
+  只做到"提示"，没有处置闭环。操作者要求"做完他，留好接口，GUI别做"。
+- **落地范围**：共用层 `lib/shared/review/`（`types` / `store` / `actions` / `normalize` / `merge` /
+  `rerun` / `http` / `mcp`，8 个文件）+ `scripts/review-schema.sql`（`review_overrides` 当前生效结论、
+  `review_actions` 只增审计日志，两表 upsert/insert 写、anon 只读）+ 四个模块各 4 个 REST 路由
+  （`api/review/{route,history,undo,bulk}.ts`）+ 4 个 MCP tool（`list_<m>_review` /
+  `get_<m>_review_history` / `apply_<m>_review_action` / `undo_<m>_review_action`，共 16 个，写
+  tool 都标 `readOnlyHint:false`）+ results 导出接线（`applyOverridesToSubmission`，只有
+  `scope=submission` 套用覆盖，新增 `X-Review-Pending`/`X-Review-Deferred` 响应头）。
+- **与 REVIEW_SPEC 的三处偏差（已登记在该文件第15节）**：
+  1. 没建 httpOnly cookie 会话（`admin-session.ts`）——这套机制只有 GUI 会用到，这轮不做 GUI，
+     REST/MCP 沿用和其余模块一致的 `x-admin-token` 请求头方式，等做 GUI 时再补，避免"为不存在的
+     需求预先设计"。
+  2. classification 的复核队列目前只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"——
+     后者这个信号目前只在单文档接口即时返回，没有持久化进 `verification_results`，要补齐需要单独
+     加一列（涉及表结构变更，需要操作者确认，不在本轮范围）。
+  3. MCP 没做独立的 bulk tool（批量只走 REST）——这个其实符合 REVIEW_SPEC §8 原定的 4 个 tool，
+     不算偏差，这里一并记录说明。
+- **实测中发现并修了一个真实 bug**：`lib/shared/review/store.ts` 的 `listOverrides` 最初用 PostgREST
+  的 `.in("email_id", emailIds)` 查询；submission 导出一次传几百个 email_id 进来，拼进 URL 查询参数
+  直接被 PostgREST 判 400 Bad Request（本地实测复现）。根因是 URL 长度限制，不是权限/数据问题——
+  `review_overrides` 表本身很小（只有"被人工处理过的一小撮"），改成不带 `.in()` 条件、按
+  `target_kind` 整表取回再在内存过滤，问题消失，也更贴近这张表的实际规模。
+- **验证**：本地 `next dev` 对 `comparison` 模块实测 confirm/correct/undo/bulk（含故意传一个不存在的
+  `email_id`，验证批量失败隔离能返回 `{succeeded, failed}` 而不整批失败）/ 乐观锁冲突 409 /
+  一致性校验 400（MISMATCH 不带缺陷字段被拒）/ 撤销后正确回滚 / 提交导出的 `X-Review-Pending`
+  `X-Review-Deferred` 头随人工动作实时变化，全部通过；测试数据用完已从 `review_overrides`/
+  `review_actions` 清空，没留在共享数据库里。`npm run typecheck`、`npm run build`（16 个新路由都
+  正常生成）、`npm run test:mcp-annotations`（写 tool 白名单已加 8 个新条目）均通过。

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TEXT_PROVIDER_IDS } from "@/lib/llm";
 import { readSampleAttachmentParsed } from "@/lib/shared/sample-inputs";
+import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 import { extractFields } from "../logic";
 
 /**
@@ -46,3 +47,6 @@ export const extractionMcpTool = {
     return extractFields({ documentText: parsed.text, documentType, provider });
   },
 };
+
+// 人工复核闭环（P1-1）：队列 = NEEDS_REVIEW 且原因是抽取相关问题的邮件
+export const extractionReviewMcpTools = makeReviewMcpTools("extraction", "抽取");

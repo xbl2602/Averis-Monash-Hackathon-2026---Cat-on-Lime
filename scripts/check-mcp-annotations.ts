@@ -12,7 +12,20 @@
  */
 import { mcpTools } from "../app/core/mcp-server/tools";
 
-const EXPECTED_WRITE_TOOLS = ["run_batch", "sync_gmail", "classify_uploaded_document"].sort();
+// P1-1 人工复核闭环新增 8 个写 tool（apply/undo × classification/extraction/comparison/pipeline）
+const EXPECTED_WRITE_TOOLS = [
+  "run_batch",
+  "sync_gmail",
+  "classify_uploaded_document",
+  "apply_classification_review_action",
+  "undo_classification_review_action",
+  "apply_extraction_review_action",
+  "undo_extraction_review_action",
+  "apply_comparison_review_action",
+  "undo_comparison_review_action",
+  "apply_pipeline_review_action",
+  "undo_pipeline_review_action",
+].sort();
 
 const total = mcpTools.length;
 const unknown = mcpTools

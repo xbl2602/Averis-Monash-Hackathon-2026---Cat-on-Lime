@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { compareDocuments } from "../logic";
 import { LLM_PROVIDER_IDS, type LLMProvider } from "@/lib/llm";
+import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 
 const fieldsSchema = z
   .object({
@@ -42,3 +43,6 @@ export const comparisonMcpTool = {
     return compareDocuments({ si, bl, provider });
   },
 };
+
+// 人工复核闭环（P1-1）：list/get_history 只读，apply/undo 会写库（见 lib/shared/review/mcp.ts）
+export const comparisonReviewMcpTools = makeReviewMcpTools("comparison", "比对");

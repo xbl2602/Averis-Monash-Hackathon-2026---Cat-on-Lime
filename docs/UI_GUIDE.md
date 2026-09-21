@@ -110,6 +110,24 @@
 
 上传侧约定：文件夹用 `<input webkitdirectory>` 拿列表后**按 3MB/批**切开逐个请求（整批超限返回 413）。
 
+### 2.7 人工复核（新，还没有界面——这是给你的下一块拼图）
+
+后端（REST+MCP）已实现，**GUI 还没人接**，是队友A当前最大的一块待做。完整设计（队列筛选、动作按钮、
+时间线、口令、移动端）见 [`REVIEW_SPEC.md`](REVIEW_SPEC.md) 第 9 节；接口契约见
+[`SHARED_INTERFACES.md`](SHARED_INTERFACES.md)「人工复核闭环」一节。这里只列一页纸速查：
+
+| 方法 路径（`<m>` = classification/extraction/comparison/pipeline） | 一句话作用 | 口令 | 状态 |
+|---|---|---|---|
+| `GET /features/<m>/api/review` | 复核队列（默认异常驱动，`include_ok=true` 看全部） | 免 | 实做 |
+| `POST /features/<m>/api/review` | 应用一个动作（confirm/correct/disposition/defer/undefer/note/rerun） | 需 | 实做 |
+| `GET /features/<m>/api/review/history?email_id=` | 某条的动作时间线 | 免 | 实做 |
+| `POST /features/<m>/api/review/undo` | 撤销最近一次动作 | 需 | 实做 |
+| `POST /features/<m>/api/review/bulk` | 批量应用（逐条独立、失败隔离） | 需 | 实做 |
+
+先接 `comparison`（MISMATCH 签字闭环，最核心）；四个模块的动作集一样，UI 组件可以共用（建议放
+`app/_components/review/`，REVIEW_SPEC §9 有写）。乐观锁：写操作可选带 `expected_updated_at`，
+冲突返回 409，前端应提示"这条已被别人改过"。
+
 ## 3. 口令怎么带（重要）
 
 - 写接口统一请求头 `x-admin-token`；服务端口令存在环境变量 `ADMIN_TOKEN`（未配置 403，口令错 401）。

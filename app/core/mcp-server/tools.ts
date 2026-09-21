@@ -1,9 +1,9 @@
 import type { z } from "zod";
-import { classificationMcpTool } from "@/app/features/classification/mcp";
-import { extractionMcpTool } from "@/app/features/extraction/mcp";
-import { comparisonMcpTool } from "@/app/features/comparison/mcp";
+import { classificationMcpTool, classificationReviewMcpTools } from "@/app/features/classification/mcp";
+import { extractionMcpTool, extractionReviewMcpTools } from "@/app/features/extraction/mcp";
+import { comparisonMcpTool, comparisonReviewMcpTools } from "@/app/features/comparison/mcp";
 import { resultsMcpTools } from "@/app/features/results/mcp";
-import { pipelineMcpTool } from "@/app/features/pipeline/mcp";
+import { pipelineMcpTool, pipelineReviewMcpTools } from "@/app/features/pipeline/mcp";
 import { mailMcpTools } from "@/app/features/mail/mcp";
 import { importMcpTools } from "@/app/features/import/mcp";
 
@@ -54,9 +54,13 @@ export interface McpToolDefinition {
 
 export const mcpTools: McpToolDefinition[] = [
   classificationMcpTool,
+  ...classificationReviewMcpTools,
   extractionMcpTool,
+  ...extractionReviewMcpTools,
   comparisonMcpTool,
+  ...comparisonReviewMcpTools,
   pipelineMcpTool,
+  ...pipelineReviewMcpTools,
   ...resultsMcpTools,
   ...mailMcpTools,
   ...importMcpTools,

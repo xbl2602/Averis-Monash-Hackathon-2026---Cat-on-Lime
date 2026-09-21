@@ -42,10 +42,11 @@ npm run import:data       # 增量导入（需要 .env.local 里填了 SUPABASE_
 
 现有正式项目已经建好表，**不需要重跑**；只有在换/新建 Supabase 项目时才按这里重建，并把权限核对一遍：
 
-1. **建表**（控制台 SQL Editor 全部粘贴执行，两个脚本都可重复执行）：
+1. **建表**（控制台 SQL Editor 按顺序全部粘贴执行，三个脚本都可重复执行）：
+   - `scripts/core-schema.sql`：**先跑这个**——核心三表（`raw_emails` / `parsed_attachments` / `verification_results`）、只读视图 `verification_overview`、缓存表 `llm_call_cache`，以及三张业务表的 anon select 策略（`llm_call_cache` 故意不给 anon 策略，只走 service role）
    - `scripts/phase2-schema.sql`：第二阶段 4 张业务表（`app_config` / `mail_accounts` / `supabase_projects` / `uploaded_documents`）
    - `scripts/phase2-rls.sql`：给上面 4 张表启用 RLS，并给 `uploaded_documents` 建 anon select 策略
-   - 主三表（`raw_emails` / `parsed_attachments` / `verification_results`）、只读视图 `verification_overview`、缓存表 `llm_call_cache` 的建表语句**不在仓库里**，需要从现有 Supabase 控制台导出后补进 `scripts/`；其中 **`verification_results` / `verification_overview` 必须保留 anon select 策略，否则 results 的 list/stats/conflicts/export 与 pipeline 的增量读取会全部失败**
+   - 跑完后再执行一次 `npm run import:data` 把 `data/sample/` 的样例邮件+附件导入 `raw_emails`/`parsed_attachments`（`verification_results` 由后续跑分类/抽取/比对时写入）
 2. **Storage**：Storage → 确认 bucket `uploads` 存在（private），并到 Storage → Policies 核对/记录它的访问策略（以控制台实际策略为准）。
 3. **anon 只读探测**（用匿名 key 访问，验证"读全开放"没配错）：
    ```bash
@@ -64,7 +65,7 @@ npm run evaluate -- --limit=50  # 只跑前 50 封（调试）
 npm run evaluate -- --no-write  # 只算分，不写库
 ```
 
-ground_truth 仅用于自测（官方 Discord 已澄清允许），不会进最终提交文件。
+ground_truth 仅用于本地自测：官方已明确确认题目包（含 `ground_truth.json`）允许参赛者使用，唯一约束是它只用于自测、绝不进最终提交文件（口径见 `AGENTS.md`/`CLAUDE.md`「评审沉淀」⑤）。
 当前成绩（2026-09-20）：分类 macro-F1 100%、端到端 520/520、缺陷字段 100%/100%/100%。
 
 各判断点的选项与定义、程序/模型判定标准、模型输入（扁平化）契约，统一记录在 [DECISION_SPEC.md](docs/DECISION_SPEC.md)。
@@ -225,7 +226,7 @@ docker compose up --build
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：① extraction 的 REST/MCP 之前把 PDF 按 UTF-8 直接读（现在统一走格式解析）；② Next 打包器会丢 `pdf.worker.mjs` 导致服务端 PDF 解析失败（已把 `pdf-parse`/`pdfjs-dist` 声明为 `serverExternalPackages`）
-- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库），Claude/OpenAI/DeepSeek 还没填（选这几个 provider 会返回可读的缺 key 错误）
+- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库）。`DEEPSEEK_API_KEY` 已在 Vercel 填入，但 Vercel 的环境变量改动只在**下一次部署**才生效——填入时间晚于当时最新一次部署，所以还需要等一次新部署（本次改动 push 后会自动触发）才能验证。Claude/OpenAI 还没填（选这几个 provider 会返回可读的缺 key 错误）
 - 第二阶段（功能已合并，详见 [PHASE2_SPEC.md](docs/PHASE2_SPEC.md)）：**config 配置中心**（GUI 可调、敏感值 AES-256-GCM 加密、读开放/写口令保护）、**mail 占位接口**（Gmail 连接状态 + 多 Supabase 项目切换与停用恢复）、**import 文档上传**（单件/多选/文件夹、校验链、内容哈希去重、按内容识别 SI/BL、原文件存 Storage）。新增 4 张业务表与 `uploads` bucket（RLS 脚本见 `scripts/phase2-rls.sql`；线上实际策略以控制台为准，核对/探测方法见上文「数据库初始化」）。
   - **线上写入已配置**（2026-09-20）：`ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已加进 Vercel（production + preview），线上实测：无口令写入 401、带口令可写、敏感值加密存储；本地 `.env.local` 有同样的值。如需在其他环境部署，记得补这两个变量（见 `.env.example`）
   - GUI（配置页/上传页）由队友A负责接入：**先看 [docs/UI_GUIDE.md](docs/UI_GUIDE.md)**（GUI 开发指南：就绪接口速查 + 要做的界面改动）；字段级契约见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md) 的 config / mail / import 章节

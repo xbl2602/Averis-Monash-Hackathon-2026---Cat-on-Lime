@@ -8,6 +8,7 @@
 
 | 我想知道 | 打开这份 |
 |---|---|
+| **现在还有什么没做完（待办清单）** | **[TODO.md](TODO.md)** |
 | 怎么装、怎么跑、怎么部署（本地 / Docker / Vercel） | 仓库根目录 [README.md](../README.md) |
 | 要做/改界面（GUI），接口哪些能接 | **[UI_GUIDE.md](UI_GUIDE.md)** ← 做界面的唯一入口 |
 | 某个接口的字段 / 参数 / 返回 / 错误码 | [SHARED_INTERFACES.md](SHARED_INTERFACES.md) |
@@ -39,6 +40,7 @@
 | [FINALS_ROADMAP.md](FINALS_ROADMAP.md) | 决赛冲刺计划与缺口清单 | 视计划变化更新 |
 | [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md) | 题目背景、评分理解、赛程 | 背景，基本不改 |
 | [PHASE2_SPEC.md](PHASE2_SPEC.md) | config / mail / import 三块的设计说明 | ⚠️ 部分字段已落后于代码，以 SHARED_INTERFACES 为准（差异清单见 UI_GUIDE §6） |
+| [REVIEW_SPEC.md](REVIEW_SPEC.md) | 人工复核闭环（复核队列 / 落库 / 撤销 / 审计）的设计规范 | ✅ 后端（REST+MCP）已实现，四模块都接了；**GUI 未做**（队友A待办，见 UI_GUIDE.md）；实现记录见本文件 §14.1 |
 
 ### C. 历史 · 只读（不要再回头改，新记录追加到末尾）
 

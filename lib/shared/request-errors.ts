@@ -34,6 +34,11 @@ const KNOWN_ERROR_STATUS: Record<string, number> = {
   MailNotFoundError: 404,
   MailStoreUnavailableError: 503,
   MailDataError: 500,
+  ReviewRequestError: 400,
+  ReviewConsistencyError: 400,
+  ReviewNotFoundError: 404,
+  ReviewConflictError: 409,
+  ReviewStoreUnavailableError: 503,
 };
 
 export const INTERNAL_ERROR_MESSAGE = "内部错误（详情见服务端日志）";

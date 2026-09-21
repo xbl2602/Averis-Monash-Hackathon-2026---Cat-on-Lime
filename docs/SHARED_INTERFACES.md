@@ -295,6 +295,64 @@ dry_run 不写库，所以预览结果不会累积；要看 520 封完整体用�
 `dry_run=true` 允许匿名预览（单次封顶 20 封）。只读 tool 全部显式声明 `readOnlyHint: true`，
 汇总层 gate 按 `readOnlyHint !== true` fail-closed 判定（未注解 = 需要口令）。
 
+## 人工复核闭环（review，P1-1）
+
+设计规范见 [REVIEW_SPEC.md](REVIEW_SPEC.md)（权威说明，含动作语义、数据模型、并发/安全）；这里只记对外契约。
+**实现范围**：四个模块（classification/extraction/comparison/pipeline）的 REST + MCP 都已实现；
+**GUI 未实现**（队友A的待办，见 UI_GUIDE.md）。共用逻辑在 `lib/shared/review/`（不是任何一个 feature 内部）。
+
+### REST 契约（每个模块相同形状，`<m>` = classification | extraction | comparison | pipeline）
+
+| 路径 | 方法 | 作用 | 口令 |
+|---|---|---|---|
+| `/features/<m>/api/review` | GET | 复核队列：`?include_ok&q&status&reason&review_state&limit&offset` | 免 |
+| `/features/<m>/api/review` | POST | 应用一个动作：`{ email_id, action, payload?, note?, reason?, expected_updated_at? }` | 需 `x-admin-token` |
+| `/features/<m>/api/review/history` | GET | `?email_id=` 某条的动作时间线 | 免 |
+| `/features/<m>/api/review/undo` | POST | `{ email_id, action_id?, expected_updated_at? }` | 需 |
+| `/features/<m>/api/review/bulk` | POST | `{ email_ids[], action: "confirm"\|"disposition"\|"defer", payload? }`，逐条独立、失败隔离，返回 `{ batch_id, succeeded[], failed[] }` | 需 |
+
+`action` ∈ `confirm / correct / disposition / defer / undefer / note / rerun`（`undo` 走独立端点，不在这个枚举里）。
+`payload` 字段：`category`（分类改判）/ `comparison_status`+`review_reason`+`defect_fields`（比对改结论，三者必须自洽：
+MISMATCH 必有缺陷无原因、NEEDS_REVIEW 必有原因无缺陷、OK 都没有，否则 400）/ `extracted_si`+`extracted_bl`（抽取字段修正）/
+`disposition`（分拣去向，六选一）/ `provider`（仅 `rerun` 用，指定重跑用哪个模型）。
+
+响应形状：`{ item: ReviewQueueItem, action: ReviewActionRow }`（undo 同形状）；bulk 是
+`{ batch_id, succeeded: string[], failed: { email_id, error }[] }`。类型定义见 `lib/shared/review/types.ts`。
+
+**队列默认过滤（异常驱动，`include_ok=true` 才看全部）**，各模块口径不同：
+- `comparison`：`comparison_status ∈ {MISMATCH, NEEDS_REVIEW}`
+- `extraction`：`comparison_status=NEEDS_REVIEW` 且 `review_reason ∈ {missing_value, wrong_doc_type, unreadable}`
+- `classification`：`model_provider` 的分类器分段 = `degraded`（即"全模型失败降级"）
+- `pipeline`：`processing_status=failed` 或 `model_provider` 含 `degraded`
+
+**已知缺口**：分类的"Jev 置信度 < 0.85 但没有全失败"这种拿不准，目前**没有持久化**到 `verification_results`
+（`classifyEmailHybrid` 算出的 `needs_review` 只在单文档接口即时返回，批量流水线没有存这个信号），所以
+classification 复核队列目前只覆盖"降级"这一种情况，不覆盖"低置信度但 Jev 正常返回"这种。要补齐需要在
+`verification_results` 加一列持久化分类置信度/needs_review，这是一次单独的 schema 改动，未包含在本轮范围内。
+
+错误：参数错/一致性校验不过 400；口令错 401；未配置 `ADMIN_TOKEN` 403；查无邮件 404；
+乐观锁冲突（`expected_updated_at` 不匹配，或撤销的不是最新动作）409；其余 500。
+
+### MCP tool 契约（每个模块 4 个，共 16 个）
+
+`list_<m>_review`（只读）/ `get_<m>_review_history`（只读）/ `apply_<m>_review_action`（写，`readOnlyHint:false`）/
+`undo_<m>_review_action`（写，`readOnlyHint:false`）。参数/返回与 REST 一一对应；MCP 没有单独的 bulk tool
+（批量目前只走 REST）。
+
+### 导出接线（results 模块）
+
+`scope=submission` 的导出会调用 `lib/shared/review/merge.ts` 的 `applyOverridesToSubmission`：
+只有 `classification`（改 `category`）和 `comparison`（改 `status`/`review_reason`/`defect_fields`）两个
+target_kind 的覆盖会进最终提交格式（`extraction`/`pipeline` 的覆盖不直接影响提交，官方格式本来就不含抽取字段）；
+`review_state=deferred` 的覆盖不生效（等同系统结果，但计入统计）。响应头新增
+`X-Review-Pending`（应复核未处置数）、`X-Review-Deferred`（被搁置未闭环数），MCP `export_results` 的 `_meta`
+同步 `review_pending`/`review_deferred`。**只有 `scope=submission` 套用覆盖**，`results`/`conflicts` 仍展示系统原值。
+
+### 数据库
+
+`review_overrides`（当前生效的人工结论，`unique(target_kind,email_id)`，写入一律 upsert）+
+`review_actions`（append-only 审计日志）。DDL 见 `scripts/review-schema.sql`；读对 anon 开放，写走 service role。
+
 ## config 模块（运行时配置中心，第二阶段）
 
 `app/features/config/`：GUI 可调的运行时配置。**数据库有值 > 环境变量 > 代码默认值**；

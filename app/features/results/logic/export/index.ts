@@ -11,6 +11,7 @@
  *   避免把附件解析依赖（mammoth/pdf-parse 等）拖进导出函数包（next.config 只带文件名清单）
  */
 import { listSampleEmailIds } from "@/lib/shared/inbox";
+import { applyOverridesToSubmission } from "@/lib/shared/review/merge";
 import { PIPELINE_LOGIC_VERSION } from "@/lib/shared/versions";
 import type { ComparedField, EmailVerificationResult } from "@/lib/shared/types";
 import { listAllConflicts } from "../conflicts";
@@ -78,6 +79,8 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
     staleIds: [],
     invalidIds: [],
     incomplete: false,
+    reviewPending: 0,
+    reviewDeferred: 0,
     content: serialize(request.format, data),
     generatedAt,
   };
@@ -90,11 +93,11 @@ async function buildSubmissionDocument(
   generatedAt: string
 ): Promise<ExportDocument> {
   const rows = await listAllResults(ALL_RESULTS_QUERY);
-  const payload: Record<string, EmailVerificationResult> = {};
+  const systemPayload: Record<string, EmailVerificationResult> = {};
 
   for (const row of rows) {
     if (!row.category || !row.comparison_status) continue; // failed 行没有合法结果，跳过
-    payload[row.email_id] = {
+    systemPayload[row.email_id] = {
       category: row.category,
       status: row.comparison_status,
       review_reason: row.review_reason,
@@ -102,6 +105,9 @@ async function buildSubmissionDocument(
       has_defect: row.has_defect,
     };
   }
+
+  // 人工复核覆盖只套用在 submission 导出上（§5.3）；results/conflicts 仍展示系统原值
+  const { payload, reviewPending, reviewDeferred } = await applyOverridesToSubmission(systemPayload);
 
   const itemCount = Object.keys(payload).length;
   const expected = await resolveExpectedSampleIds(stats);
@@ -140,6 +146,8 @@ async function buildSubmissionDocument(
     staleIds,
     invalidIds,
     incomplete,
+    reviewPending,
+    reviewDeferred,
     content: toJson(payload),
     generatedAt,
   };

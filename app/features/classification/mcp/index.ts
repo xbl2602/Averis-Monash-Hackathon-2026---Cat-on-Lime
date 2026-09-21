@@ -2,6 +2,7 @@ import { z } from "zod";
 import { classifyEmail } from "../logic";
 import { getSampleEmail } from "@/lib/shared/inbox";
 import { LLM_PROVIDER_IDS, type LLMProvider } from "@/lib/llm";
+import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 
 /**
  * 这个模块要暴露成 MCP tool 的定义，被 /app/core/mcp-server 汇总注册。
@@ -36,3 +37,6 @@ export const classificationMcpTool = {
     return classifyEmail({ email, provider });
   },
 };
+
+// 人工复核闭环（P1-1）：队列目前只覆盖"全模型失败降级"，见 docs/TODO.md 的实现记录
+export const classificationReviewMcpTools = makeReviewMcpTools("classification", "分类");

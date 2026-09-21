@@ -212,6 +212,14 @@ export interface ExportDocument {
    * 任意一条成立就是 true（fail-closed：宁可提示不完整，也不谎报"已完整"）
    */
   incomplete: boolean;
+  /**
+   * scope=submission 时：应该复核但还没处置的项数（NEEDS_REVIEW/MISMATCH 且没有对应的人工覆盖）。
+   * 人工复核闭环（P1-1，见 docs/REVIEW_SPEC.md §5.2）；非 submission 场景恒为 0。
+   * 大于 0 不影响 incomplete（提交格式仍合法），只是提示前端"还有 N 条未人工闭环"。
+   */
+  reviewPending: number;
+  /** scope=submission 时：被人工搁置（defer）、尚未闭环的项数；非 submission 场景恒为 0 */
+  reviewDeferred: number;
   /** 文件内容本体：HTTP 直接作为响应体，MCP 作为 text 返回 */
   content: string;
   generatedAt: string;

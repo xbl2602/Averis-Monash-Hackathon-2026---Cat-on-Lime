@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LLM_PROVIDER_IDS } from "@/lib/llm";
+import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 import { normalizeBatchRequest, runPipelineBatch } from "../logic";
 import { BATCH_DEFAULT_LIMIT, BATCH_MAX_CONCURRENCY, BATCH_MAX_LIMIT } from "../logic/types";
 
@@ -66,3 +67,6 @@ export const pipelineMcpTool = {
   handler: async (args: Record<string, unknown>, context?: { anonymous?: boolean }) =>
     runPipelineBatch(normalizeBatchRequest(args), { anonymous: context?.anonymous === true }),
 };
+
+// 人工复核闭环（P1-1）：队列 = processing_status=failed 或 model_provider 含 degraded 的邮件
+export const pipelineReviewMcpTools = makeReviewMcpTools("pipeline", "流水线");

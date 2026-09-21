@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
         "X-Export-Stale-Ids": formatIdList(doc.staleIds),
         "X-Export-Invalid": String(doc.invalidIds.length),
         "X-Export-Invalid-Ids": formatIdList(doc.invalidIds),
+        "X-Review-Pending": String(doc.reviewPending),
+        "X-Review-Deferred": String(doc.reviewDeferred),
         "X-Export-Generated-At": doc.generatedAt,
       },
     });

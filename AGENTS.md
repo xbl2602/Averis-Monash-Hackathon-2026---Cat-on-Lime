@@ -17,7 +17,7 @@
 - **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 docs/TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
 - **功能模块划分**：`classification` / `extraction` / `comparison` 三个 feature，各自负责人见文末"各功能模块负责人"。
 - **正式 Vercel 项目是 `hackathonaveris`，不是 `hackathon-demo`**：账号下一度同时存在两个 Vercel 项目——`hackathon-demo`（最早建的，没连 GitHub，不会自动更新，已停用，不用管它）和 `hackathonaveris`（正确连了 GitHub 仓库 `xbl2602/Hackathon` 的 `main` 分支，`git push` 会自动触发重新部署）。**以 `hackathonaveris` 为准**。线上demo地址：`https://hackathonaveris.vercel.app`，SSO保护默认关闭，不登录也能直接打开。
-- **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**线上验收（2026-09-20）**：云端 MCP 握手、结果查询/导出、Jev 分类、Gemini 分类都已实测可用。**还没填**：`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`（云端选这几个 provider 会报缺 key 的可读错误，选 Jev/Gemini 可用）——这几个是私密key，需要团队自己去申请，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key；`SUPABASE_SERVICE_ROLE_KEY` 线上批量写结果也要用（已配置并实测 `run_batch` 写库成功，本地导入/评测也用它）。
+- **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**线上验收（2026-09-20）**：云端 MCP 握手、结果查询/导出、Jev 分类、Gemini 分类都已实测可用。**2026-09-21 更新**：`DEEPSEEK_API_KEY` 已经填进 Vercel，但填入时间晚于当时线上最新一次部署——Vercel 的环境变量改动只在下一次部署后才对已运行的函数生效，所以还没验证通过（下一次 `git push` 触发部署后需要重新实测一次）。`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 仍未填（云端选这两个 provider 会报缺 key 的可读错误）——这几个是私密key，需要团队自己去申请，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key；`SUPABASE_SERVICE_ROLE_KEY` 线上批量写结果也要用（已配置并实测 `run_batch` 写库成功，本地导入/评测也用它）。
 
 ## 产品形态要求（硬性，初赛截止前必须做到）
 
@@ -205,3 +205,4 @@ docs/SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写
 ## 评审沉淀（/council 2026-09-21）
 
 - ① MCP 新增写 tool 必须显式声明 `readOnlyHint:false`（MCP 入口对未声明注解的 tool 按"需要口令"fail-closed 处理）；② 实现与已批方案有偏差（如分块粒度、默认引擎）必须显式登记并同步验证清单；③ 外部调用的错误文案要可读但不透传上游原文；④ 提交文件完整性（submission 导出）的分母必须来自独立可信来源（官方样例清单），不能用自己的数据当分母
+- ⑤ **官方题目包（含答案）已确认可用（2026-09-21 口径更新）**：`[!] Problem Statement/` 下的 `sdoc-hackathon-docker`（含 `data_v2/ground_truth.json` 答案、出题生成器、官方评分脚本）是主办方**明确声明允许参赛者使用**的材料，正常使用、留在仓库里都不构成违规——**不要再按"泄露/红线"处理，也不要为此清理 git 历史或从仓库删除**。唯一约束：`ground_truth` 只用于本地自测，绝不进最终提交文件（`scope=submission` 的导出里没有它）。

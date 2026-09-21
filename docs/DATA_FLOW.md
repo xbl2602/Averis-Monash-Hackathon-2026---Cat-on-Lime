@@ -74,6 +74,13 @@ verification_results（结果层）
 规则：results 模块**只读**，不写任何表；别的模块也不要自己去查 `verification_overview`
 或拼相同的查询——要数据就走 results 的 logic（接口格式见 SHARED_INTERFACES.md）。
 
+**例外（P1-1 人工复核闭环，2026-09-21）**：`scope=submission` 导出会额外读 `review_overrides`
+（通过 `lib/shared/review/merge.ts` 的 `applyOverridesToSubmission`，不是 results 模块自己拼查询，
+是调公共区 `lib/shared/review/` 提供的函数），把人工复核结论叠加到系统结果之上再输出。这是唯一
+一处"结果查询之外还读别的表"的地方，因为它就是导出链路本身的一部分，不算破坏"results 只读查询"
+的边界——`review_overrides`/`review_actions` 两张表的写入完全由 `lib/shared/review/` 负责，
+四个 feature 模块（classification/extraction/comparison/pipeline）各自的 `api/review/*` 只是薄层转发。
+
 ## 数据的"读/写"边界
 
 | 数据 | 谁能读 | 谁能写 |
@@ -81,6 +88,7 @@ verification_results（结果层）
 | `data/sample/`（官方样例邮件） | 所有模块 | 任何代码都不应该修改它——这是官方给的原始数据，改了就对不上了 |
 | `lib/shared/types.ts`（字段/格式定义） | 所有模块 | 改动前必须先跟操作者确认，这是"公共区"，改错了三个模块都受影响 |
 | Supabase（`raw_emails` 原始层 / `parsed_attachments` 文字层 / `verification_results` 结果层 / 只读视图 `verification_overview`，另有内部缓存 `llm_call_cache`） | 前三张表和视图对所有模块、UI、预览开放读（RLS 公开只读）；结果查询统一走 `verification_overview` 视图（results 模块实现），不要各自拼两张表；`llm_call_cache` 只有服务端能读写 | `raw_emails`、`parsed_attachments` 只由本地导入脚本 `npm run import:data` 增量写（按指纹跳过没变的内容；upsert 冲突键 `email_id` / `email_id,file_path`）；`verification_results` 由本地评测 `npm run evaluate` 按 `email_id` upsert 写（单封失败标 `processing_status='failed'`）。不要在别的代码里零散写这些表；表结构和指纹规则见 SHARED_INTERFACES.md「数据库存储层」 |
+| Supabase（`review_overrides` 人工覆盖 / `review_actions` 审计日志，P1-1） | 对所有模块、UI 开放读（RLS 公开只读） | 只由 `lib/shared/review/store.ts` 写（四模块的 `api/review/*` 都调这一份，不各自拼 SQL）；`review_overrides` 按 `(target_kind,email_id)` upsert，`review_actions` 只 insert（append-only）；DDL 见 `scripts/review-schema.sql` |
 | 环境变量 | 只用来配置"怎么连外部服务"（LLM key、Supabase地址） | 不要把业务数据（邮件内容、比对结果）塞进环境变量里，那是配置，不是数据 |
 
 ## 为什么要这么严格

@@ -43,7 +43,8 @@ export class UpstreamServiceError extends Error {
 /**
  * 判断异常是不是"调用超时"。
  * AbortSignal.timeout 抛出的 DOMException 名字是 TimeoutError；不同 SDK 可能把它包进
- * cause 链，所以往 cause 里多找两层。不做重试（见 CLAUDE.md 调试规范）。
+ * cause 链，所以往 cause 里多找两层。这里只负责"判断是不是超时"，是否重试由调用方
+ * （`lib/llm/index.ts` 的 `callLLM`）决定——2026-09-21 起超时会自动重试一次（见该文件）。
  */
 export function isTimeoutError(err: unknown): boolean {
   let current: unknown = err;

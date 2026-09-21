@@ -151,6 +151,8 @@ const exportResultsMcpTool = {
         stale_ids: doc.staleIds.slice(0, 50),
         invalid: doc.invalidIds.length,
         invalid_ids: doc.invalidIds.slice(0, 50),
+        review_pending: doc.reviewPending,
+        review_deferred: doc.reviewDeferred,
         generated_at: doc.generatedAt,
       },
     };
