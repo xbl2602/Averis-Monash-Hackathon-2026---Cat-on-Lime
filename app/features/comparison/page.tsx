@@ -1,7 +1,11 @@
 import { PageHeader } from "../../_components/page-header";
+import { listEmailOptions } from "../../_lib/email-options";
 import { ComparisonPanel } from "./ui";
 
-export default function ComparisonPage() {
+// The sample inbox is read from the server on every visit
+export const dynamic = "force-dynamic";
+
+export default async function ComparisonPage() {
   return (
     <div className="space-y-8">
       <PageHeader
@@ -9,7 +13,7 @@ export default function ComparisonPage() {
         title="SI / BL comparison"
         description="Compare the Bill of Lading draft against the Shipping Instruction field by field, show the differences, and flag anything a person should check."
       />
-      <ComparisonPanel />
+      <ComparisonPanel emails={await listEmailOptions()} />
     </div>
   );
 }

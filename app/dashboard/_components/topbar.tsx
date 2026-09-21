@@ -5,16 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../_components/icon";
 import { ThemeToggle } from "../../_components/theme-toggle";
+import { AdminChip } from "../../_components/admin/admin-chip";
+import { pageTitle } from "./nav-items";
 import { useSearch } from "./search-context";
-
-const PAGE_TITLES: Record<string, string> = {
-  "/dashboard/settings": "Settings",
-  "/features/verification": "Full pipeline",
-  "/features/classification": "Email classification",
-  "/features/extraction": "Field extraction",
-  "/features/comparison": "SI / BL comparison",
-  "/features/jev-lab": "Model lab (Jev)",
-};
 
 export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { query, setQuery } = useSearch();
@@ -63,7 +56,7 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
         </div>
       ) : (
         <div className="flex-1 truncate text-sm font-semibold text-fg-muted">
-          {PAGE_TITLES[pathname] ?? "Dashboard"}
+          {pageTitle(pathname)}
         </div>
       )}
 
@@ -74,6 +67,8 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
         <Icon name="play" size={16} />
         Run pipeline
       </Link>
+
+      <AdminChip />
 
       <ThemeToggle />
 

@@ -13,9 +13,22 @@ const MESSAGES: Record<number, string> = {
   401: "This action needs an admin token, and none was accepted.",
   403: "This action is not enabled on this server.",
   404: "The requested item was not found.",
+  409: "Someone else changed this item first. Reload it to see the latest version, then try again.",
+  413: "That upload is too large. Send fewer or smaller files at a time.",
+  422: "The file could not be read. Check that it is a text, PDF, Word or Excel document with readable text.",
   429: "Too many requests right now. Wait a moment and try again.",
   503: "A service or API key this step depends on is not configured on this server. Try another model.",
 };
+
+/**
+ * True when the failure means "no database is connected to this server" rather than a bad request.
+ * The results and config routes answer 503; the review queue answers 500 with the missing-Supabase text.
+ */
+export function isDatabaseUnavailable(status: number, body: unknown): boolean {
+  if (status === 503) return true;
+  const detail = body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : "";
+  return status === 500 && /supabase/i.test(detail);
+}
 
 export function describeApiError(status: number, body: unknown): ApiErrorInfo {
   const detail =

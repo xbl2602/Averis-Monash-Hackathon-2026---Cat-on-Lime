@@ -3,12 +3,10 @@
 import { useState } from "react";
 import { describeApiError, describeNetworkError, type ApiErrorInfo } from "../../../_components/api-error";
 import { ErrorNotice } from "../../../_components/error-notice";
+import { EmailPicker } from "../../../_components/email-picker";
 import { Icon } from "../../../_components/icon";
-
-interface EmailOption {
-  email_id: string;
-  subject: string;
-}
+import { Gauge } from "../../../_components/motion/gauge";
+import type { EmailOption } from "../../../_lib/attachments";
 
 interface ClassifyResponse {
   category: string;
@@ -69,16 +67,7 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
     <div className="space-y-5">
       <div className="card p-6 sm:p-8">
         <div className="grid gap-5 sm:grid-cols-2">
-          <label className="block text-sm">
-            <span className="mb-2 block font-semibold">Sample email</span>
-            <select value={emailId} onChange={(e) => setEmailId(e.target.value)} className="field">
-              {emails.map((email) => (
-                <option key={email.email_id} value={email.email_id}>
-                  {email.email_id} — {email.subject.slice(0, 60)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <EmailPicker emails={emails} value={emailId} onChange={setEmailId} label="Sample email" />
           <label className="block text-sm">
             <span className="mb-2 block font-semibold">Model</span>
             <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
@@ -116,14 +105,9 @@ export function JevLabPanel({ emails }: { emails: EmailOption[] }) {
           <p className="text-sm text-fg-muted">{category?.desc ?? "Unknown category"}</p>
 
           {confidencePct !== null ? (
-            <div>
-              <div className="flex justify-between text-xs text-fg-muted">
-                <span>Confidence (calibrated by Jev)</span>
-                <span className="font-mono">{confidencePct}%</span>
-              </div>
-              <div className="mt-2 h-2.5 w-full rounded-full bg-sunken">
-                <div className="h-2.5 rounded-full bg-accent" style={{ width: `${confidencePct}%` }} />
-              </div>
+            <div className="flex items-center gap-5">
+              <Gauge value={confidencePct / 100} label="confident" />
+              <p className="text-xs text-fg-muted">Confidence, calibrated by Jev. Below 85% the email is sent to a person.</p>
             </div>
           ) : (
             <p className="text-xs text-fg-faint">
