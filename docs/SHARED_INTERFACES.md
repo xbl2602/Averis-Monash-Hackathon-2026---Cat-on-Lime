@@ -218,12 +218,17 @@ interface StatsResponse {
 }
 ```
 
-**2026-09-22 修复**：`total_emails`/`processed`/`by_category`/`by_status` 等这些数字现在会先按 email_id 排除
-`pt<N>_` 前缀的行（`scripts/perturb-generate.mjs` 生成的内部扰动测试数据，灌进了和 demo 共用的 Supabase
-项目里，见 DECISION_LOG）。之前 Overview 首页会出现"卡片写 520 但 Coverage 写 3000+"这种误导人的不一致，
-就是因为这里把内部回归测试的几千行也算了进去。这个统计口径现在恒等于"官方样例那 520 封"，不受团队什么时候
-跑了多少轮内部扰动测试影响；`/features/results`、`/features/results/conflicts` 等列表/搜索接口不受影响，
-仍然能查到全部数据（含扰动测试行），只有这个 Overview 用的汇总统计做了排除。
+**2026-09-22 修复：内部测试数据的统一口径**。库里混着两类数据——官方样例那 520 封，和
+`scripts/perturb-generate.mjs` 生成的内部扰动测试邮件（`pt<N>_` 前缀，2768 行，灌进了和 demo 共用的
+Supabase 项目，见 DECISION_LOG 决策34/35）。判定规则只有一份：`lib/shared/internal-data.ts`。
+
+**所有读取路径默认只看官方样例**（统计 / 结果列表 / 冲突对 / 复核队列 / 提交导出），因为混着算会让
+每个数字点进去都对不上——实测过：Overview 写 Matches 454，点进去列表 2806；Mismatches 46，点进去
+冲突页 482；Need review 20，点进去队列 110。
+
+两个逃生口，保证排查内部数据的路径没断：
+- `include_internal=true`：结果列表 / 冲突对接口显式要求带上内部测试数据
+- 搜索词本身以 `pt<数字>` 开头时自动带上（直接按 id 搜 `pt5_email_065` 仍然能搜到）
 
 冲突对响应：`{ total, limit, offset, sortBy, order, items }`，其中每条 item 是
 `{ email_id, from, subject, si_file, bl_file, other_files, status, review_reason, defect_fields, defect_count, si_values, bl_values, si_evidence, bl_evidence, updated_at }`（`si_evidence/bl_evidence` 为字段级出处，2026-09-21 新增）。
@@ -235,6 +240,7 @@ interface StatsResponse {
 - 文件名在响应头 `Content-Disposition`；`scope=submission` 时用一组响应头判断是否覆盖了全部 520 封（完整性 fail-closed）：
   - `X-Export-Incomplete`：任意一项异常即 `true`（Expected-Source 非 sample、条数 ≠ 分母、有缺失、有过期版本、有失败行）
   - `X-Export-Expected-Source`：`sample` = 分母锚定官方样例清单（data/sample/inbox 的文件名）；`db-fallback` = 清单读不到、降级用数据库总数——**此时即使 `Missing=0` 也按不完整处理**
+  - `X-Review-Overridden` / `X-Review-Overridden-Ids`（2026-09-22 新增）：人工复核覆盖**真的改掉了引擎结论**的条数和 email_id。覆盖是合法功能，所以**不影响 `incomplete`**，但提交文件里"哪几条不是引擎自己算的"必须看得见——实测发生过：一条测试时随手点的"更正"把 email_004 判对的 MISMATCH 悄悄换成了 OK，导出文件里完全看不出来（见 DECISION_LOG 决策36）
   - `X-Export-Missing` / `X-Export-Missing-Ids`：清单里有、导出里没有的 email_id（头里最多列 20 个）
   - `X-Export-Stale` / `X-Export-Stale-Ids`：有结果但 `logic_version` 与当前引擎版本不一致的 email_id（旧版本结果需要重跑）
   - `X-Export-Invalid` / `X-Export-Invalid-Ids`（2026-09-21 新增）：行内字段自相矛盾（MISMATCH 没有缺陷清单、NEEDS_REVIEW 却带缺陷或缺原因、OK 带缺陷/原因）的 email_id；有任意一条时 `incomplete` 也为 true

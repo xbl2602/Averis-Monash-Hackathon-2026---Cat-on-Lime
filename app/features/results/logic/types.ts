@@ -57,6 +57,11 @@ export interface ResultQuery {
   provider?: string;
   /** 邮件ID / 发件人 / 主题 的关键词搜索 */
   q?: string;
+  /**
+   * true = 连内部扰动测试数据（pt<N>_ 前缀）一起查。默认 false：库里混着几千封内部回归测试邮件，
+   * 默认带上会让 Overview 的数字和这里的列表对不上（见 lib/shared/internal-data.ts）。
+   */
+  includeInternal?: boolean;
   sortBy: ResultSortField;
   order: SortOrder;
   groupBy?: GroupField;
@@ -135,6 +140,8 @@ export type NumericMode = (typeof NUMERIC_MODES)[number];
 export interface ConflictQuery {
   statuses: ComparisonStatus[];
   q?: string;
+  /** 同 ResultQuery.includeInternal */
+  includeInternal?: boolean;
   sortBy: ConflictSortField;
   order: SortOrder;
   limit: number;

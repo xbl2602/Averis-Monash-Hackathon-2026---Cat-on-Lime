@@ -6,6 +6,7 @@
  * - 所有可用字段都是扁平列，筛选/排序直接做，不依赖 PostgREST 的内嵌表语义
  *   （内嵌排序实测不会影响父行顺序，之前踩过坑）
  */
+import { INTERNAL_TEST_LIKE_PATTERN, searchTargetsInternalData } from "@/lib/shared/internal-data";
 import type { ComparisonStatus, EmailCategory, ReviewReason } from "@/lib/shared/types";
 import { fetchAllRows, getReadClient, ilikeFragment, sanitizeSearchTerm } from "./db";
 import { DataAccessError } from "./errors";
@@ -76,6 +77,7 @@ interface FilterableBuilder<T> {
   in(column: string, values: readonly unknown[]): T;
   eq(column: string, value: unknown): T;
   ilike(column: string, pattern: string): T;
+  not(column: string, operator: string, value: unknown): T;
   or(filters: string): T;
   order(column: string, options?: { ascending?: boolean; nullsFirst?: boolean }): T;
 }
@@ -113,6 +115,12 @@ export async function listAllResults(query: ResultQuery): Promise<ResultRow[]> {
 
 function applyFilters<T extends FilterableBuilder<T>>(builder: T, query: ResultQuery): T {
   let q = builder;
+
+  // 默认只看官方样例：库里还混着内部扰动测试数据，不排除的话 Overview 的数字和这里点进来
+  // 看到的列表对不上（实测 454 → 2806）。显式要（include_internal）或者直接搜它的 id 时才带上。
+  if (!query.includeInternal && !searchTargetsInternalData(query.q)) {
+    q = q.not("email_id", "like", INTERNAL_TEST_LIKE_PATTERN);
+  }
 
   if (query.categories?.length) q = q.in("category", query.categories);
   if (query.statuses?.length) q = q.in("comparison_status", query.statuses);

@@ -6,6 +6,7 @@
  * 不做"先查再插"。读用 anon key（三表读都对 anon 开放），写用 service role key。
  */
 import { randomUUID } from "node:crypto";
+import { isInternalTestEmailId, searchTargetsInternalData } from "@/lib/shared/internal-data";
 import { getSupabaseClient, getSupabaseServiceClient } from "@/lib/shared/supabase";
 import type { ComparedField, ComparisonStatus, EmailCategory, ReviewReason } from "@/lib/shared/types";
 import { ReviewStoreUnavailableError } from "./errors";
@@ -112,7 +113,12 @@ export async function listReviewQueue(
   if (error) throw new Error(`读取 verification_overview 失败：${error.message}`);
 
   const rows = (data ?? []) as OverviewQueueRow[];
-  let filtered = rows.filter((row) => options.includeOk || isInDefaultQueue(targetKind, row));
+  // 内部扰动测试数据默认不进复核队列：和 Overview / 结果列表保持同一口径，否则"Need review 20"
+  // 点进来会看到 110（见 lib/shared/internal-data.ts）。排查内部数据时按 id 搜即可。
+  const visible = searchTargetsInternalData(options.q)
+    ? rows
+    : rows.filter((row) => !isInternalTestEmailId(row.email_id));
+  let filtered = visible.filter((row) => options.includeOk || isInDefaultQueue(targetKind, row));
   if (options.status) filtered = filtered.filter((row) => row.comparison_status === options.status);
   if (options.reason) filtered = filtered.filter((row) => row.review_reason === options.reason);
   const searched = options.q ? filtered.filter((row) => matchesSearch(row, options.q!)) : filtered;

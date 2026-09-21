@@ -49,11 +49,13 @@ export interface RawQueryInput {
   tolerance?: unknown;
   value_field?: unknown;
   value?: unknown;
+  include_internal?: unknown;
 }
 
 export interface RawConflictQueryInput {
   status?: unknown;
   q?: unknown;
+  include_internal?: unknown;
   sort_by?: unknown;
   order?: unknown;
   limit?: unknown;
@@ -80,6 +82,7 @@ export function normalizeResultQuery(raw: RawQueryInput): ResultQuery {
     hasDefect: toBoolean(raw.has_defect, "has_defect"),
     provider: toShortText(raw.provider, "provider", 64),
     q: toShortText(raw.q, "q", 100),
+    includeInternal: toBoolean(raw.include_internal, "include_internal"),
     sortBy,
     order: resolveOrder(raw.order, sortBy),
     groupBy: pickOne(toStringList(raw.group_by), GROUP_FIELDS, "group_by"),
@@ -114,6 +117,7 @@ export function normalizeConflictQuery(raw: RawConflictQueryInput): ConflictQuer
     // 缺省看"所有需要人关注的"：MISMATCH + NEEDS_REVIEW
     statuses: statuses ?? ["MISMATCH", "NEEDS_REVIEW"],
     q: toShortText(raw.q, "q", 100),
+    includeInternal: toBoolean(raw.include_internal, "include_internal"),
     sortBy,
     order: resolveOrder(raw.order, sortBy),
     limit: resolveLimit(raw.limit),

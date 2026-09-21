@@ -8,6 +8,7 @@ import type {
   ExtractedDocumentEvidence,
   ReviewReason,
 } from "@/lib/shared/types";
+import { INTERNAL_TEST_LIKE_PATTERN, searchTargetsInternalData } from "@/lib/shared/internal-data";
 import { fetchAllRows, getReadClient, ilikeFragment, sanitizeSearchTerm } from "./db";
 import { DataAccessError } from "./errors";
 import { applyNumericQuery, usesNumericFeatures } from "./numeric-query";
@@ -114,6 +115,11 @@ function applyConflictFilters<T extends ConflictQueryBuilder>(
   query: ConflictQuery
 ): T {
   let q = builder.in("comparison_status", query.statuses);
+
+  // 和结果列表同一口径：默认只看官方样例，内部扰动测试数据不混进来（见 lib/shared/internal-data.ts）
+  if (!query.includeInternal && !searchTargetsInternalData(query.q)) {
+    q = q.not("email_id", "like", INTERNAL_TEST_LIKE_PATTERN);
+  }
 
   if (query.q) {
     const term = sanitizeSearchTerm(query.q);
