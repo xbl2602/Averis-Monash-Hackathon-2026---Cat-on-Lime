@@ -38,7 +38,7 @@ export type ProcessingState = (typeof PROCESSING_STATES)[number];
 export const GROUP_FIELDS = ["category", "comparison_status"] as const;
 export type GroupField = (typeof GROUP_FIELDS)[number];
 
-export const EXPORT_FORMATS = ["json", "md", "txt"] as const;
+export const EXPORT_FORMATS = ["json", "md", "txt", "csv"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // 导出场景：同一份数据，不同场景导出不同内容（见 SHARED_INTERFACES.md）

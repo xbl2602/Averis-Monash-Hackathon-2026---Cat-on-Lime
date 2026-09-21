@@ -291,7 +291,7 @@ ground_truth 仅用于本地自测：官方已明确确认题目包（含 `groun
 | `/features/results/api` | 按分类/状态/处理情况查结果列表（含未处理邮件），支持排序、分组、分页 |
 | `/features/results/api/stats` | 总数 / 已处理 / 未处理 / 失败 / 分类分布 / 状态分布 / 差异字段频次 |
 | `/features/results/api/conflicts` | 冲突文件对（SI/BL 不一致 + 需要人工确认），带两边字段值 |
-| `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt`（`scope=submission` 仅支持 json）；完整性看响应头 `X-Export-Incomplete` / `X-Export-Expected-Source`（submission 场景） |
+| `/features/results/api/export` | Save as：`scope=results\|conflicts\|stats\|submission` × `format=json\|md\|txt\|csv`（`scope=submission` 仅支持 json；`csv` 在 `scope=conflicts` 下是"一行=一个待改字段"的 amendment list，列出 email_id/si_value/bl_value/为什么判定）；完整性看响应头 `X-Export-Incomplete` / `X-Export-Expected-Source`（submission 场景） |
 
 整箱批量入口（`POST /features/pipeline/api`，会写结果表）：
 不传参数 = 全量增量跑（跳过没变的），`limit` 控制单次几封，`dry_run: true` 只算不写：

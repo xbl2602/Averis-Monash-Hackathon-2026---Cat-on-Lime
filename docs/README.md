@@ -46,7 +46,7 @@
 
 | 文档 | 收录内容 |
 |---|---|
-| [HISTORY.md](HISTORY.md) | 原 MERGE_NOTES（一次合并记录）+ WORKSHOP_1（云托管 workshop 纪要）+ COUNCIL_AUDIT_2026-09-21（一次审计快照） |
+| [HISTORY.md](HISTORY.md) | 原 MERGE_NOTES（一次合并记录）+ WORKSHOP_1（云托管 workshop 纪要）+ WORKSHOP_2（Averis 题目答疑纪要）+ COUNCIL_AUDIT_2026-09-21（一次审计快照） |
 
 ### D. 官方原文（不要修改）
 

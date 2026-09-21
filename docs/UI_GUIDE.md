@@ -63,6 +63,8 @@
 
 注意：导出文件带完整性响应头（`X-Export-*`），要用 `fetch + blob` 才能读到，`<a>` 直接下载读不到（见本文件第二部分 §3/§7.4）。
 
+**2026-09-21 新增 `format=csv`**（业务方 workshop 明确要的格式）：json/md/txt 之外多一个 `csv` 选项，`scope=conflicts&format=csv` 时是"一行 = 一个待改字段"的表格（列：email_id/from/subject/status/review_reason/field/si_value/bl_value），可以直接给导出按钮的格式下拉多加一项；`scope=submission` 仍然只认 json，csv 会被拒绝（400）。
+
 ### 2.3 分类 / 抽取 / 比对（演示页或 jev-lab）
 
 | 方法 路径 | 一句话作用 | 口令 | 状态 |

@@ -131,7 +131,7 @@ export function normalizeExportRequest(raw: RawExportInput): ExportRequest {
 
   if (scope === "submission" && format !== "json") {
     throw new ResultQueryError(
-      "scope=submission 导出的是给官方评分用的纯 JSON 文件，只支持 format=json（txt/md 请用 scope=results 或 scope=conflicts）"
+      "scope=submission 导出的是给官方评分用的纯 JSON 文件，只支持 format=json（txt/md/csv 请用 scope=results 或 scope=conflicts）"
     );
   }
 

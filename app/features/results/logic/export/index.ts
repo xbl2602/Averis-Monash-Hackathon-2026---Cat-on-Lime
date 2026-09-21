@@ -18,6 +18,7 @@ import { listAllConflicts } from "../conflicts";
 import { listAllResults } from "../query";
 import { getStats } from "../stats";
 import type { ExportDocument, ExportFormat, ExportRequest, ResultQuery, StatsSummary } from "../types";
+import { buildCsvReport } from "./csv";
 import { toJson } from "./json";
 import { buildMarkdownReport } from "./markdown";
 import {
@@ -33,6 +34,7 @@ const MIME_TYPES: Record<ExportFormat, string> = {
   json: "application/json; charset=utf-8",
   md: "text/markdown; charset=utf-8",
   txt: "text/plain; charset=utf-8",
+  csv: "text/csv; charset=utf-8",
 };
 
 // 官方提交文件要"全部已处理的邮件"，不接受筛选；limit/offset 会被 listAllResults 忽略
@@ -202,6 +204,7 @@ async function resolveExpectedSampleIds(stats: StatsSummary): Promise<ExpectedSa
 function serialize(format: ExportFormat, data: ReportData): string {
   if (format === "json") return toJson(buildJsonPayload(data));
   if (format === "md") return buildMarkdownReport(data);
+  if (format === "csv") return buildCsvReport(data);
   return buildTextReport(data);
 }
 

@@ -122,7 +122,7 @@ const listConflictsMcpTool = {
 const exportResultsMcpTool = {
   name: "export_results",
   description:
-    "把结果导出成文件内容（Save as）。scope=results 结果列表 / conflicts 冲突文件对 / stats 统计汇总 / submission 官方提交格式（仅 json）；format=json|md|txt。返回的 text 就是文件内容，文件名在 _meta.filename",
+    "把结果导出成文件内容（Save as）。scope=results 结果列表 / conflicts 冲突文件对 / stats 统计汇总 / submission 官方提交格式（仅 json）；format=json|md|txt|csv（csv 适合 conflicts：一行=一个待改字段，列出 email_id/si_value/bl_value/为什么判定）。返回的 text 就是文件内容，文件名在 _meta.filename",
   inputSchema: {
     scope: z.enum(EXPORT_SCOPES).optional().describe("导出场景，缺省 results"),
     format: z.enum(EXPORT_FORMATS).optional().describe("文件格式，缺省 json"),

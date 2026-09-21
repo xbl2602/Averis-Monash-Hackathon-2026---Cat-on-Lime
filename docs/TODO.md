@@ -97,3 +97,4 @@
 - [x] MCP 注解 fail-closed + 自检脚本（`scripts/check-mcp-annotations.ts`）
 - [x] 三种部署文件齐备（`Dockerfile` / `docker-compose.yml` / `next.config.mjs` standalone）
 - [x] 已把 `docs/REVIEW_SPEC.md` 登记进 `docs/README.md`
+- [x] 导出新增 `format=csv`（响应 2026-09-21 workshop 业务方明确要的"SI/BL值+为什么mismatch"表格，见 `docs/HISTORY.md` Workshop 2、`docs/DECISION_LOG.md` 决策33）。`scope=conflicts` 是一行一个待改字段的 amendment list；`submission` 仍只认 json。README/UI_GUIDE 已同步

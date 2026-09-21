@@ -1,7 +1,7 @@
 # 历史记录（合并存档）
 
 > 用途：一次性记录 / 会议纪要 / 审计快照的合集，**只读历史**，不要回头改这里的内容；新记录追加到对应 Part 末尾。
-> 合并了原 `MERGE_NOTES.md` / `WORKSHOP_1_CLOUD_HOSTING_NOTES.md` / `COUNCIL_AUDIT_2026-09-21.md`。
+> 合并了原 `MERGE_NOTES.md` / `WORKSHOP_1_CLOUD_HOSTING_NOTES.md` / `COUNCIL_AUDIT_2026-09-21.md`，2026-09-21 晚追加 `WORKSHOP_2`（Averis 题目答疑专场）。
 > 归档时间：2026-09-21。
 
 ---
@@ -412,3 +412,104 @@ REST + MCP 都已上线**。新增能力清单：
 
 - 新增 8：`UI_HANDOFF.md`、`lib/llm/errors.ts`、`lib/shared/request-errors.ts`、`lib/shared/write-policy.ts`、`lib/shared/versions.ts`、`scripts/crypto-self-test.mjs`、`scripts/check-mcp-annotations.ts`、`scripts/phase2-rls.sql`
 - 修改 42（安全收紧 / 健壮性 / 文档同步），未碰任何 UI 文件。
+
+---
+
+## Workshop 2 纪要：Averis 题目答疑专场（2026-09-21 线上 workshop）
+
+来源：官方 workshop 录音转录文本（会议 `meeting-063e802f-5cb3-404a-a51c-28f9d903bd8e`，录音名 `Meeting 21_09_26_19_07_29`，约48分钟）。本节是整理后的重点摘要，不是逐字稿；原始转录含大量语音识别错误和中英混杂，已按上下文修正，拿不准的地方如实标注，没有脑补。
+
+---
+
+### 0. 语音识别修正对照
+
+| 转录原文 | 应为 | 说明 |
+|---|---|---|
+| Everest / Everts / Avis | **Averis** | 主办方，与开幕式纪要同一处识别错误 |
+| shipping dogs / shooting document / saving dogs | **shipping docs / shipping documentation** | 题目"航运单证"，转录 consistently 听错 |
+| Ruby（"emphasis on the Ruby"） | **rubric（评分标准）** | 结合上下文"按 rubric 打分" |
+| GraphBL checks | **draft BL checks**（疑似） | 问"一周做多少次 BL 核对"，原话听不清，按上下文推断 |
+| strike truck（"create the strike truck"） | **听不清，疑似指"标出差异并回传"的动作** | 转录 [09:41] 处，原意是"打印出来标出哪几处要改再扫回去"，具体词无法还原，不影响理解 |
+| consigner / consign-y / to-dog | **consignee / to the order of** | 提单字段，转录把术语拆碎了 |
+| CSP（"get a CSP"） | **CSV（疑似）** | 上下文在问"导出 CSV"，按此理解 |
+| human ejection / human AFC | **human in the loop / 人工介入**（疑似） | 在问"核心靠代码、AI 只做辅助行不行"，见第2节 |
+| One-Wight-Taking | **听不清** | [16:43] 处回答"人工核对要几分钟"时的时间表述，已按前后文取"比对本身约10分钟"为准 |
+
+---
+
+### 1. 概况
+
+- 时间：2026-09-21 晚（距 9/22 12:00pm 提交截止约 17 小时），Averis 主讲（Yen 讲业务细节 + 主持人答规则）。
+- 形式：纯 Q&A，无 slides，只有录播。问题都围绕"题目到底要做到什么程度、demo 怎么评"。
+- 核心一句话：**决赛看同一批数据，准确率重要但不只看准确率；架构和讲故事才是拉开差距的地方**（[01:05][29:23][36:12] 三处反复强调）。
+
+---
+
+### 2. 评分立场重申（最重要的一节，先看这节）
+
+1. **准确率不是唯一判据**：原话"we will not judge solely based on the dataset"，关注点是 architecture / system design。ground truth 已经给了，就是帮大家理解数据该怎么走，不用为数据集过度焦虑（[01:14][01:30]）。
+2. **决赛仍用同一批数据判**（"final judge on the same dataset"），目前**没有隐藏的第二批测试集**；如果以后有，会再公告，有的话才会考泛化（[29:21][29:32]）。
+3. **纯代码解法可以交，但 AI 占比低会扣分**：有人问"核心靠代码解决、AI 只做辅助行不行"，官方答可以，但"marks will be lower"，最终看 justification 和 system design choice（[05:55][06:04]）。
+4. **贵模型 vs 便宜模型、agent vs workflow vs 简单 API**，全部"up to your justification"：Yen 举例"不用 AI、70% 准确率但成本最低也 fine"，另一队用 agent 也行，评委只看"你为什么选这个、技术决策合不合理、是不是为了追潮流（FOMO）而做"（[32:21][36:12][37:46]）。Technology integration 是占比最大的那块分。
+5. **合成数据（synthetic / mock）**：可以拿来自己练模型、再到 ground truth 上验证效果，但最终还是用 ground truth 那套判（[42:07][42:31]）。
+
+---
+
+### 3. 提交与演示要求
+
+- **必须有一个 live demo**（[00:29]），demo 里要讲清楚"这个项目是什么、为什么比别人的方案好"。因为人人都有 docker zip 数据，准确率拉不开差距，靠讲解决定的 standout（[00:36][00:47]）。
+- **要的是 working prototype，不是 mock 数据**：原话"prototyping is fine, but we do not want a mock data, we want functional ones"，要达到能部署、符合行业标准的程度（[02:24][02:45]）。
+- **预计算结果可以**（提前跑好的 safe results fine），但 demo 时必须能现场扔数据进去并正确 flag 出问题（[11:38][11:54]）。
+- **有人审（human review）流程必须在视频里 live 演示出来**，有就要展示（[13:24]）。
+- **Slide 用 HTML 文件可以**（[05:35]），没有页数限制。
+- **JSON 导出**：只要可读、能让评审验证的完整 JSON 就行；它**不需要通过网站提交**——提交网站只收 video / live demo / slides 这几样（[20:11][24:37][25:00]）。
+- **CSV 导出是真实现场要的东西**：Yen 确认真实场景要导出 CSV，列出 SI 里是什么、BL 里是什么、为什么判 mismatch（[27:15][27:28]）；结构跟 submission 对齐即可（[28:54]）。
+- **输出物要先定方向再做**：每个 UI 功能都要对用户有意义，不要堆功能；summary data 要能说清"给谁看、干嘛用"（[25:43][26:06]）。
+- **证据放哪里**：test results 之类都算 validated assumptions；可以放 demo 里（比如 AI 的 confidence、人工点了 approve）、slides 附录、GitHub，三处要一致，不能这边有那边没有（[33:27][33:46]）。用户反馈/测试算在 practical value 里，不会同一份证据算两次分（[35:10]）。
+- 评分 rubric、两份数据集 zip 都在 Discord `#resources` 频道（[43:13][46:43]）；决赛路演不对观众开放（[43:04]）。
+
+---
+
+### 4. 数据怎么喂进去（ingestion，官方三种都认）
+
+- Mail server 对接可以（[06:40]）；REST API 发请求可以（[20:47] kérdés 里队伍自述的方案，主办方没反对）；live simulated inbox feed 也可以。
+- Averis 自己现状（背景，非要求）：用邮件服务商 + 共享邮箱 + RPA，但不是全量监控收件箱（[21:46]）。
+- Demo 重点（Yen 原话）：**从 inbox 开始，到 comparison 出结果、到人审动作，整条链都要能走通**；核心是"证明 discrepancies 能抓出来 + 讲清楚哪一步需要人看、人要做什么动作"（[22:29][23:10]）。
+- **必须能上传别的文件集来处理**（评委要换文件测），这可以是一个 feature（[32:02]）。
+- 想拿高分就**按场景（case by case）讲**：定两三个目标场景，说明每个场景怎么测、网站怎么覆盖，比泛泛地说"什么都能做"更具体、更可能高分（[07:33][07:49]）。
+
+---
+
+### 5. 业务细节补充（Averis 业务人员 Yen 讲的，可直接拿去写 slide"问题理解"）
+
+- **日常流程**：货代在系统里生成 SI → 发邮件给承运人（carrier）→ 承运人出 BL 草稿 → 航运团队逐封逐项人眼核对 → 打印标出要改的字段 → 扫描发回客户 + 发 amendment 清单（[08:50][09:01]）。
+- **三大痛点**（[10:10][10:27][10:49]）：① 邮件太多，找"哪封是 BL、它配哪份 SI"很耗时；② 人工逐项比对耗时且易错；③ 不同承运人的 BL 版式/叫法不一样（比如 POL / load port 混用），人理解得费劲。
+- **耗时**：只算"比对"本身约 10 分钟一票，不含找邮件的时间；整单全流程更久（[15:44][16:13][16:26]）。如果系统误报（false alarm），不会直发承运人，专员会先看一眼再定（同段问答的第二问）。
+- **错单率**：hachathon 数据约 1/5（46/220）要改，真实周工作量约 20–30 票量级；全对就直接 confirm，不用发 amendment（[03:22][03:56][04:47]）。转录这段很碎，数字只记量级，别当精确 KPI 写。
+- **7 个字段哪个错了最麻烦**：Yen 说极少"整段全错"，大多是 partial（空格、换行、星号 `*`/`**` 跨页续行符没对上，其实是同一家）；shipper / consignee / notify party 的星号续行是重灾区；gross weight / container count 一旦错，下游返工明显（[18:09][18:30][19:38]）。
+- **consignee vs `to the order of` 是两回事**（[44:00][44:24]）：consignee = 指定收货、承运人实际交货的对象；`to the order of` = 提单可转让（negotiable）的标记，写的是"凭指示交货"的抬头、可背书转让。写 slide 时别把两者混为一谈。
+- **"draft BL 发来尽快核对"这类 91 封邮件算哪类**：要看附件——真带了 SI/BL 对、能进下一步比对的，就按 BL 核对链处理；只看正文一句话定不了类（[12:05][12:36]）。
+- **漏报 vs 误报哪个代价大（5 倍还是 50 倍）、改单费/银行不符点费/LC 延迟几天、一季度几单**：官方明确说**不在本题范围内**，不用解到提单签发之后的事；发出 amendment 等对方改完即可，费用他们自己不统计（[13:52][15:10][17:06]）。slide 里别给这些编数字。
+- **Dashboard 经理看什么**：accuracy + 共抓出多少 discrepancies + 有没有缺字段（用户投诉最多的是"导出的 CSV 缺了我们要的字段"）；他们内部也会拿 manual vs AI 对一遍，看谁漏了（[38:37][39:22][40:04]）。
+- **1000 封/天、几个 admin 并发**：官方没给准数，只说现在就是一个几人的小团队在做（[40:34]）。别按这个去过度设计并发，按现有"有上限并发 + 失败隔离"那套即可。
+
+---
+
+### 6. 对我们项目的直接影响 / 提交前待办（对照现状，2026-09-21 晚盘点）
+
+**已经对上的（不用再动，slide 里直接写）**
+
+1. "架构优先"正好是我们现在的路线：规则优先 + Jev 判断 + LLM 兜底（DECISION_LOG 决策22），judge 问"为什么这么选"时有据可查，不是 FOMO 加 AI。
+2. AI 是核心链路（分类/抽取/比对里都有模型判定点，见 DECISION_SPEC §6），不是"纯代码 + AI 备份"，避开了第2节第3条的扣分项。
+3. "现场扔数据进去能 flag"已覆盖：`POST /features/pipeline/api`（`dry_run` 可预览）+ sandbox 单条即测（评委自带 SI/BL 不写库）+ import 上传别的文件集，三条都是"换文件测"的入口。
+4. "预计算结果 fine"：库里已有 520 条结果，demo 即使现场 LLM 额度出问题，也有规则路径保底 + degraded 标记 + 一键重试（决策25）。
+5. 导出：`scope=submission` 的 JSON 与官方 schema 对齐（含 fail-closed 校验，决策27）；conflicts / stats 导出有 json/md/txt 可读版本，对应"给 staff 看的 summary"。
+
+**提交前还差的（按优先级排，只剩今晚+明早）**
+
+1. **视频必须出现 human review 的 live 操作**（第3节）：后端 4 模块复核接口已落地，但 GUI 归队友A（见 REVIEW_SPEC / UI_GUIDE）。如果 GUI 来不及，视频里至少用 REST/MCP 现场点一次 confirm/correct/undo，不要只口头说"我们有人审"。
+2. **CSV 导出**：Yen 点名真实场景要 CSV（SI 值 / BL 值 / 为什么 mismatch 三列）。我们导出现在是 json/md/txt，没有 `.csv`。时间够就加一个最小 CSV（conflicts 口径复用即可）；不够就别硬加，视频里明说"md/txt 是给人看的可读版，json 是对齐 submission 的机器版"，也算 justification。
+3. **Demo 讲两个具体场景，不要讲"全能"**（第4节）：建议就讲 ① inbox→comparison→人审整链 ② 评委现场换一份 SI/BL（走 sandbox）当场出比对 + 导出 CSV/JSON。网站/视频/slide 三处用同一套说法和数字。
+4. **Slide"问题理解"页直接用第5节素材**：日常流程 + 三大痛点 + 10 分钟/票 + 1/5 改单率 + 星号 partial mismatch + consignee vs `to the order of` 的区别，评委一听就知道懂行。别写 amendment 费、LC 延迟天数（官方说超范围，写了反而露怯）。
+5. **证据三处一致**：demo 里露一次 confidence（如 Jev 0.52/0.88 分界、0.85 阈值），slides 附录贴全量评测数（分类 100%、520/520、缺陷 72/0/0），GitHub 留评测脚本，数字要对得上。
+6. **本地 LM Studio、1000 封/天并发**这类问题如果评委问：标准答就是 AGENTS.md 里那套（云端 demo 用不了本地模型是架构限制；批量用有上限并发 + 单条失败隔离），不要现场"修"。

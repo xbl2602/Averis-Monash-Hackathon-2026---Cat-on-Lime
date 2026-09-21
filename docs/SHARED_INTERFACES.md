@@ -222,7 +222,7 @@ interface StatsResponse {
 ### 导出（Save as）
 
 - `scope`：`results`（当前筛选的结果列表）/ `conflicts`（冲突文件对）/ `stats`（统计汇总）/ `submission`（官方提交纯 JSON：`{ email_id: EmailVerificationResult }`，只允许 `format=json`）
-- `format`：`json` | `md` | `txt`（json 是结构化数据，md/txt 是给人看的报告，含统计摘要 + 明细）
+- `format`：`json` | `md` | `txt` | `csv`（json 是结构化数据，md/txt 是给人看的报告；csv 是 2026-09-21 workshop 后新增——业务方明确要"SI 值/BL 值/为什么判 mismatch"这种可打印的表格，`scope=conflicts` 时一行 = 一个待改字段（amendment list），`scope=results` 一行一封邮件，`scope=stats` 是 metric/value 两列；`scope=submission` 仍只允许 `format=json`，csv 会被拒绝）
 - 文件名在响应头 `Content-Disposition`；`scope=submission` 时用一组响应头判断是否覆盖了全部 520 封（完整性 fail-closed）：
   - `X-Export-Incomplete`：任意一项异常即 `true`（Expected-Source 非 sample、条数 ≠ 分母、有缺失、有过期版本、有失败行）
   - `X-Export-Expected-Source`：`sample` = 分母锚定官方样例清单（data/sample/inbox 的文件名）；`db-fallback` = 清单读不到、降级用数据库总数——**此时即使 `Missing=0` 也按不完整处理**

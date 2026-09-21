@@ -462,3 +462,26 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   预览页"跑起来，`dry_run` 批量预览也能在零 Supabase 配置下工作（读的是本地 `data/sample/` 文件，
   不依赖数据库）——这部分结果记入 README 新增的"评委/新人 30 秒看到它跑起来"一节。
   `npm run typecheck`、`npm run build`（`/features/sandbox/api` 正常生成）均通过。
+
+### 决策 33：导出新增 `format=csv`，响应官方 workshop 明确提出的业务需求
+
+- **背景**：2026-09-21 晚官方 Q&A workshop（纪要见 `docs/HISTORY.md` Workshop 2 一节），业务方
+  Yen 明确说真实场景需要导出 CSV，列出"SI 里是什么、BL 里是什么、为什么判 mismatch"三类信息，
+  对应操作团队打印出来标注哪些字段要发 amendment 的真实流程（决策见 FINALS_ROADMAP.md 相关记录）。
+  之前导出只有 json/md/txt 三种格式，都不是 CSV 这种能直接拖进 Excel/Google Sheets 的表格。
+- **决策**：在 `EXPORT_FORMATS` 里加一个 `csv`，新增 `app/features/results/logic/export/csv.ts`，
+  和 json/md/txt 一样从同一份 `ReportData` 出发、不重新查数据：
+  - `scope=conflicts`：一行 = 一个待改字段（"amendment list"）——`defect_fields` 非空时按字段拆行，
+    每行给 `si_value`/`bl_value`；`defect_fields` 为空的纯 `NEEDS_REVIEW`（比如缺附件）给一行只带
+    `review_reason`，不留空邮件不出现的情况。
+  - `scope=results`：一行一封邮件的摘要（分类/状态/差异字段/模型/更新时间），给管理者看整体概况用。
+  - `scope=stats`：`metric,value` 两列，把分类分布/状态分布/差异字段频次拆成一行一个指标，不做成
+    一格塞一大堆文字（那样在 Excel 里没法用）。
+  - `scope=submission` **仍然只允许 json**（`params.ts` 里显式拒绝，官方评分只认 JSON schema）。
+  - 输出带 UTF-8 BOM（`﻿` 开头），避免中文内容在 Excel 里直接打开变乱码；字段按 RFC 4180 规则
+    转义（含逗号/引号/换行的值套双引号）。
+- **验证**：本地起 `npm run dev`，对真实 Supabase 数据（当前库里含官方 520 封 + 之前多种子回归测试
+  导入的额外样本，`stats` 显示 `total_emails=3288`）分别请求 `scope=conflicts|results|stats` 的
+  `format=csv`，人工核对了字段值转义（含逗号的地址被正确加引号）、字段拆行逻辑（同一封邮件多个
+  defect field 拆成多行）；确认 `scope=submission&format=csv` 仍返回 400，不会被新格式绕过。
+  `npm run typecheck` 通过。

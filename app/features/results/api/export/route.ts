@@ -4,7 +4,7 @@ import { searchParamsToRecord, toErrorResponse } from "../params";
 
 /**
  * GET /features/results/api/export
- * Save as：scope=results|conflicts|stats|submission × format=json|md|txt。
+ * Save as：scope=results|conflicts|stats|submission × format=json|md|txt|csv（submission 仅支持 json）。
  * 返回带下载头的文件本体；完整性信息都在响应头里（`<a>` 直接下载读不到，前端要用 fetch + blob）：
  *   X-Export-Scope / Format / Items / Incomplete / Expected-Source / Missing / Stale ...
  *   ?scope=conflicts&format=md
