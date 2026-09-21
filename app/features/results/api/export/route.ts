@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
         "X-Export-Invalid-Ids": formatIdList(doc.invalidIds),
         "X-Review-Pending": String(doc.reviewPending),
         "X-Review-Deferred": String(doc.reviewDeferred),
+        "X-Review-Overridden": String(doc.overriddenIds.length),
+        "X-Review-Overridden-Ids": formatIdList(doc.overriddenIds),
         "X-Export-Generated-At": doc.generatedAt,
       },
     });

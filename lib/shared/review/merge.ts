@@ -18,6 +18,13 @@ export interface ApplyOverridesResult {
   reviewPending: number;
   /** 被搁置、未闭环的项数 */
   reviewDeferred: number;
+  /**
+   * 人工覆盖真的改掉了引擎结论的邮件（合并结果 ≠ 系统结果）。
+   * 2026-09-22 加的：一条测试时随手点的"更正"（email_004 被人工改成 OK）把引擎本来判对的
+   * MISMATCH 悄悄换掉了，导出文件里完全看不出这是人改的还是引擎算的。覆盖本身是合法功能，
+   * 但提交文件里"哪几条不是引擎自己的结论"必须是看得见的。
+   */
+  overriddenIds: string[];
 }
 
 export async function applyOverridesToSubmission(
@@ -30,6 +37,7 @@ export async function applyOverridesToSubmission(
   ]);
 
   const payload: Record<string, EmailVerificationResult> = {};
+  const overriddenIds: string[] = [];
   let reviewPending = 0;
   let reviewDeferred = 0;
 
@@ -51,10 +59,25 @@ export async function applyOverridesToSubmission(
       else reviewPending += 1;
     }
 
-    payload[emailId] = mergeOne(emailId, system, classificationOverride, comparisonOverride);
+    const merged = mergeOne(emailId, system, classificationOverride, comparisonOverride);
+    payload[emailId] = merged;
+    if (differsFromSystem(system, merged)) overriddenIds.push(emailId);
   }
 
-  return { payload, reviewPending, reviewDeferred };
+  return { payload, reviewPending, reviewDeferred, overriddenIds: overriddenIds.sort() };
+}
+
+/** 合并后的结论和引擎自己的结论是不是真的不一样（只比进提交格式的那几个字段） */
+function differsFromSystem(system: EmailVerificationResult, merged: EmailVerificationResult): boolean {
+  const key = (result: EmailVerificationResult) =>
+    JSON.stringify({
+      category: result.category,
+      status: result.status,
+      review_reason: result.review_reason,
+      defect_fields: [...result.defect_fields].sort(),
+      has_defect: result.has_defect,
+    });
+  return key(system) !== key(merged);
 }
 
 function mergeOne(

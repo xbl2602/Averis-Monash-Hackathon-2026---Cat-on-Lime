@@ -153,6 +153,8 @@ const exportResultsMcpTool = {
         invalid_ids: doc.invalidIds.slice(0, 50),
         review_pending: doc.reviewPending,
         review_deferred: doc.reviewDeferred,
+        review_overridden: doc.overriddenIds.length,
+        review_overridden_ids: doc.overriddenIds.slice(0, 50),
         generated_at: doc.generatedAt,
       },
     };

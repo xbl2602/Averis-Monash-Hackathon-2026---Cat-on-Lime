@@ -83,6 +83,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
     incomplete: false,
     reviewPending: 0,
     reviewDeferred: 0,
+    overriddenIds: [],
     content: serialize(request.format, data),
     generatedAt,
   };
@@ -95,10 +96,18 @@ async function buildSubmissionDocument(
   generatedAt: string
 ): Promise<ExportDocument> {
   const rows = await listAllResults(ALL_RESULTS_QUERY);
+  const expected = await resolveExpectedSampleIds(stats);
+  // 提交文件的成员资格锚定官方样例清单，不是"数据库里有什么就交什么"。
+  // 2026-09-22 实测到的真 bug：共用的 Supabase 项目里还躺着内部扰动测试数据（pt1~pt14，2768 行，
+  // 见 DECISION_LOG 决策35①），它们同样有合法的 category/status，于是被一起写进了提交文件——
+  // 实测导出 3288 条，其中 2768 条是测试数据。清单读不到时（db-fallback）没有可信成员名单，
+  // 只能维持原样，但那条路径本来就强制 incomplete=true。
+  const allowed = expected.source === "sample" ? new Set(expected.ids) : null;
   const systemPayload: Record<string, EmailVerificationResult> = {};
 
   for (const row of rows) {
     if (!row.category || !row.comparison_status) continue; // failed 行没有合法结果，跳过
+    if (allowed && !allowed.has(row.email_id)) continue; // 不在官方清单里的一律不进提交文件
     systemPayload[row.email_id] = {
       category: row.category,
       status: row.comparison_status,
@@ -109,19 +118,21 @@ async function buildSubmissionDocument(
   }
 
   // 人工复核覆盖只套用在 submission 导出上（§5.3）；results/conflicts 仍展示系统原值
-  const { payload, reviewPending, reviewDeferred } = await applyOverridesToSubmission(systemPayload);
+  const { payload, reviewPending, reviewDeferred, overriddenIds } = await applyOverridesToSubmission(systemPayload);
 
   const itemCount = Object.keys(payload).length;
-  const expected = await resolveExpectedSampleIds(stats);
   const invalidIds = findInvalidSubmissionIds(payload);
 
   const present = new Set(Object.keys(payload));
   const missingIds =
     expected.source === "sample" ? expected.ids.filter((id) => !present.has(id)) : [];
-  // 只有"有合法结果"的行才算 stale：pending 行（没结果）算缺失、failed 行由 failedCount 覆盖
+  // 只有"有合法结果"的行才算 stale：pending 行（没结果）算缺失、failed 行由 failedCount 覆盖。
+  // 同样只看真正进了提交文件的行——库里的内部测试数据不会被官方流水线重跑，
+  // 让它们把提交标成"引擎版本过期"是误报。
   const staleIds = rows
     .filter(
       (row) =>
+        present.has(row.email_id) &&
         row.category !== null &&
         row.comparison_status !== null &&
         row.logic_version !== PIPELINE_LOGIC_VERSION
@@ -150,6 +161,7 @@ async function buildSubmissionDocument(
     incomplete,
     reviewPending,
     reviewDeferred,
+    overriddenIds,
     content: toJson(payload),
     generatedAt,
   };

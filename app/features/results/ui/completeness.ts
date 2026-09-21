@@ -12,6 +12,9 @@ export interface Completeness {
   invalidIds: string[];
   reviewPending: number;
   reviewDeferred: number;
+  /** Entries whose answer a person changed, so they are not what the engine decided */
+  overridden: number;
+  overriddenIds: string[];
 }
 
 function num(headers: Headers, name: string): number {
@@ -40,5 +43,7 @@ export function readCompleteness(headers: Headers): Completeness {
     invalidIds: ids(headers, "X-Export-Invalid-Ids"),
     reviewPending: num(headers, "X-Review-Pending"),
     reviewDeferred: num(headers, "X-Review-Deferred"),
+    overridden: num(headers, "X-Review-Overridden"),
+    overriddenIds: ids(headers, "X-Review-Overridden-Ids"),
   };
 }

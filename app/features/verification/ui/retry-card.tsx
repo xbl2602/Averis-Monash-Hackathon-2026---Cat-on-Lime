@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { useAdmin } from "../../../_components/admin/admin-provider";
 import { LockedCard } from "../../../_components/admin/admin-gate";
-import type { ApiErrorInfo } from "../../../_components/api-error";
 import { ErrorNotice } from "../../../_components/error-notice";
 import { Icon } from "../../../_components/icon";
 import { CountUp } from "../../../_components/motion/count-up";
+import { useRunStatus } from "../../../_components/run-status";
 import { useToast } from "../../../_components/toast";
 import type { RunSummary as Summary, StatsSummary } from "../../../_lib/contracts";
 import type { ProviderOption } from "../../../_lib/provider-options";
@@ -18,9 +18,23 @@ export function RetryCard({ providers }: { providers: ProviderOption[] }) {
   const stats = useApi<StatsSummary>("/features/results/api/stats");
   const { unlocked, adminRequest } = useAdmin();
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  // Tracked app-wide: this run keeps going (and stays visible) if you switch pages mid-retry
+  const retryRun = useRunStatus<Summary>("pipeline-retry");
+  const busy = retryRun.running;
+  const summary = retryRun.result?.ok ? retryRun.result.data : null;
+  const failure = retryRun.result && !retryRun.result.ok ? retryRun.result : null;
+  // 401/403 already lock the tab and raise a toast in AdminProvider; a second notice here is noise
+  const error = failure && failure.status !== 401 && failure.status !== 403 ? failure.error : null;
+  const finishedAt = retryRun.record?.finishedAt ?? null;
+
+  // The counts behind this card are stale once a retry finishes, including a retry finished on
+  // another page; reload them whenever a run completes rather than only right after our own click.
+  const seenFinishRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (finishedAt === null || seenFinishRef.current === finishedAt) return;
+    seenFinishRef.current = finishedAt;
+    stats.reload();
+  }, [finishedAt, stats]);
 
   // No database means there is nothing saved to retry; the card would only be noise
   if (stats.databaseDown || (!stats.data && !stats.loading)) return null;
@@ -33,22 +47,18 @@ export function RetryCard({ providers }: { providers: ProviderOption[] }) {
   const provider = providers.find((p) => p.id === "gemini")?.id ?? providers[0]?.id;
 
   async function retry() {
-    setBusy(true);
-    setError(null);
-    setSummary(null);
-    const result = await adminRequest<Summary>("/features/pipeline/api", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ retry_failed: true, dry_run: false, ...(provider ? { provider } : {}) }),
+    const result = await retryRun.start({
+      label: "Retrying failed emails",
+      href: "/features/verification#retry",
+      task: () =>
+        adminRequest<Summary>("/features/pipeline/api", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ retry_failed: true, dry_run: false, ...(provider ? { provider } : {}) }),
+        }),
     });
-    setBusy(false);
-    if (!result.ok) {
-      if (result.status !== 401 && result.status !== 403) setError(result.error);
-      return;
-    }
-    setSummary(result.data);
+    if (!result?.ok) return;
     toast({ tone: result.data.failed > 0 ? "warn" : "ok", title: result.data.ran === 0 ? "Nothing needed a retry" : `Retried ${result.data.ran} emails` });
-    stats.reload();
   }
 
   return (

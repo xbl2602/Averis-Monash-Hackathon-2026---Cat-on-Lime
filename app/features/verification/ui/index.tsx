@@ -2,12 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import { useAdmin } from "../../../_components/admin/admin-provider";
-import type { ApiErrorInfo } from "../../../_components/api-error";
 import { ErrorNotice } from "../../../_components/error-notice";
 import { Icon } from "../../../_components/icon";
 import { Notice } from "../../../_components/notice";
 import { PipelineFlow } from "../../../_components/pipeline/pipeline-flow";
 import { DEFAULT_LIMIT, DEFAULT_PROVIDER, LIMIT_PREF_KEY, PROVIDER_PREF_KEY, usePref } from "../../../_components/prefs";
+import { useRunStatus } from "../../../_components/run-status";
 import { postJson } from "../../../_lib/api-client";
 import type { RunSummary as Summary } from "../../../_lib/contracts";
 import type { ProviderOption } from "../../../_lib/provider-options";
@@ -34,9 +34,11 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
   const [save, setSave] = useState(false);
   const [concurrency, setConcurrency] = useState(4);
   const [force, setForce] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  // Tracked app-wide, so leaving this page mid-run no longer hides the run or loses its result
+  const pipelineRun = useRunStatus<Summary>("pipeline-run");
+  const loading = pipelineRun.running;
+  const summary = pipelineRun.result?.ok ? pipelineRun.result.data : null;
+  const error = pipelineRun.result && !pipelineRun.result.ok ? pipelineRun.result.error : null;
 
   const provider = providerChoice ?? (providers.some((p) => p.id === savedProvider) ? savedProvider : providers[0]?.id ?? "");
   const selectedProvider = providers.find((p) => p.id === provider);
@@ -48,9 +50,6 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
 
   async function run(event?: FormEvent) {
     event?.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSummary(null);
     const emailIds = parseEmailIds(emailIdsText);
     const body = {
       dry_run: !saving,
@@ -60,12 +59,14 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
       ...(saving && force ? { force: true } : {}),
       ...(emailIds.length > 0 ? { email_ids: emailIds } : {}),
     };
-    const result = saving
-      ? await adminRequest<Summary>("/features/pipeline/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      : await postJson<Summary>("/features/pipeline/api", body);
-    setLoading(false);
-    if (result.ok) setSummary(result.data);
-    else setError(result.error);
+    await pipelineRun.start({
+      label: saving ? "Full pipeline run" : "Pipeline preview",
+      href: "/features/verification",
+      task: () =>
+        saving
+          ? adminRequest<Summary>("/features/pipeline/api", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          : postJson<Summary>("/features/pipeline/api", body),
+    });
   }
 
   return (

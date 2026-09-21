@@ -222,6 +222,12 @@ export interface ExportDocument {
   reviewPending: number;
   /** scope=submission 时：被人工搁置（defer）、尚未闭环的项数；非 submission 场景恒为 0 */
   reviewDeferred: number;
+  /**
+   * scope=submission 时：人工复核覆盖真的改掉了引擎结论的 email_id（合并结果 ≠ 系统结果）。
+   * 覆盖是合法功能，所以不影响 incomplete；但提交文件里"哪几条不是引擎自己算的"必须看得见，
+   * 否则一条测试时随手点的更正就能悄悄改掉判对的结果（2026-09-22 真实发生过，见 DECISION_LOG 决策36）。
+   */
+  overriddenIds: string[];
   /** 文件内容本体：HTTP 直接作为响应体，MCP 作为 text 返回 */
   content: string;
   generatedAt: string;

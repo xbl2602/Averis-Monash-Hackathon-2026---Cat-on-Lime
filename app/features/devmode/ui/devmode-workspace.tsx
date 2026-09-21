@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LockedCard } from "../../../_components/admin/admin-gate";
 import { useAdmin } from "../../../_components/admin/admin-provider";
 import { Icon } from "../../../_components/icon";
 import { Skeleton } from "../../../_components/motion/skeleton";
+import { useRunStatus } from "../../../_components/run-status";
 import { useToast } from "../../../_components/toast";
 // Only the pure-constants file, never the logic/ barrel: the barrel also exports
 // wipe.ts/restore.ts/status.ts, which pull in the Supabase server client and node:crypto —
@@ -81,7 +82,11 @@ export function DevModeWorkspace() {
   const toast = useToast();
   const [status, setStatus] = useState<DevModeStatusResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<"wipe" | "restore" | null>(null);
+  // Tracked app-wide: restoring re-imports every sample email, which takes long enough that
+  // switching pages mid-run is likely — and used to make the run look like it never happened.
+  const wipeRun = useRunStatus<unknown>("devmode-wipe");
+  const restoreRun = useRunStatus<unknown>("devmode-restore");
+  const busy = wipeRun.running ? "wipe" : restoreRun.running ? "restore" : null;
 
   const loadStatus = useCallback(async () => {
     setRefreshing(true);
@@ -97,22 +102,36 @@ export function DevModeWorkspace() {
     if (unlocked) void loadStatus();
   }, [unlocked, loadStatus]);
 
+  // Row counts are stale after either action finishes, including one that finished while this
+  // page was closed; re-read them on the transition rather than only inside the click handler.
+  const lastFinish = Math.max(wipeRun.record?.finishedAt ?? 0, restoreRun.record?.finishedAt ?? 0);
+  const seenFinishRef = useRef(0);
+  useEffect(() => {
+    if (lastFinish === 0 || seenFinishRef.current === lastFinish || !unlocked) return;
+    seenFinishRef.current = lastFinish;
+    void loadStatus();
+  }, [lastFinish, unlocked, loadStatus]);
+
   async function runAction(kind: "wipe" | "restore") {
     const path = kind === "wipe" ? "/features/devmode/api/wipe" : "/features/devmode/api/restore";
     const confirm = kind === "wipe" ? WIPE_CONFIRM_PHRASE : RESTORE_CONFIRM_PHRASE;
-    setBusy(kind);
-    const result = await adminRequest<unknown>(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm }),
+    const tracker = kind === "wipe" ? wipeRun : restoreRun;
+    const result = await tracker.start({
+      label: kind === "wipe" ? "Wiping all data" : "Restoring the official sample",
+      href: "/features/devmode",
+      task: () =>
+        adminRequest<unknown>(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm }),
+        }),
     });
-    setBusy(null);
+    if (!result) return;
     if (result.ok) {
       toast({
         tone: "ok",
         title: kind === "wipe" ? "All tables cleared" : "Restored to the official sample",
       });
-      void loadStatus();
     } else if (result.status !== 401 && result.status !== 403) {
       toast({ tone: "bad", title: "That did not work", detail: result.error.message });
     }

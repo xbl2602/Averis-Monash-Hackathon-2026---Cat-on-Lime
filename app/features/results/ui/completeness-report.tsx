@@ -39,6 +39,16 @@ function buildChecks(c: Completeness): Check[] {
       detail: c.invalid === 0 ? "Every row is consistent (a mismatch lists its fields, a match lists none)." : `${c.invalid} rows contradict themselves: ${idText(c.invalidIds, c.invalid)}. Fix or re-run them first.`,
     },
     {
+      key: "overridden",
+      ok: c.overridden === 0,
+      soft: true,
+      title: "Every answer is the engine's own",
+      detail:
+        c.overridden === 0
+          ? "No answer in this file was changed by a person."
+          : `${c.overridden} ${c.overridden === 1 ? "answer was" : "answers were"} changed by a person and no longer match what the engine decided: ${idText(c.overriddenIds, c.overridden)}. That is allowed — but check it was deliberate, not a leftover from testing.`,
+    },
+    {
       key: "review",
       ok: c.reviewPending === 0 && c.reviewDeferred === 0,
       soft: true,
@@ -92,7 +102,7 @@ export function CompletenessReport({ report }: { report: Completeness }) {
         })}
       </ul>
 
-      {(report.reviewPending > 0 || report.reviewDeferred > 0) && (
+      {(report.reviewPending > 0 || report.reviewDeferred > 0 || report.overridden > 0) && (
         <Link href="/features/review" className="btn btn-glass !py-2">
           <Icon name="flag" size={16} />
           Open the review queue

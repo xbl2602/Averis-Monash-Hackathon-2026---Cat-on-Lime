@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../_components/icon";
+import { RunIndicator } from "../../_components/run-indicator";
 import { ThemeToggle } from "../../_components/theme-toggle";
 import { AdminChip } from "../../_components/admin/admin-chip";
 import { pageTitle } from "./nav-items";
@@ -59,6 +60,8 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           {pageTitle(pathname)}
         </div>
       )}
+
+      <RunIndicator />
 
       <Link
         href="/features/verification"

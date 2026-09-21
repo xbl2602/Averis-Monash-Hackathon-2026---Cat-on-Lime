@@ -31,6 +31,14 @@ function Parts({ parts, tone }: { parts: DiffPart[]; tone: "del" | "add" }) {
   );
 }
 
+/**
+ * One side's value for one field.
+ *
+ * The SI/BL tag is shown at every width, not just on narrow screens. On a wide screen the only clue
+ * used to be the header row far above, so two flagged rows side by side were easy to read wrong —
+ * pairing this row's SI with the next row's SI and concluding the engine had flagged two identical
+ * values. It also means a copy-paste of this table still says which value came from which document.
+ */
 function Cell({
   label,
   value,
@@ -39,6 +47,7 @@ function Cell({
   evidence,
   missing,
   alignEnd = false,
+  divider = false,
 }: {
   label: string;
   value: string | undefined;
@@ -47,18 +56,23 @@ function Cell({
   evidence: ExtractedDocumentEvidence[keyof ExtractedDocumentEvidence] | undefined;
   missing: boolean;
   alignEnd?: boolean;
+  divider?: boolean;
 }) {
   return (
-    <div className="min-w-0">
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-fg-faint sm:hidden">{label}</div>
-      {value === undefined ? (
-        <span className={`text-sm ${missing ? "font-semibold text-warn" : "text-fg-faint"}`}>{missing ? "Missing" : "—"}</span>
-      ) : (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="break-words text-sm">{parts ? <Parts parts={parts} tone={tone} /> : value}</span>
-          <EvidenceChip evidence={evidence} alignEnd={alignEnd} />
-        </div>
-      )}
+    <div className={`min-w-0 ${divider ? "sm:border-l sm:border-line sm:pl-5" : ""}`}>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-faint">
+          {label}
+        </span>
+        {value === undefined ? (
+          <span className={`text-sm ${missing ? "font-semibold text-warn" : "text-fg-faint"}`}>{missing ? "Missing" : "—"}</span>
+        ) : (
+          <>
+            <span className="break-words text-sm">{parts ? <Parts parts={parts} tone={tone} /> : value}</span>
+            <EvidenceChip evidence={evidence} alignEnd={alignEnd} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -117,7 +131,7 @@ export function CompareView({
           {fieldLabel(row.field)}
         </div>
         <Cell label="SI" value={row.si} parts={diff?.left ?? null} tone="del" evidence={siEvidence?.[row.field as keyof ExtractedDocumentEvidence]} missing={isFlagged && row.si === undefined} />
-        <Cell label="BL" value={row.bl} parts={diff?.right ?? null} tone="add" evidence={blEvidence?.[row.field as keyof ExtractedDocumentEvidence]} missing={isFlagged && row.bl === undefined} alignEnd />
+        <Cell label="BL" value={row.bl} parts={diff?.right ?? null} tone="add" evidence={blEvidence?.[row.field as keyof ExtractedDocumentEvidence]} missing={isFlagged && row.bl === undefined} alignEnd divider />
       </div>
     );
   };
