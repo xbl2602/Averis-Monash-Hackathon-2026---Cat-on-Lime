@@ -81,6 +81,14 @@ verification_results（结果层）
 的边界——`review_overrides`/`review_actions` 两张表的写入完全由 `lib/shared/review/` 负责，
 四个 feature 模块（classification/extraction/comparison/pipeline）各自的 `api/review/*` 只是薄层转发。
 
+## 评委自带文档测试（sandbox 模块）：完全不进这条管道
+
+`app/features/sandbox/` 是唯一一个**不碰 Supabase 任何一张表**的模块——它接收上传的 SI/BL 文件内容，
+直接调用 classification/extraction/comparison 各自的 `logic/`（和 `pipeline.ts` 一样是编排层，只是
+输入来自请求体而不是 `data/sample/`），结果算完直接返回，不落 `verification_results`、不进
+`raw_emails`/`parsed_attachments`。这是有意设计：这个模块的目的是"临时测一次、不留痕迹"，
+不应该污染正式的结果表或参与统计/导出。
+
 ## 数据的"读/写"边界
 
 | 数据 | 谁能读 | 谁能写 |

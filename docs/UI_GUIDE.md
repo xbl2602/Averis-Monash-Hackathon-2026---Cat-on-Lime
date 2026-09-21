@@ -128,6 +128,20 @@
 `app/_components/review/`，REVIEW_SPEC §9 有写）。乐观锁：写操作可选带 `expected_updated_at`，
 冲突返回 409，前端应提示"这条已被别人改过"。
 
+### 2.8 Sandbox：评委自带 SI/BL 文档临时测试（新，还没有界面）
+
+| 方法 路径 | 一句话作用 | 口令 | 状态 |
+|---|---|---|---|
+| `POST /features/sandbox/api` | 拿自己的 SI+BL 文件（不是仓库样例）跑一次分类(可选)+抽取+比对，不写库 | 免 | 实做 |
+| `GET /features/sandbox/api` | 浏览器打开时回用法说明 | 免 | 仅说明 |
+
+建议界面：一个表单——邮件主题/正文（可选文本框）+ 两个文件选择框（SI / BL，各自限
+`.txt/.md/.pdf/.docx/.xlsx`，单文件 1.5MB）+ 一个 provider 下拉（可选）。提交后把文件转
+`data_base64`（`FileReader.readAsDataURL` 去掉前缀，或 `arrayBuffer` 转 base64）塞进请求体；
+展示分类结果（没给主题/正文时这块不显示）、SI/BL 各自抽出的 7 个字段、比对结论与差异字段。
+这个页面**不需要口令、不需要 Supabase**，可以放在导航里独立一个入口（比如"Try your own"），
+也适合放进首页的产品介绍区旁边做一个"现在就试试"的 CTA。
+
 ## 3. 口令怎么带（重要）
 
 - 写接口统一请求头 `x-admin-token`；服务端口令存在环境变量 `ADMIN_TOKEN`（未配置 403，口令错 401）。
@@ -155,14 +169,11 @@
 | `list_uploaded_documents` | 读 | 实做 |
 | `classify_uploaded_document` | 写 | 实做 |
 
-## 6. 已知的文档不一致（不影响 GUI 使用，待有空同步）
+## 6. 已知的文档不一致（2026-09-21 已全部修复，见 TODO.md P2-6）
 
-1. `PHASE2_SPEC.md` 提到 `GET /features/import/api/documents/export`，代码里没有 → **以代码为准，别接**。
-2. `SHARED_INTERFACES.md` 没有把 classification / extraction / comparison 三条 `POST` 端点写进端点表（只有数据契约）→ 契约看 route.ts 或询问操作者。
-3. 同文件 MCP 章节没有逐项列出 `classify_email` / `extract_document_fields` / `compare_documents`（只写了"共 8 个读"）。
-4. `PHASE2_SPEC.md` 的"测试连接"目标清单缺 `lmstudio`（代码已支持）；`§4.2` 端点清单缺 `supabase-projects/deactivate`（代码已有，`SHARED_INTERFACES.md` 已记）。
-5. `PHASE2_SPEC.md` 的 import 列表参数缺 `detected_type`（代码已支持，`SHARED_INTERFACES.md` 已记）。
-6. `PHASE2_SPEC.md` 笼统写"POST 都要口令"，但分类/抽取/比对三个 POST 是开放的（不写库）——实现与 `SHARED_INTERFACES.md` 一致，属措辞过粗。
+原来记的 6 条（导出端点不存在、端点表缺三条 POST、MCP 未逐项列工具、缺 `lmstudio`、缺
+`supabase-projects/deactivate`、import 参数缺 `detected_type`、口令措辞过粗）已经全部同步进
+`PHASE2_SPEC.md` 和 `SHARED_INTERFACES.md`，这里不再重复列。以后再发现新的不一致，照这个格式加进来。
 
 
 ---
@@ -274,3 +285,38 @@
 
 - `X-Export-Invalid` / `X-Export-Invalid-Ids`：行内自相矛盾（如 MISMATCH 没有缺陷清单、NEEDS_REVIEW 缺原因）的 email_id；任一条时 `X-Export-Incomplete` 也为 true
 - 建议：`fetch + blob` 下载 submission 后检查头，`Invalid > 0` 显示红色告警（"提交文件有 N 条自相矛盾，请先修复/重跑"）；`Missing` / `Stale` 沿用原建议
+
+## 8. 手绘草图功能核对（2026-09-21，操作者拿两张手绘图对照现状）
+
+> 背景：操作者画了两张图（Main 列表+展开对比、Dashboard），本意是标注"系统要有什么功能"而不是具体界面样式。核对结论：图上的功能点后端已经全部就绪，缺口仍然是"没接 GUI"，和上面 §2.7/§3 是同一个缺口，不是新后端工作。这里只补两条图纸带出来、但前面章节写得还不够具体的点，以及一个待确认的开放问题。
+
+### 8.1 Dashboard 应该是独立页面，不是列表页里的附属项
+
+图上的 Dashboard 是一个单独页面：总处理数 / 失败数、几张 detail 明细卡片、"导出全部结果"按钮。对应接口全部就绪：
+
+- `GET /features/results/api/stats`（`total_emails` / `failed` / `by_category` / `by_status` / `defect_field_frequency`）
+- `GET /features/results/api/export?scope=stats` 或 `scope=submission`（导出全部）
+
+之前 §3 只把它列成结果列表页的"[参考]"附属项，图纸的意思是它值得单独做一个页面（首页/导航栏一个入口），不是塞在别的页面角落。
+
+### 8.2 并排对比视图：后端只给到"哪个字段不一致"，不给字符级高亮
+
+图上"compare view 展开"要求两栏并排、差异部分用颜色标出。数据来源：
+
+- 每条记录的 `defect_fields`（字段级——告诉你"consignee 这个字段不一致"）+ `comparison_status`（OK/MISMATCH/NEEDS_REVIEW，对应图上的 normal/warning）
+- `evidence_si` / `evidence_bl`（字段级出处，`{ line, text, source }`，可以做"点开看原文第几行"）
+
+**后端不做字符级 diff**（比如 `APRIL Fine Paper` vs `APRIL FIne Paper` 具体哪个字母不一样）——两边的完整字段值都已经在返回里（`extracted_si`/`extracted_bl` 或 conflicts 的 `si_values`/`bl_values`），如果要做到字符级高亮，前端自己拿这两个字符串跑一个 diff 库即可，不需要后端再加接口。
+
+### 8.3 开放问题（未定，先记录不动手）——"和别的邮件比对"按钮的本意
+
+图上 Main 列表里有一个"compare with other mail"触发按钮，指向 compare 展开视图。有两种可能，目前操作者尚未决定是哪种：
+
+1. **看这封邮件自己的 SI vs BL**——数据已经齐全（`extracted_si`/`extracted_bl` 已经在 `list_results`/`list_conflicts` 返回里），纯前端展示，不需要新接口。
+2. **任选两封不相关的邮件互相比对**——现有 `POST /features/comparison/api` 理论上能接受任意两组字段（不强制要求同一封邮件），但没有"传两个 `email_id` 直接比"的便捷接口；如果确定要做成正式功能，需要后端补一个小接口（把两个 `email_id` 换成各自的 `extracted_si`/`extracted_bl` 再调 `compareDocumentsHybrid`）。
+
+**在操作者明确是哪种之前，不要按第 2 种去实现 GUI 或加后端接口**，避免做完发现理解错了要返工。
+
+### 8.4 唯一一个真正"接口也没准备好"的点——分类"没把握但没失败"没有落库
+
+图上 Main 页的"Check"标签页，如果本意是"分类置信度不够、需要人工看一眼"（区别于 §2.7 review 闭环里已覆盖的"分类彻底失败降级"），**这个数据现在拿不到**：`classifyEmailHybrid` 算出的置信度/`needs_review` 只在单条实时调用时临时返回一次，批量流水线跑完不会把它存进 `verification_results`，所以列表/统计接口都查不到"哪些邮件分类没把握"。这不是"没接 GUI"，是**数据库这层就没留这一列**，要做的话得先加一列 schema 改动、再改批量流水线写入逻辑——真正需要操作者新写后端代码的点，跟前面几条"接口都在只是没人调"性质不一样。详见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「人工复核闭环」一节的"已知缺口"。

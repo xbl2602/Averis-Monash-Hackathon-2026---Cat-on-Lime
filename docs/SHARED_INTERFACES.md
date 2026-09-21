@@ -41,6 +41,16 @@ interface ClassifyEmailResult {
 - **降级标记（2026-09-21 起）**：混合引擎（不传 provider）降级时，结果层 `model_provider` 会带 `degraded`（分类尽力兜底）或 `rules-degraded`（比对 Jev 复核失败）；运维/GUI 可用 `provider=degraded` 子串筛出这些邮件，再用 pipeline 的 `retry_failed` 一键重试（接法见 UI_GUIDE.md 第二部分 §7）。**显式传 provider 时不会降级到别的模型**（选谁只试谁，避免"悄悄换模型装作成功"）。
 - 该参数只在 `api` / `mcp` 层解析、传给 `logic`；`logic` 里的函数签名是 `{ ..., provider?: LLMProvider }`，默认值由 logic 自己兜底，UI 不传也能正常工作。
 
+### REST 端点（三个基础模块，单文档、开放不需要口令）
+
+| 路径 | 请求体 | 返回 |
+|---|---|---|
+| `POST /features/classification/api` | `{ email_id, provider? }` | `ClassifyEmailResult` |
+| `POST /features/extraction/api` | `{ attachment_path, documentType: "SI"\|"BL", provider? }` | `ExtractDocumentResult` |
+| `POST /features/comparison/api` | `{ si, bl, provider? }`（`si`/`bl` 是 `ExtractedDocumentFields`） | `CompareDocumentsResult` |
+
+三个都不写库，**不需要 `x-admin-token`**（这条和 `PHASE2_SPEC.md`「写接口都要口令」是两回事，那条规则只管 config/mail/import 自己的接口）。GET 同一路径返回接口用法说明。
+
 ## extraction 模块的输出
 
 对 SI 或 BL 里的一份文档文本，抽取下面 7 个字段（这是官方指定的字段，按"含义"对齐，不是按原文字段名对齐——SI 和 BL 上同一个字段的叫法可能不一样）：
@@ -445,6 +455,32 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 加上原有的 8 个，现在共 11 个 tool（8 个只读 + 3 个写库；写 tool 需 `x-admin-token`，只有 `run_batch` 的
 `dry_run=true` 允许匿名预览）。
 
+## sandbox 模块（评委自带文档临时测试，P2）
+
+**背景**：`classification`/`extraction` 的单文档接口只能对着仓库自带的样例数据用（传 `email_id` /
+`attachment_path`，指向 `data/sample/`），评委自己带一份新的 SI/BL 文档、或临时换一封邮件测试时，
+之前没有任何接口能接住——这正是决策记录21提到的真实风险（"决赛现场评委临时换一封邮件测试"）。
+`app/features/sandbox/` 补这个缺口：直接接收上传的文件内容，跑一次分类（可选）+ 抽取 + 比对，
+**不写库、不需要配置 Supabase**，用完即丢，Vercel 和本地/Docker 行为完全一致。
+
+| 路径 | 作用 | 保护 |
+|---|---|---|
+| `POST /features/sandbox/api` | `{ subject?, body?, from?, si: {name,data_base64}, bl: {name,data_base64}, provider? }` → `{ classification, extraction:{si,bl}, comparison }` | 开放（不写库，不需要口令） |
+
+- `subject`/`body` 都不给 → `classification` 返回 `null`（只测抽取+比对）；给了任一个就会跑分类。
+- `si`/`bl` 必填，支持 `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`，**单文件不超过 1.5MB**（两份文件要一起塞进一次
+  JSON 请求体，留够 Vercel ~4.5MB 请求体上限的余量；这个场景是"贴一份单证测试"，不是批量归档，
+  没有对齐 import 模块 20MB 的上限）。文件校验（扩展名白名单 → base64 解码复核 → 魔数校验）复用
+  [`lib/shared/file-validate.ts`](lib/shared/file-validate.ts)——这是从 `import` 模块的校验逻辑里提出来的
+  公共层，两个模块共用一套规则，import 模块自己的行为没有变化。
+- 抽取/比对引擎和生产环境完全一致（`extractFields` 规则优先+Gemini兜底、`compareDocumentsHybrid`
+  规则+Jev复核），不是简化版——评委测出来的结果和系统正式跑出来的结果同一套标准。
+- `provider` 可选，语义同其余模块；传 `jev` 时抽取会忽略它、用自己的默认值（Gemini），因为 Jev 不做文本抽取。
+
+### MCP tool
+
+`run_adhoc_test`（只读——不写任何库，用完即丢），参数/返回与上面的 REST 端点一一对应。
+
 ## 环境变量约定
 
 见 [`.env.example`](.env.example)，新增需要的环境变量时同步更新那个文件（不要把真实 key 提交进 git）。
@@ -461,6 +497,10 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 ## MCP tool 约定
 
 每个 feature 的 `mcp/index.ts` 导出 `{ name, description, inputSchema, handler }` 形状的对象，由 `app/core/mcp-server/tools.ts` 统一汇总注册（一个模块可以导出多个，用数组，如 `resultsMcpTools`），不要自己在别的地方重复注册。handler 返回普通对象时由汇总层转成 JSON 文本；需要返回文件内容/MCP 原生结果时，可以直接返回 `{ content: [...], _meta }`。
+
+三个基础模块各自的 tool 名（只读，`readOnlyHint:true`，参数/返回与上面的 REST 端点一一对应）：
+`classify_email`（classification）/ `extract_document_fields`（extraction）/ `compare_documents`（comparison）。
+其余模块的 tool 清单见各自章节（results 4 个、pipeline 1 个、mail/import 各自的、人工复核闭环 16 个）。
 
 **注解是硬约定（写保护 gate 按此 fail-closed 判定）**：只读 tool 必须显式声明 `readOnlyHint: true`；
 会写库的 tool 必须显式声明 `readOnlyHint: false`；未声明的一律按"需要口令"处理。写 tool 可以额外声明

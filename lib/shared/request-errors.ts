@@ -39,6 +39,9 @@ const KNOWN_ERROR_STATUS: Record<string, number> = {
   ReviewNotFoundError: 404,
   ReviewConflictError: 409,
   ReviewStoreUnavailableError: 503,
+  SandboxRequestError: 400,
+  SandboxFileTooLargeError: 413,
+  FileValidationError: 400,
 };
 
 export const INTERNAL_ERROR_MESSAGE = "内部错误（详情见服务端日志）";

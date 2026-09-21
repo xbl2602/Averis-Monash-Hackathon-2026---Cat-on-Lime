@@ -74,9 +74,14 @@
 - **现状/证据**：有 `npm run typecheck`（`package.json:13`，`tsconfig.json` strict），但**无 ESLint、无 `.github/workflows`**，验证靠手跑脚本。
 - **做法**：加 ESLint（Next 官方配置）+ 一个 CI 跑 `typecheck`（+ 可选的 `test:mcp-annotations`、`test:crypto`）。不要引入重型框架。
 
-### [ ] P2-6 同步文档里已知的 6 处不一致
-- **现状/证据**：清单在 `docs/UI_GUIDE.md` 第 6 节（PHASE2_SPEC 的导出端点不存在、端点表缺三条 POST、MCP 章节未逐项列工具、测试目标缺 `lmstudio`、缺 `supabase-projects/deactivate`、import 参数缺 `detected_type`、措辞过粗）。
-- **做法**：以代码与 `docs/SHARED_INTERFACES.md` 为准修 `docs/PHASE2_SPEC.md`，修完把 UI_GUIDE 第 6 节对应条目删掉。
+### [x] P2-6 同步文档里已知的 6 处不一致
+- **做了什么**：`docs/PHASE2_SPEC.md` 删掉不存在的 `documents/export` 端点、`test` 接口目标清单补 `lmstudio`、`§4.2` 补 `supabase-projects/deactivate`、import 列表端点补 `detected_type` 查询参数、`§1` 加了一句澄清"口令规则只管 config/mail/import 自己的接口，不是全项目所有 POST"。`docs/SHARED_INTERFACES.md` 补了 classification/extraction/comparison 三个 REST 端点的表格和对应的 3 个 MCP tool 名。`docs/UI_GUIDE.md` 第6节清空重复内容，改成指回这两份文件。
+
+### [x] 验证：评委安装部署便利性 + 新增 sandbox 模块（评委自带测试集，单条版）
+- **做了什么**：① 实测（不是看文档猜）本地零配置 `npm run dev` 和 Docker `docker compose up --build` 两条路径，确认首页/Full pipeline 预览页/`dry_run` 批量预览在完全没有 Supabase/LLM key 的情况下也能正常工作（规则引擎优先 + 样例数据读本地文件，不依赖数据库）；README 新增"评委/新人 30 秒看到它跑起来"一节把这条路径讲清楚，并说明 Supabase 的 anon key 本身不敏感、可以直接问操作者要现成的，不需要评委自己注册账号。② 发现一个真实架构缺口：分类/抽取的单文档接口只能对着仓库自带样例数据用，评委带自己的新邮件/SI/BL 文件没法测——新增 `app/features/sandbox/`（`POST /features/sandbox/api` + MCP `run_adhoc_test`）补上，不写库、不需要配置 Supabase，复用生产同一套抽取/比对引擎。顺带把 `import` 模块的文件校验逻辑抽出成 `lib/shared/file-validate.ts` 供两边共用。
+- **决策记录**：`DECISION_LOG.md` 决策32。
+- **验收**：用真实样例文件（已知有差异的 email_004 SI/BL）当"评委自己的文档"喂给 sandbox 接口，结果和正式流水线完全一致；错误路径（坏扩展名/坏base64/超限/缺文件）都返回可读错误。`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations` 均通过。
+- **还没做**：批量测试集版本（一次上传一整批邮件+附件跑整箱）——操作者明确说"两个都要，先做单条"，批量版视时间决定；sandbox 的 GUI 页面（`docs/UI_GUIDE.md` §2.8 已写好交接说明，归队友A）。
 
 ---
 

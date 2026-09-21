@@ -39,7 +39,7 @@
 | [TEAM_HANDBOOK.md](TEAM_HANDBOOK.md) | 团队手册：分工、时间线、Git、协作方式 | 视计划变化更新 |
 | [FINALS_ROADMAP.md](FINALS_ROADMAP.md) | 决赛冲刺计划与缺口清单 | 视计划变化更新 |
 | [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md) | 题目背景、评分理解、赛程 | 背景，基本不改 |
-| [PHASE2_SPEC.md](PHASE2_SPEC.md) | config / mail / import 三块的设计说明 | ⚠️ 部分字段已落后于代码，以 SHARED_INTERFACES 为准（差异清单见 UI_GUIDE §6） |
+| [PHASE2_SPEC.md](PHASE2_SPEC.md) | config / mail / import 三块的设计说明 | ✅ 2026-09-21 已同步文档差异（原 UI_GUIDE §6 清单已修完） |
 | [REVIEW_SPEC.md](REVIEW_SPEC.md) | 人工复核闭环（复核队列 / 落库 / 撤销 / 审计）的设计规范 | ✅ 后端（REST+MCP）已实现，四模块都接了；**GUI 未做**（队友A待办，见 UI_GUIDE.md）；实现记录见本文件 §14.1 |
 
 ### C. 历史 · 只读（不要再回头改，新记录追加到末尾）

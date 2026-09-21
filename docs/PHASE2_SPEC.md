@@ -14,6 +14,11 @@
 
 ## 1. 安全模型
 
+> 本节的口令规则只管**本文件涉及的三个 feature**（config/mail/import）自己的接口。项目里另外还有
+> `classification`/`extraction`/`comparison` 三个模块的 `POST` 端点（单文档分类/抽取/比对），
+> 那三个 POST 不写库、是开放的，不需要口令——不要把下面这条规则误读成"全项目所有 POST 都要口令"，
+> 具体契约见 `SHARED_INTERFACES.md`。
+
 - 读接口：完全开放（和现有演示一致，裁判可自由查看）
 - 写接口（PUT/POST/DELETE）：需要请求头 `x-admin-token: <ADMIN_TOKEN>`。
   - 服务端在 `ADMIN_TOKEN` 未配置时**拒绝所有写操作**并返回可读错误（安全默认）
@@ -73,7 +78,7 @@
 ```
 GET  /features/config/api                       读全部配置（敏感项为掩码；?category=llm 过滤）
 PUT  /features/config/api                       批量写：{ updates: [{ key, value }] }（写保护）
-POST /features/config/api/test                  测试连接：{ target: "claude"|"openai"|"deepseek"|"gemini"|"typesafe"|"supabase" }
+POST /features/config/api/test                  测试连接：{ target: "claude"|"openai"|"deepseek"|"gemini"|"typesafe"|"supabase"|"lmstudio" }
                                                 → { ok: boolean, detail: string }（写保护，服务端解密后真调一次）
 ```
 
@@ -106,6 +111,7 @@ POST /features/mail/api/gmail/disconnect         断开（写保护）
 GET  /features/mail/api/supabase-projects        列出项目（service_key 掩码）
 POST /features/mail/api/supabase-projects        新增/更新项目（写保护）
 POST /features/mail/api/supabase-projects/activate  切换启用项目（写保护）
+POST /features/mail/api/supabase-projects/deactivate  停用当前启用项目，回退到环境变量配置（写保护；切换到一个配置有误的项目后的恢复通道）
 ```
 
 Supabase 客户端解析优先级：`supabase_projects.is_active > 环境变量`。现有 env 方案保持可用，切换 project 后新建的请求走新项目。
@@ -155,10 +161,11 @@ POST /features/import/api/upload     写保护
   返回: { batch_id, items: [{ name, status: "stored"|"duplicate"|"rejected", reason?, id?, detected_type? }] }
   ——单文件失败不影响其他文件（逐文件 try/catch）
 
-GET  /features/import/api/documents  列表（?review_status=pending&limit=&offset=）
+GET  /features/import/api/documents  列表（?review_status=pending|filed|skipped&detected_type=SI|BL|OTHER|UNKNOWN&limit=&offset=）
 PUT  /features/import/api/documents  人工归类：{ id, detected_type }（写保护）
-GET  /features/import/api/documents/export  导出提交用文件（复用 results/export 的格式，写后续）
 ```
+
+（没有导出端点——上传文档池不接官方 submission 导出，那是 `results` 模块 `GET /features/results/api/export` 的职责，两者不要混。）
 
 GUI 侧约定：文件夹上传用 `<input webkitdirectory>` 拿到文件列表后，**按 3MB/批**切开逐个请求；
 每个批次的结果就地展示，失败的可以单独重试。

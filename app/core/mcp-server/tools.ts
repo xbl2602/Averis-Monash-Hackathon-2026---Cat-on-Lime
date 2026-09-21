@@ -6,6 +6,7 @@ import { resultsMcpTools } from "@/app/features/results/mcp";
 import { pipelineMcpTool, pipelineReviewMcpTools } from "@/app/features/pipeline/mcp";
 import { mailMcpTools } from "@/app/features/mail/mcp";
 import { importMcpTools } from "@/app/features/import/mcp";
+import { sandboxMcpTool } from "@/app/features/sandbox/mcp";
 
 /**
  * 汇总各个 feature 模块暴露的 MCP tool 定义。
@@ -64,4 +65,5 @@ export const mcpTools: McpToolDefinition[] = [
   ...resultsMcpTools,
   ...mailMcpTools,
   ...importMcpTools,
+  sandboxMcpTool,
 ];

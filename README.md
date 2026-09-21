@@ -6,6 +6,22 @@ Averis x Monash Hackathon 2026 —— 航运单证核验。团队协作规则见
 
 判断航运操作团队收到的邮件类型（SI请求 / BL确认 / 发票询问 / 一般询问 / 垃圾邮件），并在 BL 确认类邮件里比对 Shipping Instruction 和 Bill of Lading 草稿的字段，标出不一致的地方。详见 [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md)。
 
+## 评委/新人：30 秒看到它跑起来（不用配置任何 key）
+
+**线上最快**：直接打开 https://hackathonaveris.vercel.app ，进"Full pipeline 预览页"点 Run preview，或者
+用你自己的 SI/BL 文档试："Sandbox" 页（`/features/sandbox`，接口见下文）不写库、不需要任何配置。
+
+**自己电脑上跑，只要两条命令**：
+
+```bash
+npm install && npm run dev
+```
+
+打开 http://localhost:3000 ，点"Run preview"就能看到分类→抽取→比对真的跑起来——**这一步完全不需要填任何 key**，因为规则引擎优先、且预览用的是仓库自带的样例数据（不落库）。Docker 同理，见下文"Docker 部署"，也是两条命令、不用填 key。
+
+如果还想看**历史结果统计/冲突列表/导出提交文件**这些依赖数据库的功能，才需要 Supabase 的 `URL` / `ANON_KEY`
+（见下文「本地开发」）——这两个不是敏感信息（Supabase 的 anon key 设计上就是给浏览器用的、只读），可以直接问操作者要现成的，不需要自己注册 Supabase 账号。
+
 ## 环境要求
 
 - Node.js 22+（[nodejs.org](https://nodejs.org) 下载安装即可，安装时自带 npm；AI SDK v7 要求 Node 22 以上，Vercel/Docker 也都是 22）
@@ -100,7 +116,7 @@ curl -X POST http://localhost:3000/features/pipeline/api \
 
 响应里的 `remaining` = 还没跑完的数量；`stopped_by_deadline=true` 表示这一轮被 30s deadline 截断，再调一次即可（写模式会跳过已经算好的）。**dry_run / 匿名预览不写库、每次只预览前 20 封；要攒齐完整体必须用写模式（带口令）分批续跑**（模型结果走 `llm_call_cache` 复用）。
 
-单文档接口（分类/抽取/比对）GET 同一地址可以看用法，POST 示例：
+单文档接口（分类/抽取/比对，只能对着仓库自带样例数据用）GET 同一地址可以看用法，POST 示例：
 
 ```bash
 curl http://localhost:3000/features/classification/api            # GET：接口用法说明
@@ -109,7 +125,15 @@ curl -X POST http://localhost:3000/features/classification/api \
   -d '{"email_id":"email_004"}'
 ```
 
-格式见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「pipeline 模块（批量入口）」。写保护规则见下文「评委体验与写保护」。
+**想拿自己的 SI/BL 文档测（不是仓库自带样例）**，用 sandbox 接口——不写库、不需要配置 Supabase：
+
+```bash
+curl -X POST http://localhost:3000/features/sandbox/api \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"Please confirm BL","body":"See attached SI and draft BL","si":{"name":"my_si.txt","data_base64":"<base64>"},"bl":{"name":"my_bl.txt","data_base64":"<base64>"}}'
+```
+
+格式见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md)「pipeline 模块（批量入口）」「sandbox 模块」。写保护规则见下文「评委体验与写保护」。人工复核闭环（`/features/<m>/api/review/*`，四个模块都有）见 [REVIEW_SPEC.md](docs/REVIEW_SPEC.md)。
 
 MCP 端点（Streamable HTTP，无状态）：
 
@@ -118,12 +142,16 @@ MCP 端点（Streamable HTTP，无状态）：
 线上：https://hackathonaveris.vercel.app/core/mcp-server
 ```
 
-共 11 个 tool：
+共 28 个 tool（`npm run test:mcp-annotations` 会打出实时的读/写清单和总数，这里给个分类速查）：
 
 | 类型 | tool |
 |---|---|
-| 只读（8 个） | `classify_email` / `extract_document_fields` / `compare_documents` / `list_results` / `get_stats` / `list_conflicts` / `export_results` / `list_uploaded_documents` |
-| 写库（3 个，需 `x-admin-token`；`run_batch` 的 `dry_run=true` 可匿名预览） | `run_batch` / `sync_gmail` / `classify_uploaded_document` |
+| 单文档核验（只读，4个） | `classify_email` / `extract_document_fields` / `compare_documents` / `run_adhoc_test`（自带 SI/BL 测试，不写库） |
+| 结果查询（只读，4个） | `list_results` / `get_stats` / `list_conflicts` / `export_results` |
+| 人工复核闭环（P1-1，4模块×4个=16个；`list_*`/`get_*_review_history` 只读，`apply_*`/`undo_*` 写库） | `list_<m>_review` / `get_<m>_review_history` / `apply_<m>_review_action` / `undo_<m>_review_action`（`<m>` = classification/extraction/comparison/pipeline） |
+| 其余（1只读+3写库） | `list_uploaded_documents`（只读）/ `run_batch` / `sync_gmail` / `classify_uploaded_document`（写库） |
+
+写库的 tool（`readOnlyHint:false`）都需要 `x-admin-token`；只有 `run_batch` 的 `dry_run=true` 允许匿名预览。
 
 Claude Desktop 等 MCP client 直接把这个地址填成远程 MCP server 即可（GET/DELETE 返回 405 是正常的，
 无状态模式只接受 POST）。
@@ -222,7 +250,9 @@ docker compose up --build
 
 - 引擎完成：规则优先 + Jev 判断 + LLM 兜底；全量评测 **520/520 端到端一致、缺陷字段 0 漏报 0 误报**（见上文"本地评测"）
 - 数据层就绪：`raw_emails` / `parsed_attachments` / `verification_results` 三张表 + 只读视图 `verification_overview` + 内部缓存表 `llm_call_cache`，导入脚本支持增量（见上文）
-- 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（共 11 个 tool，地址见上文）
+- 查询/统计/冲突对/导出（results 模块）REST + MCP 已就绪；MCP server 已接上真正的 Streamable HTTP 握手（共 28 个 tool，地址见上文）
+- 人工复核闭环（P1-1）REST+MCP 已就绪（四模块 confirm/correct/disposition/defer/undefer/note/rerun/undo/bulk），GUI 未做，见 [REVIEW_SPEC.md](docs/REVIEW_SPEC.md)
+- sandbox 接口（评委自带 SI/BL 文档临时测试，不写库不需要 Supabase）已就绪，见上文
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：① extraction 的 REST/MCP 之前把 PDF 按 UTF-8 直接读（现在统一走格式解析）；② Next 打包器会丢 `pdf.worker.mjs` 导致服务端 PDF 解析失败（已把 `pdf-parse`/`pdfjs-dist` 声明为 `serverExternalPackages`）

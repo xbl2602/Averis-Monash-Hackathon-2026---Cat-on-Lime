@@ -432,3 +432,33 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
   `X-Review-Deferred` 头随人工动作实时变化，全部通过；测试数据用完已从 `review_overrides`/
   `review_actions` 清空，没留在共享数据库里。`npm run typecheck`、`npm run build`（16 个新路由都
   正常生成）、`npm run test:mcp-annotations`（写 tool 白名单已加 8 个新条目）均通过。
+
+### 决策 32：新增 sandbox 模块——评委自带 SI/BL 文档临时测试，不写库（P2）
+
+- **背景**：操作者要求验证"评委安装部署是否方便"和"评委能不能上传自己的测试集"两件事。验证过程中
+  发现一个真实的架构限制：`classification`/`extraction` 的单文档 REST/MCP 接口传的是"样例数据里的
+  `email_id`/`attachment_path`"，只能对着仓库自带的 520 封样例用——评委没法直接把自己的一份新邮件
+  或 SI/BL 文件传进去测。这正是决策21提到的风险原话："决赛现场评委临时换一封邮件测试"可能暴露
+  "系统本身其实不会处理没见过的邮件"。
+- **决策**：新增 `app/features/sandbox/`（独立 feature 文件夹，不改动 classification/extraction/
+  comparison 内部实现）：`POST /features/sandbox/api` 接收 `{ subject?, body?, from?, si, bl, provider? }`
+  （`si`/`bl` 是 `{name, data_base64}`），直接调用三个模块各自的 `logic/`（分类可选、抽取+比对必做），
+  结果用完即丢，**不写 Supabase 任何表**、**不需要配置 Supabase**——Vercel 和本地/Docker 行为完全一致，
+  这也顺带满足了"两种部署方式都要支持"的要求（因为它压根不依赖数据库）。抽取/比对用的是和生产
+  完全一样的引擎（`extractFields`/`compareDocumentsHybrid`），不是简化版。
+- **顺带的重构**：上传文件的通用校验逻辑（扩展名白名单、base64 解码复核、魔数校验、文件名净化）
+  原来只在 `import` 模块里，这次抽出来放 `lib/shared/file-validate.ts`（`import` 模块自己的
+  `validate.ts` 改成薄封装调用它，行为完全不变），sandbox 直接复用，不重新写一遍校验逻辑。
+- **交互形态选择**：操作者明确要"单条即测"和"批量测试集"两个都要，先做单条（优先级更高、能立刻
+  解决"临时换一封邮件"的真实风险），批量版本（类似样例格式的一整批邮件+附件）视时间决定要不要做，
+  暂不在这轮范围内。
+- **文件大小限制**：单文件 1.5MB（不是 import 模块的 20MB）——因为两份文件要一起塞进一次 JSON 请求体，
+  要留够 Vercel ~4.5MB 请求体上限的余量，这个场景是"贴一份单证测试"，没必要对齐批量归档的上限。
+- **验证**：用真实样例文件（`email_004` 的 SI/BL，已知有 `consignee`/`notify_party` 两处差异）当"评委
+  自己的文档"重新提交给 sandbox 接口，分类/抽取/字段出处/比对结论和正式流水线跑出来的结果完全一致；
+  错误路径（不支持的扩展名、伪造的 base64、超过大小上限、缺文件）都返回可读的 400/413。同时借这次
+  机会验证了"评委零配置能不能跑起来"：临时把 `.env.local`/`.env` 换成空白模板，`npm run dev` 和
+  `docker compose up --build`（真实构建镜像、真实启动容器）都能在零配置下把首页和"Full pipeline
+  预览页"跑起来，`dry_run` 批量预览也能在零 Supabase 配置下工作（读的是本地 `data/sample/` 文件，
+  不依赖数据库）——这部分结果记入 README 新增的"评委/新人 30 秒看到它跑起来"一节。
+  `npm run typecheck`、`npm run build`（`/features/sandbox/api` 正常生成）均通过。
