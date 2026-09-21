@@ -86,14 +86,26 @@ export async function runEmailPipeline(
     };
   }
 
-  const { siDoc, blDoc } = await resolveDocumentPair(input.attachments, options.textProvider);
+  const { siDoc, blDoc, leftoverOtherType, leftoverUnreadable } = await resolveDocumentPair(
+    input.attachments,
+    options.textProvider
+  );
 
   if (!siDoc || !blDoc) {
+    // 配不上对，不等于"没有附件"：附件在、但读不出来或明显不是 SI/BL 时，要照实报给人看，
+    // 不能落到"没要求比对就判 OK"那条路上（2026-09-22 扰动测试 pt1 暴露：附件名去掉 _SI/_BL
+    // 标记后，读不出的 BL 和冒充 BL 的发票都被静默判成了 OK，10 封全错）。
+    // 优先级和下面文件名配对路径保持一致：先 wrong_doc_type，再 unreadable。
+    const reason: ReviewReason | null = leftoverOtherType
+      ? "wrong_doc_type"
+      : leftoverUnreadable
+        ? "unreadable"
+        : emailAsksForComparison(input.email.body)
+          ? "missing_attachment"
+          : null;
     const result = applyClassificationConfidence(
       classification,
-      emailAsksForComparison(input.email.body)
-        ? buildReview(classification.category, "missing_attachment")
-        : buildOk(classification.category)
+      reason ? buildReview(classification.category, reason) : buildOk(classification.category)
     );
     return { result, meta, extracted, evidence };
   }
@@ -228,30 +240,43 @@ function findDocument(
  * 1. 先按文件名的 _SI / _BL 标记配对（历史行为，样例数据走这条）；
  * 2. 有缺位时，对没被占用、且能读出文字的附件按内容识别（关键词规则为准，规则判不出才问模型链），
  *    只补缺的那一侧，同一份附件不会被 SI 和 BL 抢两次；
- * 3. 内容也认不出就维持缺位，走原来的 missing_attachment / unreadable 分支。
+ * 3. 内容也认不出就维持缺位，同时如实报告"为什么缺"——有读不出的附件（leftoverUnreadable），
+ *    或者有能读但明显不是 SI/BL 的附件（leftoverOtherType），调用方据此判 unreadable / wrong_doc_type，
+ *    而不是把"附件在但用不了"当成"根本没附件"。
  * 识别规则本身只在 lib/shared/document-identify.ts / document-identify-llm.ts，这里不重写。
  */
+interface DocumentPairResolution {
+  siDoc?: PipelineAttachment;
+  blDoc?: PipelineAttachment;
+  leftoverOtherType: boolean;
+  leftoverUnreadable: boolean;
+}
+
 async function resolveDocumentPair(
   attachments: PipelineAttachment[],
   preferred?: LLMProvider
-): Promise<{ siDoc?: PipelineAttachment; blDoc?: PipelineAttachment }> {
+): Promise<DocumentPairResolution> {
   let siDoc = findDocument(attachments, "_SI");
   let blDoc = findDocument(attachments, "_BL");
-  if (siDoc && blDoc) return { siDoc, blDoc };
+  if (siDoc && blDoc) return { siDoc, blDoc, leftoverOtherType: false, leftoverUnreadable: false };
 
   const claimed = new Set(
     [siDoc, blDoc].filter((doc): doc is PipelineAttachment => Boolean(doc))
   );
-  const candidates = attachments.filter(
-    (attachment) => !claimed.has(attachment) && attachment.parseStatus === "ok"
-  );
-  for (const candidate of candidates) {
+  const unclaimed = attachments.filter((attachment) => !claimed.has(attachment));
+  let leftoverOtherType = false;
+  for (const candidate of unclaimed) {
     if (siDoc && blDoc) break;
+    if (candidate.parseStatus !== "ok") continue;
     const type = await identifyDocumentTypeSmart(candidate.text, preferred);
     if (type === "SI" && !siDoc) siDoc = candidate;
     else if (type === "BL" && !blDoc) blDoc = candidate;
+    else if (type === "OTHER") leftoverOtherType = true;
   }
-  return { siDoc, blDoc };
+  const leftoverUnreadable = unclaimed.some(
+    (attachment) => attachment.parseStatus !== "ok" && attachment !== siDoc && attachment !== blDoc
+  );
+  return { siDoc, blDoc, leftoverOtherType, leftoverUnreadable };
 }
 
 function buildOk(category: EmailVerificationResult["category"]): EmailVerificationResult {
