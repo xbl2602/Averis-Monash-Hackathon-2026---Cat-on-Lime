@@ -1,23 +1,15 @@
 %% 源码：README 架构全景图 + docs/diagrams/architecture.png 都从这里生成。
 %% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/architecture.mmd -o docs/diagrams/architecture.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% block 网格写法：columns 锁死 3 列，天然 1:1，不靠 direction 指令（渲染器会忽略它）。
+%% 漏斗语义（故意）：三个入口都指向同一条 logic/，不存在"三套流程"；
+%% 模块清单不在图里展开，见 README Features 表。block 网格锁死比例约 4:3。
 block-beta
   columns 3
-  UI["Web UI"] REST["REST API"] MCP["MCP · 28 tools"]
-  CLS["classification"] EXT["extraction"] CMP["comparison"]
-  PIPE["pipeline"] RES["results"] REV["复核闭环"]
-  SB["sandbox"] CFG["config·mail·import"] space
+  UI["Web UI<br/>人点"] REST["REST API<br/>程序调"] MCP["MCP Server<br/>agent 调"]
+  LOGIC["同一套 logic/：分类 · 抽取 · 比对 · 批量 · 复核 · 查询导出 · 上传 · 配置"]:3
   LIB["lib/ 公共区：LLM 适配 · 指纹缓存 · 有界并发 · 加密写保护"]:3
-  DB[("Supabase")]:3
-  UI --> CLS
-  REST --> EXT
-  MCP --> CMP
-  CLS --> PIPE
-  EXT --> RES
-  CMP --> REV
-  PIPE --> LIB
-  RES --> LIB
-  REV --> LIB
-  SB --> LIB
-  CFG --> LIB
+  DB[("Supabase：表 + 视图 + 缓存")]:3
+  UI --> LOGIC
+  REST --> LOGIC
+  MCP --> LOGIC
+  LOGIC --> LIB
   LIB --> DB
