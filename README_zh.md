@@ -136,6 +136,7 @@
 - **比对模块里数字字段不进模型**：Jev 实测不擅长数字比较，所以容器数量、重量这些字段用代码规范化后精确比对，只把"两段文字是不是在说同一件事"这种语义判断交给 Jev（阈值 0.85 是在样例集上调到 0 假阳性 / 0 假阴性）。
 - **显式 provider 永不静默切换**：调用时指定了某个 provider，就只试那一个，失败就是失败，不会为了"看起来成功"偷偷换一个模型再骗自己。
 - **失败链每一级都单独 try/catch**：一封邮件的模型调用失败，不会拖垮整批处理；`degraded` 标记会被 `retry_failed` 一键捞出来重算。
+- **回退有时间约束，保证真的来得及发生**：每次模型调用 10 秒超时；只对限流 / 5xx / 网络这类很快就失败的错误重试一次，卡住不回应的不重试；整条回退链总时限 20 秒、单个模型最多 12 秒。首选模型卡住时大约 10 秒就换到下一个；全部模型都挂了，这一步也会在平台 30 秒上限内结束，给出带标记的尽力结果并送人工复核，而不是整个请求被平台掐断。分类和字段抽取都走这条回退链。
 - **人工复核不是终点，是数据**：确认 / 更正 / 标记待定 / 撤销的每一步都写进 `review_actions`（append-only 审计日志），乐观锁（`updated_at`）防止两个人同时改同一条记录时互相覆盖。
 
 ## 🛳 Self Hosting —— 一份代码，三种跑法
@@ -144,7 +145,9 @@
 
 仓库连到 Vercel 后，push 到 `main` 会自动部署。需要在 Vercel 项目的 Environment Variables 里，把 `.env.example` 里列的变量都配置一遍（`LM_STUDIO_BASE_URL` 除外，云端用不到）。
 
-**线上 demo 地址**：https://hackathonaveris.vercel.app （已连 GitHub `main` 分支，push 会自动重新部署。Supabase 读权限 + service key、Jev、Gemini 都已配好并实测可用，整箱批量也能在线上真写库；Claude/OpenAI/DeepSeek 的 key 状态见「环境变量说明」）
+**线上 demo 地址**：https://hackathonaveris.vercel.app （已连 GitHub `main` 分支，push 会自动重新部署。Supabase 读权限 + service key、Jev、Gemini、DeepSeek 都已配好并实测可用，整箱批量也能在线上真写库；Claude 和 ChatGPT 是故意没配，原因见下）
+
+> **为什么线上 demo 没给 Claude 和 ChatGPT 配 API key。** 这两家的 API 是五个模型里最贵的，公开 demo 谁都能点，每一次调用都算团队的钱。接入代码是完整的：两者都在模型列表里，走同一个 `lib/llm` 统一接口，只要在 Vercel 补上 key 就会自动加入回退链，不用改代码。在那之前选它们会返回可读的"缺少 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`"提示，回退链也会直接跳过它们。线上实际的文本模型回退链是 Gemini → DeepSeek（结构化判断另有 Jev）；这一点不影响官方 520 封样例邮件——它们全部由规则直接判定。
 
 ### B. Docker 部署
 
@@ -385,7 +388,7 @@ curl -sD headers.txt -o submission.json \
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 去 [supabase.com](https://supabase.com) 建免费项目，Project Settings → API 里找 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 服务端专用，导入/写库用，绝不能加 `NEXT_PUBLIC_` 前缀 |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | 不需要全填，缺哪个只是那个 provider 选不了；demo 默认兜底是 Gemini |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | 不需要全填，缺哪个只是那个 provider 选不了，回退链会跳过它。线上 demo 配了 Gemini 和 DeepSeek；Claude 和 ChatGPT 因为 API 昂贵故意留空（见上面「线上 demo 地址」） |
 | `TYPESAFE_API_KEY` / `JEV_MODEL` | Jev 结构化决策，见 `lib/llm/jev.ts` |
 | `LM_STUDIO_BASE_URL` | 只有本地/Docker 有用，默认 `http://localhost:1234/v1`，Vercel 用不了本地模型 |
 | `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` | 配置中心加密 + 写保护口令，见 `.env.example` 注释 |
@@ -472,7 +475,7 @@ curl -sD headers.txt -o submission.json \
 - 整箱批量入口已就绪：`POST /features/pipeline/api` + MCP `run_batch`（增量跳过没变的、单封失败不拖垮整批、失败也留痕；`dry_run` 可只算不写）
 - 部署验证：MCP 握手 + 全部 tool、结果查询/导出、提取（TXT/PDF/XLSX/DOCX）、Jev/Gemini 分类、整箱批量，已在本地 `next start`、Docker 镜像和线上 Vercel 上实测通过
 - 已修的两个服务端 bug：见「Challenges We Solved」第 1、2 条
-- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库）。`DEEPSEEK_API_KEY` 已在 Vercel 填入，Claude/OpenAI 还没填（选这几个 provider 会返回可读的缺 key 错误）
+- LLM key：本地缺 `ANTHROPIC_API_KEY` 等云端 LLM key（没配时自动降级、不影响规则路径）；Vercel 上 Supabase service key、Jev（`TYPESAFE_API_KEY`）和 Gemini 已配好并实测可用（含 `run_batch` 真写库）。DeepSeek 已配好并线上实测可用（2026-09-22，真实分类调用）。Claude/OpenAI 因 API 昂贵故意不配置，选它们会返回可读的缺 key 错误，回退链会跳过它们
 - 第二阶段（功能已合并，详见 [PHASE2_SPEC.md](docs/PHASE2_SPEC.md)）：**config 配置中心**（GUI 可调、敏感值 AES-256-GCM 加密、读开放/写口令保护）、**mail 占位接口**（Gmail 连接状态 + 多 Supabase 项目切换与停用恢复）、**import 文档上传**（单件/多选/文件夹、校验链、内容哈希去重、按内容识别 SI/BL、原文件存 Storage）。新增业务表与 `uploads` bucket（RLS 脚本见 `scripts/phase2-rls.sql`；线上实际策略以控制台为准）。
   - **线上写入已配置**：`ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` 已加进 Vercel（production + preview），线上实测：无口令写入 401、带口令可写、敏感值加密存储；本地 `.env.local` 有同样的值。如需在其他环境部署，记得补这两个变量（见 `.env.example`）
   - GUI（配置页/上传页/人工复核页/sandbox页）由队友A负责接入：**先看 [docs/UI_GUIDE.md](docs/UI_GUIDE.md)**；字段级契约见 [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md) 的 config / mail / import / review / sandbox 章节
