@@ -78,7 +78,7 @@
 
 ## ⚡ Try it —— 先看线上 demo
 
-**评审请直接用线上地址**：https://hackathonaveris.vercel.app（评审期间保持在线）—— 进"Full pipeline 预览页"点 Run preview；想拿自己的 SI/BL 文档试：进"Sandbox"页（`/features/sandbox`），不写库、不需要任何配置。
+**评审请直接用线上地址**：https://hackathonaveris.vercel.app （评审期间保持在线）—— 进"Full pipeline 预览页"点 Run preview；想拿自己的 SI/BL 文档试：进"Sandbox"页（`/features/sandbox`），不写库、不需要任何配置。
 
 预览不需要配任何 key：规则引擎优先，预览用的是仓库自带的样例数据（不落库）。**历史结果统计/冲突列表/导出提交文件**这些依赖数据库的功能，读的是线上已经导入好的数据，打开即看。
 
