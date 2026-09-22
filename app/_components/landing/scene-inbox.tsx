@@ -17,7 +17,7 @@ const laneEnd = (n: number) => 0.35 + n * 0.13;
 const LANE_SPAN = 0.22;
 
 /**
- * Scene 1, "The Inbox" (100-270vh, pinned 170vh). Twenty-four envelopes enter as a loose cloud and
+ * Scene 1, "The Inbox" (100-280vh, pinned 180vh). Twenty-four envelopes enter as a loose cloud and
  * sort themselves into five labelled lanes, one lane finishing after another. Every envelope
  * rests in its lane in the plain layout; the timeline only moves it away from there and back.
  */
@@ -77,7 +77,7 @@ export function SceneInbox() {
 
   return (
     <SceneShell id="capabilities" pin={SCENE_VH.inbox.pin} ref={ref}>
-      <div data-copy className="story:col-span-5">
+      <div data-copy data-avoid className="story:col-span-5">
         <SceneEyebrow>{CAPABILITIES_INTRO.eyebrow}</SceneEyebrow>
         <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">{CAPABILITIES_INTRO.heading}</h2>
         <p className="mt-4 text-fg-muted">{CAPABILITIES_INTRO.text}</p>
@@ -107,7 +107,7 @@ export function SceneInbox() {
                 data-lane={lane}
                 className="relative flex flex-wrap items-center gap-x-3 gap-y-2 rounded-full border border-line bg-sunken px-4 py-2.5 story:h-[14%] story:flex-nowrap story:py-0"
               >
-                <span data-lane-label className="w-[200px] shrink-0 text-sm font-semibold">
+                <span data-lane-label data-avoid className="w-[200px] shrink-0 text-sm font-semibold">
                   {label}
                 </span>
                 <span className="flex flex-wrap items-center gap-1.5 story:flex-nowrap">

@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 import { gsap, useGSAP } from "./gsap";
+import { BUILD } from "./scene-config";
 import { useStory } from "./story-context";
 import { useViewportKey } from "./use-viewport-key";
 
@@ -19,9 +20,10 @@ interface SceneOptions {
 }
 
 /**
- * Registers ONE scrubbed timeline for a pinned scene. The timeline is exactly one unit long and its
- * progress is the scene's own scroll progress (0 when the scene pins, 1 when it releases), so a scene
- * author places things at 0.42 and it happens at 42% of the scene's scroll, forwards or backwards.
+ * Registers ONE scrubbed timeline for a pinned scene. A scene author places things on a 0..1 timeline
+ * (0.42 = 42% of the way through the scene's story). That story is played in the first BUILD of the
+ * scene's scroll; the rest is a hold, so the finished scene sits fully on screen before it crossfades
+ * away. Forwards or backwards, it is all one scrub.
  *
  * Scenes only animate their OWN content here. The plane and the page theme belong to the master
  * timeline in plane-rig.ts, so two scenes can never fight over them.
@@ -29,7 +31,7 @@ interface SceneOptions {
 export function useScene(
   scope: RefObject<HTMLElement | null>,
   build: (tl: gsap.core.Timeline, tools: SceneTools) => void | (() => void),
-  { fadeIn = 0.05, fadeOut = 0.05 }: SceneOptions = {}
+  { fadeIn = 0.045, fadeOut = 0.05 }: SceneOptions = {}
 ): void {
   const { mode } = useStory();
   const viewport = useViewportKey();
@@ -56,7 +58,12 @@ export function useScene(
       tl.fromTo(stage, { autoAlpha: 0 }, { autoAlpha: 1, duration: fadeIn, immediateRender: true }, 0);
       tl.to(stage, { autoAlpha: 0, duration: fadeOut }, 1 - fadeOut);
 
-      const cleanup = build(tl, { q: gsap.utils.selector(root), stage });
+      // The story itself: authored over 0..1, compressed into the first BUILD of the scroll
+      const story = gsap.timeline({ defaults: { ease: "none" } });
+      const cleanup = build(story, { q: gsap.utils.selector(root), stage });
+      story.set({}, {}, 1); // exactly one unit long
+      story.timeScale(1 / BUILD);
+      tl.add(story, 0);
 
       tl.set({}, {}, 1); // pin the timeline length to exactly 1
       return cleanup; // e.g. restore text a scene rewrote

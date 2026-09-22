@@ -16,7 +16,7 @@ const GRID = "grid-cols-[32%_31%_31%_6%]";
 const SHEET_GAP = 92;
 
 /**
- * Scene 3, "The Comparison" (440-640vh, pinned 200vh). The product demo.
+ * Scene 3, "The Comparison" (460-670vh, pinned 210vh). The product demo.
  * Two sheets slide together into one table, the seven rows resolve one at a time, the formatting
  * quirk is called out at "Singapore vs SINGAPORE", and the container-count row turns red and stays.
  */
@@ -111,13 +111,12 @@ export function SceneCompare() {
       return () => {
         if (flagEl) flagEl.textContent = flagText;
       };
-    },
-    { fadeIn: 0.04, fadeOut: 0.03 }
+    }
   );
 
   return (
     <SceneShell id="compare" pin={SCENE_VH.compare.pin} ref={ref}>
-      <div data-copy className="story:col-span-5">
+      <div data-copy data-avoid className="story:col-span-5">
         <SceneEyebrow>{cap.step}</SceneEyebrow>
         <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">{cap.title}</h2>
         <p className="mt-3 text-fg-muted">{cap.text}</p>
@@ -130,22 +129,22 @@ export function SceneCompare() {
           ))}
         </ul>
 
-        <div className="mt-7">
+        <div className="mt-6">
           <SceneEyebrow>{MESSY_INTRO.eyebrow}</SceneEyebrow>
           <h3 className="mt-1.5 text-lg font-bold leading-snug">{MESSY_INTRO.heading}</h3>
-          <ul className="mt-3 space-y-2">
+          <ul className="mt-3 flex flex-wrap gap-2">
             {MESSY_INPUTS.map((m) => {
               const isFormatting = m.title === "Formatting differences";
               return (
-                <li key={m.title} className="relative rounded-2xl px-3 py-1.5">
+                <li key={m.title} title={m.text} className="chip relative !px-3.5 !py-1.5 !text-[13px] !text-fg">
                   {isFormatting && (
                     <span
                       data-messy-glow
-                      className="pointer-events-none absolute inset-0 hidden rounded-2xl border border-accent/50 bg-accent/10 story:block"
+                      className="pointer-events-none absolute -inset-1 hidden rounded-full border border-accent/60 bg-accent/15 story:block"
                     />
                   )}
-                  <div className="relative text-sm font-semibold">{m.title}</div>
-                  <p className="relative text-xs leading-relaxed text-fg-muted">{m.text}</p>
+                  <Icon name="check" size={13} className="relative text-accent-strong" />
+                  <span className="relative">{m.title}</span>
                 </li>
               );
             })}

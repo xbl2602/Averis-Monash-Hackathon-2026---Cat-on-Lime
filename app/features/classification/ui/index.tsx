@@ -12,7 +12,6 @@ import { postJson } from "../../../_lib/api-client";
 import { fileName, type EmailOption } from "../../../_lib/attachments";
 import type { EmailCategory } from "../../../_lib/contracts";
 import { CATEGORY_META } from "../../../_lib/labels";
-import type { ProviderOption } from "../../../_lib/provider-options";
 
 interface ClassifyResponse {
   category: EmailCategory;
@@ -20,7 +19,7 @@ interface ClassifyResponse {
   needs_review: boolean;
 }
 
-function ResultCard({ result, provider }: { result: ClassifyResponse; provider: string }) {
+function ResultCard({ result }: { result: ClassifyResponse }) {
   const meta = CATEGORY_META[result.category];
   return (
     <div className="card animate-pop relative overflow-hidden p-6 sm:p-8" aria-live="polite">
@@ -34,23 +33,20 @@ function ResultCard({ result, provider }: { result: ClassifyResponse; provider: 
           <h2 className="mt-1 text-3xl font-extrabold sm:text-4xl">{meta.label}</h2>
           <p className="mt-2 text-sm text-fg-muted">{meta.desc}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge tone="muted" icon="cpu">{provider ? `Asked ${provider}` : "Hybrid engine"}</Badge>
             {result.needs_review ? <Badge tone="warn" icon="flag">A person should check</Badge> : <Badge tone="ok" icon="checkCircle">No review needed</Badge>}
             {result.category === "BL_COMPARISON" && <Badge tone="info" icon="compare">Goes on to extraction and comparison</Badge>}
           </div>
         </div>
-        {result.confidence !== null ? <Gauge value={result.confidence} label="confident" color={meta.color} /> : <p className="max-w-40 text-xs text-fg-faint">Rules or a text model answered, so there is no confidence score.</p>}
+        {result.confidence !== null && <Gauge value={result.confidence} label="confident" color={meta.color} />}
       </div>
     </div>
   );
 }
 
-export function ClassificationPanel({ emails, providers }: { emails: EmailOption[]; providers: ProviderOption[] }) {
+export function ClassificationPanel({ emails }: { emails: EmailOption[] }) {
   const [emailId, setEmailId] = useState(emails.find((e) => e.email_id === "email_004")?.email_id ?? emails[0]?.email_id ?? "");
-  const [provider, setProvider] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ClassifyResponse | null>(null);
-  const [ranProvider, setRanProvider] = useState("");
   const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   const email = emails.find((e) => e.email_id === emailId);
@@ -59,20 +55,16 @@ export function ClassificationPanel({ emails, providers }: { emails: EmailOption
     setLoading(true);
     setError(null);
     setResult(null);
-    const response = await postJson<ClassifyResponse>("/features/classification/api", { email_id: emailId, ...(provider ? { provider } : {}) });
+    const response = await postJson<ClassifyResponse>("/features/classification/api", { email_id: emailId });
     setLoading(false);
-    if (response.ok) {
-      setResult(response.data);
-      setRanProvider(provider);
-    } else {
-      setError(response.error);
-    }
+    if (response.ok) setResult(response.data);
+    else setError(response.error);
   }
 
   return (
     <div className="space-y-6">
       <Notice title="How it decides">
-        Rules go first. If they are unsure, the Jev decision model is asked, and a text model is the last resort. Anything still unclear is flagged for a person to review.
+        It reads the message and its attachments, not just the subject line, and decides which of five kinds of email it is. Anything it cannot place with confidence is flagged for a person to check.
       </Notice>
 
       <div className="card space-y-5 p-6 sm:p-8">
@@ -80,21 +72,7 @@ export function ClassificationPanel({ emails, providers }: { emails: EmailOption
           <Notice tone="warn" title="The sample inbox could not be read">This page classifies sample emails, so it needs the data in data/sample/inbox.</Notice>
         ) : (
           <>
-            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_18rem]">
-              <EmailPicker emails={emails} value={emailId} onChange={(id) => { setEmailId(id); setResult(null); }} />
-              <label className="block text-sm">
-                <span className="mb-2 block font-semibold">Model</span>
-                <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
-                  <option value="">Hybrid: rules, then Jev, then text</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                      {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <EmailPicker emails={emails} value={emailId} onChange={(id) => { setEmailId(id); setResult(null); }} />
 
             {email && (
               <div className="animate-rise rounded-2xl border border-line bg-sunken p-4">
@@ -122,7 +100,7 @@ export function ClassificationPanel({ emails, providers }: { emails: EmailOption
       </div>
 
       {error && <ErrorNotice error={error} />}
-      {result && <ResultCard result={result} provider={ranProvider} />}
+      {result && <ResultCard result={result} />}
     </div>
   );
 }

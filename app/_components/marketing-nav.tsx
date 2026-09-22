@@ -8,8 +8,10 @@ import { ThemeToggle } from "./theme-toggle";
 const ANCHORS = [
   { href: "#capabilities", label: "Capabilities" },
   { href: "#formats", label: "Formats" },
-  { href: "#access", label: "Web, API & MCP" },
   { href: "#reliability", label: "Reliability" },
+  { href: "#workspace", label: "Workspace" },
+  { href: "#accuracy", label: "Accuracy" },
+  { href: "#access", label: "API & MCP" },
 ];
 
 export function MarketingNav() {

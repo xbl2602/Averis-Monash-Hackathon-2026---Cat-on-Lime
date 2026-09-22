@@ -12,7 +12,7 @@ export default function DocumentsPage() {
       <PageHeader
         eyebrow="Tools"
         title="Documents"
-        description="Add SI and BL files to the shared pool. Each one is identified by what is inside it, and anything the system cannot recognise waits here for a person to file."
+        description="Add SI and BL files to the shared pool. Each one is identified by what is inside it. Pick an SI and a BL from the pool to check them against each other, and anything the system cannot recognise waits here for a person to file."
       />
       <DocumentsWorkspace />
     </div>

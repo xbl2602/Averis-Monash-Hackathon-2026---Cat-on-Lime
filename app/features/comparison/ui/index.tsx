@@ -18,7 +18,7 @@ export function ComparisonPanel({ emails }: { emails: EmailOption[] }) {
   return (
     <div className="space-y-6">
       <Notice title="How it compares">
-        Values are normalised first, so case, punctuation and number formats don&rsquo;t cause false alarms. Wording differences get a second look from the Jev model, while numbers are always compared exactly. When it can&rsquo;t decide, the result is marked <span className="font-mono">NEEDS_REVIEW</span>.
+        Case, punctuation and number formats are tidied first, so formatting quirks don&rsquo;t cause false alarms. Numbers are always compared exactly. When it can&rsquo;t decide, the result is marked <strong>Needs review</strong> for a person.
       </Notice>
 
       <div role="tablist" aria-label="Comparison input" className="grid gap-3 sm:grid-cols-2">

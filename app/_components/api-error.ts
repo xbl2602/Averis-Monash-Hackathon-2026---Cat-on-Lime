@@ -21,8 +21,9 @@ const MESSAGES: Record<number, string> = {
 };
 
 /**
- * True when the failure means "no database is connected to this server" rather than a bad request.
- * The results and config routes answer 503; the review queue answers 500 with the missing-Supabase text.
+ * True when the failure means "no database is connected to this server" rather than a bad request,
+ * so the screen can offer the set-up steps instead of a red error. Every module answers 503 for this
+ * (the review queue was fixed to match in 2026-09-21); a 500 that names Supabase is kept as a safety net.
  */
 export function isDatabaseUnavailable(status: number, body: unknown): boolean {
   if (status === 503) return true;

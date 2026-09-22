@@ -3,7 +3,6 @@ import {
   CATEGORY_META,
   STATUS_META,
   TONE_CLASSES,
-  engineSummary,
   providerTone,
   reasonLabel,
   type Tone,
@@ -40,15 +39,19 @@ export function CategoryBadge({ category }: { category: EmailCategory | null }) 
   );
 }
 
-/** The "model_provider" tag as a small chip; degraded runs are called out in amber. */
+/**
+ * How an answer was produced is an implementation detail, so nothing is shown for a normal result.
+ * The one thing worth telling a person: a fallback answer was used because a step failed, and re-running may improve it.
+ */
 export function ProviderChip({ provider }: { provider: string | null }) {
-  if (!provider) return null;
-  const tone = providerTone(provider);
-  const degraded = provider.includes("degraded");
+  if (!provider || !provider.includes("degraded")) return null;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-mono text-[11px] ${TONE_CLASSES[tone]}`} title={degraded ? `A model step failed, so a fallback answer was used. Re-run to retry. (${provider})` : `Engine tag: ${provider}`}>
-      {degraded && <Icon name="alert" size={12} />}
-      {engineSummary(provider)}
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${TONE_CLASSES[providerTone(provider)]}`}
+      title="A step failed, so a fallback answer was used. Re-running it may give a better one."
+    >
+      <Icon name="alert" size={12} />
+      Fallback answer
     </span>
   );
 }

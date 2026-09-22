@@ -650,3 +650,22 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
 - **验证**：对官方样例 email_015 端到端实测 15 项全过（两模块各一条决定 → 从 comparison 重跑 → 两条都清、各自历史各一行、
   共用 batch_id → 分别撤销都能拿回 → 比较-删除拒绝过期时间戳 → 系统结果本身不变），测试记录事后已清掉；
   `npm run typecheck` / `build` / `test:mcp-annotations` 全绿。提交：`0a8daa2`。
+
+### 决策 38：合并队友A的前端分支 `FRONTEND-BY-WJ`（冲突怎么取舍）
+
+- **原则（操作者定）**：后端/功能性相关的优先听 main；前端相关的优先听分支；内容明显矛盾的问操作者。
+- **6 个文字冲突的处理**：
+  - `app/_components/admin/admin-provider.tsx`、`app/dashboard/_components/nav-items.ts`、`app/dashboard/page.tsx`：取分支。
+    解锁两边都已改成走 `/verify`，行为一致；导航改名/分组是纯前端，同样隐藏了 Jev 实验室；首页重写后数字全部来自
+    `/features/results/api/stats`，和 main 的"只算官方 520 封"口径天然一致。
+  - `app/features/verification/ui/index.tsx`：版面取分支（模型选择挪进高级选项），但保留 main 的两句说明——
+    "模型失败/没 key 会按顺序自动换下一个"和"列出 ID 时数量上限仍然生效"，因为它们描述的是系统的实际行为（修过的 bug #10）。
+  - `app/features/results/ui/conflict-card.tsx`（**操作者决定**）：保留 main 的"默认收起"（操作者此前明确要求），
+    分支新加的复核状态/置信度小标签放在标题行，"系统 vs 人工"对照、SI/BL 比对表、邮件正文放进展开区。
+  - `app/features/review/ui/review-detail.tsx`（**操作者决定**）：用分支的共用组件，但邮件正文**在所有模块都默认展开**并放在最上面
+    （分支原本只在分类复核时展开）——操作者此前报过"点了邮件看不到内容没法判断"。
+- **自动合并部分已核对**：main 的运行状态保持（顶栏指示器、流水线/Retry/devmode）、SI/BL 标签、重跑新规则的界面文案都还在；
+  分支删掉的旧首页组件没有残留引用；分支的准确率数字（`app/_lib/accuracy.ts`）与 2026-09-22 实测一致（520/520、72/72、FP=0、20/20）。
+- **分支里"前端已备好、等后端补字段"**（`app/_lib/backend-contract.ts`）：都是可选字段，缺了界面自动隐藏，不算冲突。
+  其中 `body` 结果列表已有；冲突对接口、复核队列还没带 `body`，分类置信度也没有单独字段（main 目前用 `review_reason=low_confidence_classification` 表达）。
+- **验证**：合并后 `tsc --noEmit`、`next build`、`test:mcp-annotations` 全过。

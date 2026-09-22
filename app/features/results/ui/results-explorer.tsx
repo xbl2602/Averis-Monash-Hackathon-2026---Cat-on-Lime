@@ -9,6 +9,8 @@ import { DatabaseDown, EmptyState, LoadError } from "../../../_components/result
 import type { ComparisonStatus, EmailCategory, ResultList } from "../../../_lib/contracts";
 import { useApi } from "../../../_lib/use-api";
 import { useDebounced } from "../../../_lib/use-debounced";
+import { useReviewOverlay } from "../../../_lib/use-review-overlay";
+import { classifierReportsUncertainty, serverSendsReview } from "../../../_lib/backend-contract";
 import { ExportPanel } from "./export-panel";
 import { FilterBar } from "./filter-bar";
 import { DEFAULT_FILTERS, filterParams, listUrl, type ResultFilters } from "./filters";
@@ -27,6 +29,8 @@ export function ResultsExplorer({ initial }: { initial: ResultFilters }) {
   const requestFilters = { ...filters, q: debouncedQ, provider: debouncedProvider };
 
   const { data, error, databaseDown, loading, reload } = useApi<ResultList>(listUrl(requestFilters));
+  // A person's decisions: read from the server's own `review` field once it exists, from the review queue until then
+  const reviewOf = useReviewOverlay({ enabled: data !== null && !serverSendsReview(data.items), modules: ["comparison", "classification"] });
   const update = (next: Partial<ResultFilters>) => {
     setFilters((prev) => ({ ...prev, ...next }));
     setOpenId(null);
@@ -43,7 +47,7 @@ export function ResultsExplorer({ initial }: { initial: ResultFilters }) {
 
   return (
     <div className="space-y-5">
-      <FilterBar filters={filters} onChange={update} />
+      <FilterBar filters={filters} onChange={update} classifierUncertainty={data !== null && classifierReportsUncertainty(data.items)} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-fg-muted">
@@ -98,7 +102,7 @@ export function ResultsExplorer({ initial }: { initial: ResultFilters }) {
         ) : (
           <div className={`transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}>
             {data?.items.map((row, i) => (
-              <ResultRowItem key={row.email_id} row={row} index={i} open={openId === row.email_id} onToggle={() => setOpenId((id) => (id === row.email_id ? null : row.email_id))} />
+              <ResultRowItem key={row.email_id} row={row} review={reviewOf(row)} index={i} open={openId === row.email_id} onToggle={() => setOpenId((id) => (id === row.email_id ? null : row.email_id))} />
             ))}
           </div>
         )}

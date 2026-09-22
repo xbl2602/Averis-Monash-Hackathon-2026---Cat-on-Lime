@@ -49,9 +49,6 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate?: () =
                       className={`transition duration-300 group-hover:scale-110 ${active ? "text-accent-strong" : "text-fg-faint group-hover:text-accent-strong"}`}
                     />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {item.badge && !active && (
-                      <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-strong">{item.badge}</span>
-                    )}
                     {active && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" />}
                   </Link>
                 );

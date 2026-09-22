@@ -42,20 +42,17 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const trimmed = token.trim();
     if (!trimmed) return { ok: false as const, message: "Enter the admin token first." };
 
-    // A dedicated, side-effect-free endpoint: 200 = accepted, 401 = wrong, 403 = writing is off.
-    // This used to fake an empty write to /features/config/api and read its 400 as "token was fine",
-    // which left a red 400 in the browser console on every successful unlock and tied unlocking to
-    // an unrelated endpoint's error semantics.
-    const probe = await apiRequest<unknown>("/features/config/api/verify", {
+    // Purpose-built check: it only compares the token and touches no data. 200 = accepted,
+    // 401 = wrong, 403 = this server has no admin token configured, so writing is switched off.
+    const probe = await apiRequest<{ ok: boolean }>("/features/config/api/verify", {
       method: "POST",
       headers: { "x-admin-token": trimmed },
     });
-    if (!probe.ok && probe.status === 401) return { ok: false as const, message: "That token was not accepted." };
-    if (!probe.ok && probe.status === 403) {
-      return { ok: false as const, message: "Writing is switched off on this server because no admin token is configured." };
+    if (!probe.ok) {
+      if (probe.status === 401) return { ok: false as const, message: "That token was not accepted." };
+      if (probe.status === 403) return { ok: false as const, message: "Writing is switched off on this server because no admin token is configured." };
+      return { ok: false as const, message: probe.error.message };
     }
-    if (!probe.ok && probe.status === 0) return { ok: false as const, message: probe.error.message };
-    if (!probe.ok) return { ok: false as const, message: probe.error.message };
 
     tokenRef.current = trimmed;
     setUnlocked(true);

@@ -18,14 +18,14 @@ export function Footer() {
           <FooterColumn
             title="Product"
             links={[
-              { href: "/features/verification", label: "Full pipeline" },
-              { href: "/features/classification", label: "Email classification" },
-              { href: "/features/extraction", label: "Field extraction" },
-              { href: "/features/comparison", label: "SI / BL comparison" },
+              { href: "/features/verification", label: "Run a verification" },
+              { href: "/features/results", label: "Results" },
+              { href: "/features/review", label: "Review queue" },
+              { href: "/features/sandbox", label: "Try your own files" },
             ]}
           />
           <FooterColumn
-            title="Developers"
+            title="Integrations"
             links={[
               { href: "/features/pipeline/api", label: "REST API reference" },
               { href: "/dashboard/settings#connections", label: "MCP connection details" },

@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import type { ReviewOverride } from "@/lib/shared/review/types";
 import { Icon } from "../../../_components/icon";
 import { CategoryBadge, ProviderChip, ReasonNote, StatusBadge } from "../../../_components/results/badges";
 import { CompareView } from "../../../_components/results/compare-view";
+import { ConfidenceChip } from "../../../_components/results/confidence-chip";
+import { SystemVsPerson } from "../../../_components/results/decision-panel";
+import { EmailMessage } from "../../../_components/results/email-message";
+import { ReviewChip } from "../../../_components/results/review-chip";
 import type { ResultRow } from "../../../_lib/contracts";
 import { fieldLabel } from "../../../_lib/labels";
 import { fullDate, relativeTime } from "../../../_lib/format";
@@ -22,7 +27,7 @@ function DefectChips({ fields }: { fields: string[] }) {
 }
 
 /** Everything under an opened row: the SI/BL comparison, any error, and the way into the review queue. */
-function RowDetail({ row }: { row: ResultRow }) {
+function RowDetail({ row, review }: { row: ResultRow; review: ReviewOverride | null }) {
   return (
     <div className="space-y-4 px-4 pb-5 pt-2 sm:px-6">
       {row.processing_status === "failed" && row.error_message && (
@@ -31,6 +36,7 @@ function RowDetail({ row }: { row: ResultRow }) {
           <p className="mt-1 break-words font-mono text-xs text-fg-muted">{row.error_message}</p>
         </div>
       )}
+      {review && <SystemVsPerson system={{ category: row.category, comparison_status: row.comparison_status, processing_status: row.processing_status, defect_fields: row.defect_fields }} override={review} />}
       {row.processing_status === "pending" ? (
         <p className="rounded-2xl border border-dashed border-line-strong p-5 text-center text-sm text-fg-muted">
           This email has not been through the pipeline yet. Run it from <Link href="/features/verification" className="font-semibold text-accent-strong underline-offset-2 hover:underline">Full pipeline</Link>.
@@ -38,6 +44,7 @@ function RowDetail({ row }: { row: ResultRow }) {
       ) : (
         <CompareView si={row.extracted_si} bl={row.extracted_bl} defectFields={row.defect_fields} siEvidence={row.evidence_si} blEvidence={row.evidence_bl} />
       )}
+      <EmailMessage body={row.body} from={row.from} subject={row.subject} />
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-fg-faint">
         <span>
           {row.attachment_paths.length} attachment{row.attachment_paths.length === 1 ? "" : "s"} · engine version {row.logic_version ?? "—"} · saved {fullDate(row.updated_at)}
@@ -54,7 +61,7 @@ function RowDetail({ row }: { row: ResultRow }) {
 }
 
 /** One result: a summary line that opens into the full comparison. Works as a table row on wide screens and a card on phones. */
-export function ResultRowItem({ row, open, onToggle, index }: { row: ResultRow; open: boolean; onToggle: () => void; index: number }) {
+export function ResultRowItem({ row, review, open, onToggle, index }: { row: ResultRow; review: ReviewOverride | null; open: boolean; onToggle: () => void; index: number }) {
   return (
     <div className="border-t border-line first:border-t-0" style={{ "--i": Math.min(index, 12) } as React.CSSProperties}>
       <button
@@ -73,10 +80,14 @@ export function ResultRowItem({ row, open, onToggle, index }: { row: ResultRow; 
           <div className="truncate text-xs text-fg-faint">{row.from}</div>
         </div>
         <div className="flex items-center justify-between gap-3 lg:contents">
-          <CategoryBadge category={row.category} />
+          <div className="flex flex-col items-start gap-1">
+            <CategoryBadge category={row.category} />
+            <ConfidenceChip confidence={row.classification_confidence} needsReview={row.classification_needs_review} />
+          </div>
           <div className="flex flex-col items-start gap-1">
             <StatusBadge status={row.comparison_status} processing={row.processing_status} />
             <ReasonNote reason={row.review_reason} />
+            <ReviewChip review={review} />
           </div>
         </div>
         <DefectChips fields={row.defect_fields} />
@@ -86,7 +97,7 @@ export function ResultRowItem({ row, open, onToggle, index }: { row: ResultRow; 
         <Icon name="chevronDown" size={18} className={`hidden text-fg-faint transition duration-300 lg:block ${open ? "rotate-180 text-accent-strong" : ""}`} />
       </button>
       <div className="expand" data-open={open}>
-        <div>{open && <RowDetail row={row} />}</div>
+        <div>{open && <RowDetail row={row} review={review} />}</div>
       </div>
     </div>
   );

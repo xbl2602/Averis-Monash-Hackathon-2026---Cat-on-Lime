@@ -7,7 +7,7 @@ import { gsap, useGSAP } from "../scroll/gsap";
 import { useStory } from "../scroll/story-context";
 import { useMagnetic } from "../scroll/use-magnetic";
 import { Footer } from "./cta-footer";
-import { AccessBlock, HowItWorksBlock, ModelsDeployBlock } from "./landing-blocks";
+import { AccessBlock, AccuracyBlock, HowItWorksBlock } from "./landing-blocks";
 
 /**
  * The call-to-action the plane lands in. In the story the card has no fill of its own: the plane
@@ -25,15 +25,15 @@ function FinalCta() {
         <div className="relative flex flex-col items-start justify-between gap-6 p-8 sm:flex-row sm:items-center sm:p-10">
           <div>
             <h2 className="text-2xl font-bold sm:text-3xl">Ready to check your first shipment?</h2>
-            <p className="mt-2 text-sm text-fg-muted">Run the full pipeline on the sample inbox, or try a single step.</p>
+            <p className="mt-2 text-sm text-fg-muted">Run a verification on the sample inbox, or drop in your own documents.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link ref={buttonRef} href="/dashboard" className="btn btn-primary magnetic !px-7 !py-3.5">
               Open the app
               <Icon name="arrowRight" size={16} />
             </Link>
-            <Link href="/features/verification" className="btn btn-glass !px-7 !py-3.5">
-              Run the pipeline
+            <Link href="/features/sandbox" className="btn btn-glass !px-7 !py-3.5">
+              Try your own files
             </Link>
           </div>
         </div>
@@ -43,7 +43,7 @@ function FinalCta() {
 }
 
 /**
- * Scene 5, "The Landing" (760vh onwards, natural flow). Back to the light palette. Each block is
+ * Scene 6, "The Landing" (950vh onwards, natural flow). Back to the light palette. Each block is
  * scrubbed in by scroll and back out again; the runway and its three lanes are drawn by scroll too.
  */
 export function SceneLanding() {
@@ -95,8 +95,8 @@ export function SceneLanding() {
 
   return (
     <div ref={ref} className="scene-landing">
+      <AccuracyBlock />
       <AccessBlock />
-      <ModelsDeployBlock />
       <HowItWorksBlock />
       <FinalCta />
       <Footer />

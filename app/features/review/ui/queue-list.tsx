@@ -5,6 +5,7 @@ import { Icon } from "../../../_components/icon";
 import { SkeletonRows } from "../../../_components/motion/skeleton";
 import { Pagination } from "../../../_components/pagination";
 import { Badge, CategoryBadge, StatusBadge } from "../../../_components/results/badges";
+import { ConfidenceChip } from "../../../_components/results/confidence-chip";
 import { EmptyState, LoadError } from "../../../_components/results/states";
 import type { ApiErrorInfo } from "../../../_components/api-error";
 import { STATUS_META, fieldLabel } from "../../../_lib/labels";
@@ -27,6 +28,7 @@ function QueueItemCard({ item, index, selected, checked, onOpen, onCheck }: { it
         <div className="truncate text-sm font-medium">{item.subject || "(no subject)"}</div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-faint">
           <CategoryBadge category={item.category} />
+          <ConfidenceChip confidence={item.classification_confidence} needsReview={item.classification_needs_review} />
           {item.defect_fields.length > 0 && <span className="text-bad">{item.defect_fields.map(fieldLabel).join(", ")}</span>}
           <span className="ml-auto">{relativeTime(item.updated_at)}</span>
         </div>

@@ -113,21 +113,6 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">
-          <label className="block text-sm">
-            <span className="mb-2 block font-semibold">Preferred model</span>
-            <select value={provider} onChange={(e) => setProviderChoice(e.target.value)} className="field">
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1.5 block text-xs text-fg-faint">
-              Rules run first and settle most fields without any model. When one is needed, this model goes first; if it fails or has no key, the app automatically tries the other configured models next, in order.
-            </span>
-          </label>
-
           {saving ? (
             <label className="block text-sm">
               <span className="mb-2 block font-semibold">How many to run this time (1 to 520)</span>
@@ -145,23 +130,33 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
               <span className="mt-2.5 block text-xs text-fg-faint">A cap on this one run. Public previews are capped at 20 emails per run either way.</span>
             </label>
           )}
-        </div>
 
-        <label className="block text-sm">
-          <span className="mb-2 block font-semibold">Only these email IDs (optional)</span>
-          <input value={emailIdsText} onChange={(e) => setEmailIdsText(e.target.value)} placeholder="email_004, email_107" className="field font-mono !text-xs" />
-          <span className="mt-1.5 block text-xs text-fg-faint">
-            Leave empty to run the first emails in the inbox instead. The cap above still applies even when you list IDs here — list more IDs than the cap and only the first ones (after already-finished ones are skipped) run this time.
-          </span>
-        </label>
+          <label className="block text-sm">
+            <span className="mb-2 block font-semibold">Specific email IDs (optional)</span>
+            <input value={emailIdsText} onChange={(e) => setEmailIdsText(e.target.value)} placeholder="email_004, email_107" className="field font-mono !text-xs" />
+            <span className="mt-1.5 block text-xs text-fg-faint">Leave empty to run the first emails in the inbox. The cap on the left still applies when you list IDs: list more than the cap and only the first ones (after already-finished ones are skipped) run this time.</span>
+          </label>
+        </div>
 
         <details className="group rounded-2xl border border-line bg-sunken">
           <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
             <Icon name="sliders" size={18} className="text-accent-strong" />
-            Advanced
+            Advanced options
             <Icon name="chevronDown" size={16} className="ml-auto text-fg-faint transition group-open:rotate-180" />
           </summary>
           <div className="grid gap-5 px-4 pb-4 md:grid-cols-2">
+            <label className="block text-sm md:col-span-2 md:max-w-sm">
+              <span className="mb-2 block font-semibold">Language model to use</span>
+              <select value={provider} onChange={(e) => setProviderChoice(e.target.value)} className="field">
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                    {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1.5 block text-xs text-fg-faint">Rules run first and settle most fields without any model. When one is needed, this model goes first; if it fails or has no key, the app automatically tries the other configured models next, in order. The default is fine for most runs.</span>
+            </label>
             <label className="block text-sm">
               <span className="mb-2 flex justify-between font-semibold">
                 At the same time <span className="font-mono text-fg-muted">{concurrency}</span>

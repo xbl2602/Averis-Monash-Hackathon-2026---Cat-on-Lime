@@ -180,7 +180,7 @@
 
 ## 3. 口令怎么带（重要）
 
-> **GUI 实际做法（2026-09-21）**：操作者在顶栏 🔒 处手动输入口令，口令只存在该标签页的内存里（不进 localStorage / cookie，不回显），由浏览器作为 `x-admin-token` 直接发给写接口，服务端逐次校验。没有做 Server Action、没有 cookie 会话（REVIEW_SPEC §6 的方案）——那需要改 `app/core` 和 `lib/shared`（公共区，要操作者点头）。这是有意的偏差；如果之后要换成 cookie 会话，只需要改 `app/_components/admin/admin-provider.tsx` 一处。校验口令原来借用"空更新列表的 `PUT /features/config/api`"（口令对 → 400，错 → 401，没配 → 403，不写任何东西）——**2026-09-21 后端已加专用接口** `POST /features/config/api/verify`（口令对 → 200，不产生那行误导性的 400），`admin-provider.tsx` 换过去调用即可，不用改判断逻辑，只是把 400 换成 200。
+> **GUI 实际做法（2026-09-21）**：操作者在顶栏 🔒 处手动输入口令，口令只存在该标签页的内存里（不进 localStorage / cookie，不回显），由浏览器作为 `x-admin-token` 直接发给写接口，服务端逐次校验。没有做 Server Action、没有 cookie 会话（REVIEW_SPEC §6 的方案）——那需要改 `app/core` 和 `lib/shared`（公共区，要操作者点头）。这是有意的偏差；如果之后要换成 cookie 会话，只需要改 `app/_components/admin/admin-provider.tsx` 一处。校验口令原来借用"空更新列表的 `PUT /features/config/api`"（口令对 → 400，错 → 401，没配 → 403，不写任何东西）——**2026-09-21 后端已加专用接口** `POST /features/config/api/verify`（口令对 → 200，不产生那行误导性的 400），**`admin-provider.tsx` 已经换过去了**。
 
 - 写接口统一请求头 `x-admin-token`；服务端口令存在环境变量 `ADMIN_TOKEN`（未配置 403，口令错 401）。
 - **不要在公开页面做"匿名可点、服务端自动注入口令"的入口**——那等于匿名可写库（见本文件第二部分 §4，硬性要求）。
@@ -301,10 +301,30 @@
 - ~~没配数据库时，results / config 的读接口返回 503，而复核队列 `GET .../review` 返回 500~~。
   复现属实（根因：`lib/shared/review/store.ts` 直接裸调 `getSupabaseClient()`，抛出的普通
   `Error` 落进 `request-errors.ts` 的未知错误兜底变 500）。已修：加 `getReadClient()`/
-  `getWriteClient()` 包装，统一抛 `ReviewStoreUnavailableError`（503）。GUI 那句"503，或 500
-  且文案含 Supabase"的兼容判断可以直接简化成只认 503。
+  `getWriteClient()` 包装，统一抛 `ReviewStoreUnavailableError`（503）。
+  **GUI 已跟进**：`isDatabaseUnavailable()` 主判据就是 503；"500 且文案含 Supabase"那条只作为兜底保留
+  （万一以后又冒出别的裸调用点，页面仍然显示"请先连接数据库"引导卡而不是红字报错），不再是必需品。
 - ~~验证口令目前借用"空更新列表的 PUT"（400=口令对）~~。已加 `POST /features/config/api/verify`
-  （口令对 → 200，见本文件 §3 上方新注）。
+  （口令对 → 200，见本文件 §3 上方新注）。**GUI 已改用它**（`app/_components/admin/admin-provider.tsx`），
+  那行误导性的 400 已消失；实测：无口令/错口令 → 401，正确口令 → 200。
+
+### 给后端的新发现——REST 比对接口和流水线口径不一致（2026-09-22，**未修**，需要操作者处理）
+
+**现象**：同一对 SI/BL 字段，`POST /features/comparison/api`（不传 provider）和流水线/sandbox 给出**相反**的结论。
+
+| 输入 | `/features/comparison/api` | sandbox / 流水线 |
+|---|---|---|
+| `Singapore` vs `SINGAPORE`（只差大小写） | MISMATCH | OK |
+| `243588` vs `243,588`（只差千分位） | MISMATCH | OK |
+| `ABC Trading Co.` vs `ABC  TRADING CO`（标点/空格） | MISMATCH | OK |
+
+**复现（真实样例）**：email_055（SI 是 .xlsx、BL 是 .docx）。两个入口拿到的抽取字段**逐字段完全相同**，`/features/comparison/api` 报 4 个差异（shipper / consignee / notify_party / gross_weight_kg），sandbox 报 OK；连跑 4 次结果稳定，不是随机。
+
+**根因**：`app/features/comparison/api/route.ts` 调的是 `compareDocuments()`；不传 provider 时它默认走 `compareByExactValue`（**不做规范化的纯字符串相等**）。而流水线和 sandbox 调的是 `compareDocumentsHybrid()`（规范化 → 精确比 → 文字候选差异交 Jev，数字由代码判）。[SHARED_INTERFACES.md](SHARED_INTERFACES.md)「provider」一节写明：比对缺省 = 规范化精确比较 + 文字候选交 Jev——REST 入口没有按这个口径实现。
+
+**影响**：① 网页「Compare SI & BL」两个标签页、REST、MCP 的 `compare_documents` 会把格式差异误报成 MISMATCH，和首页承诺的"大小写/标点/数字格式不误报"不符；② 不影响官方提交（提交走流水线，用的是 hybrid）。
+
+**建议修法（操作者的 `logic/api` 层，GUI 不动它）**：REST/MCP 在 provider 缺省时改调 `compareDocumentsHybrid`（显式传 provider 时保持现状），并补一条回归用例（上表三行）。GUI 侧不需要改：修好后两个标签页自动变对。在此之前，sandbox 页面（`/features/sandbox`）走的是正确口径，可以拿来演示。
 
 ## 7. 本轮后端新增（2026-09-21，已实现，GUI 可直接接）
 
@@ -373,11 +393,38 @@
 
 ## 9. 落地页滚动叙事运维笔记（队友A交付，2026-09-21）
 
-首页 `/` 现在是"一张纸折成纸飞机、沿航线飞过 5 个场景"的滚动驱动页面（GSAP + Lenis + SVG，无 WebGL）。完整设计规格见 [`LANDING_REDESIGN_PROMPT.md`](LANDING_REDESIGN_PROMPT.md)。**只涉及前端文件**：`app/page.tsx`、`app/_components/scroll/`、`app/_components/landing/`、`app/globals.css`、`app/_components/marketing-nav.tsx`，没有碰任何 `logic/api/mcp`。
+首页 `/` 现在是"一张纸折成纸飞机、沿航线飞过 6 个场景（收件箱 / 读取 / 比对 / 交给人 / 工作台 / 落地）"的滚动驱动页面（GSAP + Lenis + SVG，无 WebGL）。完整设计规格见 [`LANDING_REDESIGN_PROMPT.md`](LANDING_REDESIGN_PROMPT.md)。**只涉及前端文件**：`app/page.tsx`、`app/_components/scroll/`、`app/_components/landing/`、`app/globals.css`、`app/_components/marketing-nav.tsx`，没有碰任何 `logic/api/mcp`。
 
 - **演示保险开关（写进彩排手册）**：投影/演示机卡顿时，地址后加 `?motion=off`（如 `/?motion=off`）→ 变成普通竖排页面，内容一样、没有飞机和动画。系统开了"减少动态效果"、窄屏（<768px）也会自动走降级版本（窄屏保留右下角小飞机）。
 - **调飞行路线**：`/?debug=path` 会把飞机航线画成粉色虚线；航点在 `app/_components/scroll/flight-waypoints.ts`（视口比例坐标）。
 - **调场景时长**：`app/_components/scroll/scene-config.ts`（单位 vh，页面 CSS 高度和飞机时间线都读这一份，改一处即可）。
+- **"停留"机制（2026-09-22）**：每个钉住的场景只用前 `BUILD`（=68%）的滚动把内容演完，其余时间**整屏静止、完整可读**，最后 5% 才淡出切下一场。想让某个场景停更久，加大它的 `pin`；想让演出更紧凑，调小 `BUILD`。菜单锚点也落在"演完"的位置。
+- **飞机不挡字（2026-09-22）**：给需要保护的文字块加 `data-avoid` 属性，飞机飞过时会自动淡成虚影（透明度 20%），飞出后恢复。飞机比原来小了约 35%；"工作台"场景里飞机已飞出画面，不会盖住卡片。
+- **落地页只讲产品**：不再出现代码片段、模型列表、部署方式等开发者内容；Web / REST / MCP 只保留三张短卡片。
 - **主题**：滚动时页面 亮 → 黄昏 → 暗 → 亮，只在"访客没手动选过主题且系统是亮色"时生效；点右上角开关或系统是暗色，就整页固定该主题（手动选择永远优先）。
-- **文案**：所有落地页文案集中在 `app/_components/landing/content.ts`，场景只决定摆在哪，不改字。
+- **文案**：所有落地页文案集中在 `app/_components/landing/content.ts`，场景只决定摆在哪。"工作台"场景的六张卡片（结果/冲突/复核/导出/自带文件/上传文档）对应 §2.9 里真实存在的页面。
+- **菜单锚点落点（2026-09-22 修）**：每个 `.scene` 都带 `margin-bottom:-100vh`，也就是说收尾区块（`.scene-landing`：准确率 / API&MCP / 三步 / CTA / 页脚）的头 100vh 是被上一个还钉着的场景盖住的，那段里它被强制淡成透明。所以直接 `#某id` 跳过去会停在空白屏上。解决办法是给收尾区的第一个区块加 `data-jump`（单位=视口高，`scroll-provider.tsx` 会把它当额外偏移交给 Lenis）和 `story:pt-[25vh]` 的上内边距：实测 0.15 以上在 768/900/1080 三种高度下上一场景都已经完全淡出，取 0.2 留余量。**以后往收尾区最前面再加新区块、或调整场景 pin 值，要把这两个值一起挪过去**，否则菜单里那一项会跳到空白处。
 - **页面高度依赖 vh**：`.scene` 的高度 = (pin + 100)vh，改 `pin` 数值要和 `scene-config.ts` 同步（场景组件已直接读它）。
+
+## 10. 前端已备好、等后端补字段（队友A交付，2026-09-22）
+
+对照 README 里"给用户的能力"做了一轮核对，发现 5 个用户能看得见的缺口。**其中 2 个前端自己能补完，已经做完上线；另外 3 个卡在后端没有这份数据，前端把界面先做好了——后端哪天把字段加进响应里，界面自己就亮起来，前端一行都不用改。**
+
+### 10.1 已经做完的两条（不需要后端配合）
+
+1. **上传的文档能真正被用了**：以前 `/features/import` 上传完就是个死胡同，只能看看解析出的文本。现在池子里每一行有「As SI」「As BL」两个按钮，选一份 SI + 一份 BL，底部托盘点「Check this pair」，就会拿数据库里已经存好的 `extracted_text`，走 `POST /features/sandbox/api`（也就是生产同款 `compareDocumentsHybrid`）出结论。解析失败（`parse_status = unreadable`）的文件按钮是禁用的。**不写库**，界面上明说了"Nothing is saved"。涉及文件：`app/features/import/ui/{use-pair-check,document-row,pair-tray,document-pool,documents-workspace}.tsx`。
+2. **准确率有据可查**：落地页新增 `#accuracy` 一节，概览页底部新增「How accurate is it?」面板，数字来自 `npm run evaluate -- --no-write` 在 2026-09-22 重新跑出来的结果（520/520 邮件判对、分类 100%、72/72 处真实差异全找到、0 误报、20/20 不确定件正确交给人）。**数字只写在 `app/_lib/accuracy.ts` 一处**，并且注明了口径（官方 520 封样例、对答案跑出来的）。引擎改了以后重跑评测、改这一个文件即可。
+
+### 10.2 三条等后端的字段（**给操作者的清单**）
+
+前端已经写好并测过（用假数据模拟"后端已经加好字段"的情况跑通）。字段名的唯一来源是 `app/_lib/backend-contract.ts`，里面写清了每个字段的含义；后端如果用了别的名字，改那一个文件就行。
+
+| 缺口 | 后端要补什么 | 补上之后前端会自动出现什么 |
+| --- | --- | --- |
+| **分类"没把握"没落库**（就是 §8.4 那条） | `verification_results` 加两列，并在 results / conflicts / review 队列每一项上带出来：`classification_confidence`（0~1，可为 null）、`classification_needs_review`（boolean）；统计接口加 `classification_needs_review`（条数）；results 列表支持 `?classification_review=true` 过滤 | 每行分类下面出现把握度（没把握=黄色「Unsure · 58%」，有把握=一根细进度条）；筛选栏多一个「Classifier unsure」筛选；概览「Needs your attention」多一行；复核队列和详情页也会显示 |
+| **人工复核结论只在复核页看得到** | results / conflicts 每一项带上 `review`（就是 `lib/shared/review/types` 里的 `ReviewOverride`，没有就给 `null`） | 结果行/冲突卡上出现「Person confirmed / corrected / set aside」标记，展开后左右并排「系统判的」vs「人改成的 + 谁改的 + 备注」 |
+| **看不到邮件正文** | results / conflicts / review 队列每一项带上 `body`（邮件正文文本） | 展开行里多一块可折叠的「Read the email」，复核分类时默认展开（判分类本来就要看正文） |
+
+**注意第二条现在也能用**：在后端补 `review` 字段之前，结果页/冲突页会自己去调已有的 `GET /features/{comparison,classification}/api/review?include_ok=true&review_state=…&limit=200`（3 种状态 × 2 个模块 = 6 个只读请求）把人工结论拼出来显示。等后端在行里带上 `review` 字段了，前端检测到就**自动停掉这 6 个额外请求**，改用服务端给的那份（`app/_lib/use-review-overlay.ts`）。所以这条对后端不是"必须做"，做了只是更快更准。
+
+**验收方式**：这三条都已经用模拟"未来后端"的假数据在浏览器里跑通（42 项检查全过），包括"后端还没加字段时界面上不能多出任何东西"这一项——所以现在合并进去不会影响现状。

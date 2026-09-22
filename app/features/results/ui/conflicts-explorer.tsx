@@ -11,6 +11,8 @@ import type { ComparisonStatus, ConflictList } from "../../../_lib/contracts";
 import { STATUS_META } from "../../../_lib/labels";
 import { useApi } from "../../../_lib/use-api";
 import { useDebounced } from "../../../_lib/use-debounced";
+import { useReviewOverlay } from "../../../_lib/use-review-overlay";
+import { serverSendsReview } from "../../../_lib/backend-contract";
 import { conflictParams, conflictsUrl, DEFAULT_CONFLICT_FILTERS, type ConflictFilters } from "./conflict-filters";
 import { ConflictCard } from "./conflict-card";
 import { ExportPanel } from "./export-panel";
@@ -27,6 +29,7 @@ export function ConflictsExplorer() {
     value: useDebounced(filters.value),
   };
   const { data, error, databaseDown, loading, reload } = useApi<ConflictList>(conflictsUrl(debounced));
+  const reviewOf = useReviewOverlay({ enabled: data !== null && !serverSendsReview(data.items), modules: ["comparison"] });
   const update = (next: Partial<ConflictFilters>) => setFilters((prev) => ({ ...prev, ...next }));
 
   const toggleStatus = (status: ComparisonStatus) =>
@@ -121,7 +124,7 @@ export function ConflictsExplorer() {
         </div>
       ) : (
         <div className={`space-y-5 transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}>
-          {data?.items.map((pair, i) => <ConflictCard key={pair.email_id} pair={pair} index={i} />)}
+          {data?.items.map((pair, i) => <ConflictCard key={pair.email_id} pair={pair} review={reviewOf(pair)} index={i} />)}
           {data && (
             <div className="card overflow-hidden">
               <Pagination total={data.total} limit={data.limit} offset={data.offset} onChange={(offset) => update({ offset })} />

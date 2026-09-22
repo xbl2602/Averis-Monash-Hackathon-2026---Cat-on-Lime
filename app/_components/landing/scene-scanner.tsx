@@ -10,7 +10,7 @@ import { SceneEyebrow, SceneShell } from "./scene-shell";
 const cap = CAPABILITIES[1];
 
 /**
- * Scene 2, "The Scanner" (270-440vh, pinned 170vh). A beam sweeps down the four supported formats,
+ * Scene 2, "The Scanner" (280-460vh, pinned 180vh). A beam sweeps down the four supported formats,
  * lighting each in turn; the plane flies through it and, on the far side, unfolds into the SI sheet
  * while the draft BL sheet appears beside it and the extracted fields resolve out of the pair.
  * (The SI sheet IS the plane; only the BL sheet is a separate element.)
@@ -52,7 +52,7 @@ export function SceneScanner() {
 
   return (
     <SceneShell id="formats" pin={SCENE_VH.scanner.pin} ref={ref}>
-      <div data-copy className="story:col-span-5">
+      <div data-copy data-avoid className="story:col-span-5">
         <SceneEyebrow>{cap.step}</SceneEyebrow>
         <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">{cap.title}</h2>
         <p className="mt-3 text-fg-muted">{cap.text}</p>
@@ -71,16 +71,16 @@ export function SceneScanner() {
       </div>
 
       <div className="story:col-span-7 story:self-start story:pt-[12vh]">
-        <ul className="mx-auto flex w-full max-w-[360px] flex-col gap-2.5 story:mr-0">
+        <ul className="mx-auto flex w-full max-w-[360px] flex-col gap-2 story:mr-0">
           {FORMATS.map((f) => (
-            <li key={f.name} data-format className="card relative flex items-center gap-4 p-4">
+            <li key={f.name} data-format data-avoid className="card relative flex items-center gap-3.5 p-3">
               <span
                 data-format-glow
                 className="pointer-events-none absolute inset-0 hidden rounded-3xl border border-accent bg-accent/10 story:block"
               />
               <span
                 data-format-icon
-                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/12 text-accent-strong"
+                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent-strong"
               >
                 <Icon name={f.icon} size={22} />
               </span>
@@ -88,7 +88,8 @@ export function SceneScanner() {
                 <div className="font-bold">
                   {f.name} <span className="font-mono text-xs font-medium text-fg-faint">{f.ext}</span>
                 </div>
-                <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{f.note}</p>
+                {/* On short screens the description would push the list into the labels below it, so only the name and extension stay */}
+                <p className="mt-0.5 text-xs leading-relaxed text-fg-muted [@media(max-height:800px)]:hidden">{f.note}</p>
               </div>
             </li>
           ))}
@@ -108,10 +109,10 @@ export function SceneScanner() {
         <div className="mt-8 flex flex-col items-center gap-4 story:mt-0 story:block">
           <div
             data-bl-sheet
-            className="relative h-[208px] w-[160px] rounded-md border border-line-strong bg-[var(--plane,#fff)] p-4 story:absolute story:left-[78.5%] story:top-[68%] story:-translate-x-1/2 story:-translate-y-1/2"
+            className="relative h-[169px] w-[130px] rounded-md border border-line-strong bg-[var(--plane,#fff)] p-3.5 story:absolute story:left-[78.5%] story:top-[68%] story:-translate-x-1/2 story:-translate-y-1/2"
           >
             {[0, 1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="mb-3.5 h-[3px] rounded-full bg-fg-faint" style={{ width: n % 3 === 2 ? "62%" : "88%" }} />
+              <div key={n} className="mb-3 h-[3px] rounded-full bg-fg-faint" style={{ width: n % 3 === 2 ? "62%" : "88%" }} />
             ))}
           </div>
 

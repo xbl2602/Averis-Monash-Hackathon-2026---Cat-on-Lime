@@ -1,11 +1,11 @@
-import { CategoryBadge, Badge } from "../../../_components/results/badges";
-import { CompareView } from "../../../_components/results/compare-view";
-import { ExtractionCard } from "../../../_components/results/extraction-card";
-import { VerdictBanner } from "../../../_components/results/verdict-banner";
-import type { SandboxResult } from "../../../_lib/contracts";
+import type { SandboxResult } from "../../_lib/contracts";
+import { Badge, CategoryBadge } from "./badges";
+import { CompareView } from "./compare-view";
+import { ExtractionCard } from "./extraction-card";
+import { VerdictBanner } from "./verdict-banner";
 
-/** The three answers from one sandbox run, revealed top to bottom: verdict, side-by-side, then the detail behind it. */
-export function SandboxResults({ result }: { result: SandboxResult }) {
+/** The three answers from checking one SI and BL pair, revealed top to bottom: verdict, side-by-side, then the detail behind it. Shared by the sandbox and the document pool. */
+export function PairResults({ result }: { result: SandboxResult }) {
   const { classification, extraction, comparison } = result;
 
   return (

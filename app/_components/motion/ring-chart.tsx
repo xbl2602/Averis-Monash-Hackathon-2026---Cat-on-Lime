@@ -11,14 +11,14 @@ export interface RingSegment {
   color: string;
 }
 
-const SIZE = 200;
 const STROKE = 22;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const GAP = 3;
 
 /** Donut chart that draws itself in. Hovering a slice or a legend row highlights both and shows that slice in the middle. */
-export function RingChart({ segments, centerLabel, footer }: { segments: RingSegment[]; centerLabel: string; footer?: ReactNode }) {
+export function RingChart({ segments, centerLabel, footer, stacked = false, size = 200 }: { segments: RingSegment[]; centerLabel: string; footer?: ReactNode; stacked?: boolean; size?: number }) {
+  const SIZE = size;
+  const RADIUS = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const ready = useReady();
   const [active, setActive] = useState<string | null>(null);
   const total = segments.reduce((sum, s) => sum + s.value, 0);
@@ -35,7 +35,7 @@ export function RingChart({ segments, centerLabel, footer }: { segments: RingSeg
   });
 
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
+    <div className={`flex flex-col items-center gap-6 ${stacked ? "" : "sm:flex-row sm:gap-8"}`}>
       <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90" role="img" aria-label={`${centerLabel}: ${total}`}>
           <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="var(--sunken)" strokeWidth={STROKE} />
@@ -60,7 +60,7 @@ export function RingChart({ segments, centerLabel, footer }: { segments: RingSeg
           ))}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <div className="text-4xl font-extrabold">
+          <div className={size < 190 ? "text-3xl font-extrabold" : "text-4xl font-extrabold"}>
             <CountUp value={focus ? focus.value : total} />
           </div>
           <div className="mt-0.5 max-w-[7rem] text-xs font-medium text-fg-muted">{focus ? focus.label : centerLabel}</div>
@@ -76,7 +76,7 @@ export function RingChart({ segments, centerLabel, footer }: { segments: RingSeg
               onPointerLeave={() => setActive(null)}
               onFocus={() => setActive(segment.key)}
               onBlur={() => setActive(null)}
-              className={`flex w-full items-center gap-3 rounded-full px-3 py-2 text-left text-sm transition ${
+              className={`flex w-full items-center gap-3 rounded-full px-3 ${stacked ? "py-1.5" : "py-2"} text-left text-sm transition ${
                 active === segment.key ? "bg-sunken" : ""
               }`}
             >
