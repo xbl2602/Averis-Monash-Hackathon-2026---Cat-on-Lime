@@ -35,13 +35,8 @@
 > 🎬 **官方评审视频（提交要求，不超过5分钟）**——内容需包含：团队与项目名、问题陈述及其重要性、技术栈、原型现场演示、影响/指标/结果。
 
 <p align="center">
-  <em>🚧 占位中——正式提交前会把给裁判看的官方视频嵌在这里。</em>
+  <a href="https://drive.google.com/drive/folders/1QXRXr_G2Nr7UcGGtE9R3vjrdg18v9E9Y">▶️ 观看官方评审视频（Google Drive）</a>
 </p>
-
-<!-- 官方视频占位说明：视频做好后，去 GitHub 网页打开 README 点铅笔（编辑）→ 把 mp4 拖进编辑框，会生成一个
-     github.com/user-attachments/... 链接 → 把上面那行 <em> 换成：
-     <video width="800" controls src="粘贴链接到这里"></video>
-     保持内联播放，不要换成外跳链接（和下面宣传片的规则一样）。 -->
 
 > 🎬 下面是另一条**宣传片（约2分钟，讲故事用），不是给裁判打分的依据视频**。评分以上面的官方评审视频 + 线上 demo 实测 + submission 导出为准。
 

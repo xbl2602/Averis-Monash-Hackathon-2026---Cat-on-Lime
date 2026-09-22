@@ -35,13 +35,8 @@
 > 🎬 **Official demo video (submission requirement, ≤5 minutes)** — team & project name, the problem and why it matters, tech stack, a live walkthrough of the prototype, and impact/metrics/results.
 
 <p align="center">
-  <em>🚧 Placeholder — the official judge-facing demo video will be embedded here before submission.</em>
+  <a href="https://drive.google.com/drive/folders/1QXRXr_G2Nr7UcGGtE9R3vjrdg18v9E9Y">▶️ Watch the official demo video (Google Drive)</a>
 </p>
-
-<!-- JUDGE VIDEO PLACEHOLDER: once the real video is ready, open this README on github.com, hit edit (pencil),
-     drag the mp4 into the editor to get a github.com/user-attachments/... link, then replace the <em> line
-     above with: <video width="800" controls src="PASTE_LINK_HERE"></video>
-     Keep inline playback, don't switch to an outbound link (same rule as the promo video below). -->
 
 > 🎬 Below is a separate **promo video (~2 minutes, storytelling only — NOT judging material)**. Judging is based on the official demo video above, the live demo, and the submission export.
 
