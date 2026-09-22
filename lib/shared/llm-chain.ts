@@ -34,12 +34,15 @@ export interface TextChainOptions {
 }
 
 /**
- * 整条链的默认总时限。按平台上限倒推：分类/抽取/sandbox 接口 30s，分类前面还有 Jev（最多 10s），
- * 所以链本身不能超过 20s。
+ * 整条链的默认总时限。按平台上限（分类/抽取/sandbox 接口 30s）倒推，并按线上实测延迟校准（2026-09-22）：
+ * 首选（gemini）卡满 15s 后，第二个（deepseek，实测约 3s）还剩 7s，够它答完。
  */
-export const CHAIN_BUDGET_MS = 20_000;
-/** 单个 provider 最多占多久：一次 10s 的尝试 + 重试余量，给后面的 provider 留出时间 */
-const PER_PROVIDER_CAP_MS = 12_000;
+export const CHAIN_BUDGET_MS = 22_000;
+/**
+ * 单个 provider 最多占多久。实测 Gemini 字段抽取常见 8~10s，15s 能容下正常偏慢的调用，
+ * 又给后面的 provider 留出时间（试过 12s/10s，会把正常的 Gemini 抽取误判成卡住）。
+ */
+const PER_PROVIDER_CAP_MS = 15_000;
 /** 剩余时间少于这个就不再尝试下一个（一个注定超时的请求只会拖慢降级兜底） */
 const MIN_PROVIDER_MS = 3_000;
 

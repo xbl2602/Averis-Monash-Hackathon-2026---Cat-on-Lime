@@ -50,11 +50,12 @@ export function isTextProvider(value: unknown): value is TextLLMProvider {
 }
 
 /**
- * 单次尝试的超时（毫秒）。2026-09-22 从 20s 降到 10s：实测 Gemini 分类约 2s，10s 足够正常调用；
- * 旧值下一个卡住的模型要拖 42s（20s × 2 + 2s），比分类/抽取/sandbox 接口 30s 的平台上限还长，
- * 回退链还没来得及换下一个模型，整个请求就先被平台掐断了。
+ * 单次尝试的超时上限（毫秒）。按线上实测校准（2026-09-22）：Gemini 分类约 2s，但**字段抽取要 8~10s、偶尔 16s**；
+ * 试过 10s，结果把正常但偏慢的 Gemini 抽取当成卡住切断了。所以单次上限保持 20s——这主要给"显式指定、没有备用模型"
+ * 的调用用；回退链里每个模型另有 15s 的上限（见 lib/shared/llm-chain.ts），首选卡住时不会把时间耗光。
+ * 真正治"一个卡住的模型拖 42s"的是下面两条：超时不再原地重试、SDK 自带重试关掉。
  */
-const LLM_CALL_TIMEOUT_MS = 10_000;
+const LLM_CALL_TIMEOUT_MS = 20_000;
 
 /** 一次 callLLM（含那一次重试）默认最多花多久；回退链会传一个更小的值进来（见 lib/shared/llm-chain.ts） */
 const LLM_PROVIDER_BUDGET_MS = 22_000;
