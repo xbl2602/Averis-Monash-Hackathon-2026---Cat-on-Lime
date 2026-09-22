@@ -669,3 +669,33 @@ Averis x Monash Hackathon 2026，3人团队，全员无编程背景，各自用 
 - **分支里"前端已备好、等后端补字段"**（`app/_lib/backend-contract.ts`）：都是可选字段，缺了界面自动隐藏，不算冲突。
   其中 `body` 结果列表已有；冲突对接口、复核队列还没带 `body`，分类置信度也没有单独字段（main 目前用 `review_reason=low_confidence_classification` 表达）。
 - **验证**：合并后 `tsc --noEmit`、`next build`、`test:mcp-annotations` 全过。
+
+### 决策 39：模型回退机制加时间约束、抽取也走回退链；Claude/ChatGPT 不配置
+
+- **背景**：操作者要求"验证 fallback 机制"。用本地假模型（可控返回成功/500/402/卡住）+ 故意填错的 key 做端到端实测，
+  逻辑层面（顺序、跳过没 key 的、显式指定不偷换、全失败尽力兜底并送复核、比对 Jev 失败保守降级）都对，但发现 5 个问题。
+- **问题与根因**：
+  1. **重试叠了两层**：`generateText` 默认 `maxRetries: 2`，外面 `callLLM` 又重试 1 次，一个持续 500 的模型被请求 6 次、拖 14s；
+     超时也会原地重试，一个卡住的模型拖 42s（20s×2+2s）。分类/抽取/sandbox 接口平台上限 30s——回退链还没轮到下一个模型，
+     请求就先被平台掐断，设计好的"尽力兜底 + 送人工复核"根本执行不到。
+  2. **线上 DeepSeek 不可用**：key 有效但账户余额不足，真调用返回 402；设置页连接测试只查"列模型"接口，查不出来。
+     结果线上回退链实际只有 Gemini 一个。（操作者已充值，2026-09-22 线上实测分类调用成功。）
+  3. **抽取兜底只试 Gemini**：`tryLlmExtraction` 写的是 `provider ?? "gemini"`，没走回退链；流水线页"失败会自动换下一个模型"对抽取不成立。
+     失败时不会装成功（缺字段判 `missing_value` 送复核），但没有备用模型。
+  4. **Jev 连接测试误报失败**：探测请求漏了 TypeSafe 必填的 `model` 字段，一律 422（`body.model Field required`）；真实调用带 model，是好的。
+  5. **错误文案不准**：SDK 把多次失败包成 RetryError，外层没有 statusCode，上游 500 被报成"502 network_error"；402 提示"请稍后重试"。
+- **决定**：
+  - 重试只在 `callLLM` 一处做（`maxRetries: 0`），只对"很快就失败"的暂时性错误（429/5xx/网络）重试一次；**超时不重试**，直接交给回退链换下一个。
+  - 单次尝试 10s、Jev 10s；回退链总时限 20s（`CHAIN_BUDGET_MS`），单个模型最多 12s，剩余不足 3s 不再尝试；混合分类把 Jev 用掉的时间扣掉（两步合计 24s）。
+    这些数按平台 30s 上限倒推，保证"首选卡住 → 换下一个 → 还不行就兜底"能在上限内走完。
+  - 抽取：`provider`（显式，只试这一个）和 `preferredProvider`（回退链首选）分开；流水线用后者，REST/MCP 传了 provider 用前者，都不传走默认回退链。
+    缓存键和旧路径一致，已缓存的结果不失效。
+  - 错误按 code 给固定模板的下一步说明（新增 `payment_required`）；从 `lastError`/`cause` 里读真实状态码。
+  - 连接测试：Jev 补 `model`（和真实调用同源的 `resolveJevModel()`）；模型连接测试成功时如实写"只验证了 key，没有实际生成"。
+  - **Claude / ChatGPT 按团队决定不配置 API key**：这两家最贵，公开 demo 谁都能点、每次调用都算团队的钱。接入代码完整，Vercel 补 key 即自动进回退链。README / CLAUDE.md / AGENTS.md 已写明。
+- **没有 bump `PIPELINE_LOGIC_VERSION`**：官方 520 封全部由规则分类、规则抽取（线上结果行 `model_provider` 没有任何 `llm`），这次改的只是"模型出错时怎么办"，
+  不改任何判定规则；`--no-write --force` 重算仍然 520/520，结果与库里一致。
+- **验证**：修复后 21 项实测全过——持续 500：2 次请求 2s（原 6 次 14s）；卡住：10s 放弃（原 42s）；首选卡住 10s 后换下一个拿到结果；
+  总时限用完即停；402 明确说余额不足且不重试；500 不再误报成 502；分类全程（Jev 失败 + 首选卡住）11.3s 出结果；
+  抽取默认走回退链、显式指定只试一个；全失败的邮件带 `degraded` 进复核队列；Jev 连接测试成功。
+  官方 520 封 520/520；`typecheck` / `build` / `test:mcp-annotations` 全过。提交：`22d774b`。
