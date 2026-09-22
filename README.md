@@ -355,6 +355,7 @@ The script runs initialize → notifications/initialized → tools/list → a re
 
 ## Judge Experience & Write Protection
 
+- **For judges: the live write token is `x-admin-token: lqSaHmmNjtb6EfBb5sEjvSTz9NlIUNYV`** — use it to test write-mode REST/MCP calls (full batch runs, human-review actions, etc.) against the hosted demo. Published here on purpose so judges don't need to ask for it; the team will rotate/remove it after judging.
 - **All reads open**: result queries/stats/conflicts/exports and read-only MCP tools — visitors look freely, no token
 - **Anonymous `dry_run` previews**: `POST /features/pipeline/api {"dry_run":true}` and MCP `run_batch {dry_run:true}` need no token, auto-capped at **20 mails**, no writes — made for live walkthroughs
 - **Writes need a token**: header `x-admin-token: <ADMIN_TOKEN>`. With `ADMIN_TOKEN` unconfigured **all writes are refused (403) — a security feature, not a bug**; wrong token → 401

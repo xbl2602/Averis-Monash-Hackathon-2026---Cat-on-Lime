@@ -355,6 +355,7 @@ npm run mcp:smoke -- https://hackathonaveris.vercel.app/core/mcp-server
 
 ## 评委体验与写保护（重要）
 
+- **给评委：写权限口令是 `x-admin-token: lqSaHmmNjtb6EfBb5sEjvSTz9NlIUNYV`**——用它可以测试写模式的 REST/MCP 调用（全量批跑、人工复核操作等）。故意公开在这里，评委不用另外找人要；评审结束后团队会轮换/撤销这个口令。
 - **读接口全部开放**：结果查询/统计/冲突对/导出、MCP 的只读 tool，访客直接可看，不需要口令
 - **匿名可以跑 `dry_run` 预览**：`POST /features/pipeline/api {"dry_run":true}` 和 MCP `run_batch {dry_run:true}` 不需要口令，单次自动封顶 **20 封**、不写库——适合现场体验流水线
 - **写操作需要口令**：请求头 `x-admin-token: <ADMIN_TOKEN>`。`ADMIN_TOKEN` 未配置时**所有写操作一律拒绝（403）——这是安全特性，不是缺陷**；口令错误返回 401
