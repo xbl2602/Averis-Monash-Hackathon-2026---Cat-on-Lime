@@ -1,6 +1,7 @@
 import { COMPARISON_STATUSES, EMAIL_CATEGORIES } from "@/lib/shared/types";
 import type { ComparisonStatus, EmailCategory } from "../../../_lib/contracts";
 import { queryString } from "../../../_lib/api-client";
+import { CLASSIFICATION_REVIEW_PARAM } from "../../../_lib/backend-contract";
 
 export type ProcessingFilter = "" | "processed" | "pending" | "failed";
 export type SortField = "email_id" | "category" | "comparison_status" | "defect_count" | "updated_at";
@@ -12,6 +13,8 @@ export interface ResultFilters {
   statuses: ComparisonStatus[];
   processing: ProcessingFilter;
   hasDefect: boolean;
+  /** Only emails whose category the classifier was unsure about (the server must support the filter, see backend-contract.ts) */
+  classificationReview: boolean;
   provider: string;
   sortBy: SortField;
   order: "asc" | "desc";
@@ -26,6 +29,7 @@ export const DEFAULT_FILTERS: ResultFilters = {
   statuses: [],
   processing: "",
   hasDefect: false,
+  classificationReview: false,
   provider: "",
   sortBy: "email_id",
   order: "asc",
@@ -48,6 +52,7 @@ export function filtersFromParams(params: Record<string, string | string[] | und
     statuses: list("status").filter((v): v is ComparisonStatus => (COMPARISON_STATUSES as readonly string[]).includes(v)),
     processing: processing === "processed" || processing === "pending" || processing === "failed" ? processing : "",
     hasDefect: one("has_defect") === "true",
+    classificationReview: one(CLASSIFICATION_REVIEW_PARAM) === "true",
   };
 }
 
@@ -59,6 +64,7 @@ export function filterParams(f: ResultFilters) {
     status: f.statuses,
     processing: f.processing,
     has_defect: f.hasDefect,
+    [CLASSIFICATION_REVIEW_PARAM]: f.classificationReview,
     provider: f.provider.trim(),
   };
 }
@@ -81,6 +87,7 @@ export function countActiveFilters(f: ResultFilters): number {
     f.statuses.length +
     (f.processing ? 1 : 0) +
     (f.hasDefect ? 1 : 0) +
+    (f.classificationReview ? 1 : 0) +
     (f.provider.trim() ? 1 : 0)
   );
 }

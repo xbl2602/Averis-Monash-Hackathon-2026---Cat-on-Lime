@@ -3,6 +3,7 @@
  * (that document is the authority; if a route changes, update it and this file together).
  * Only the shared types in lib/shared are imported, never another feature's internals.
  */
+import type { ReviewOverride } from "@/lib/shared/review/types";
 import type {
   ComparisonStatus,
   EmailCategory,
@@ -17,8 +18,19 @@ export type { ComparedField, ComparisonStatus, EmailCategory, ExtractDocumentRes
 export type ProcessingStatus = "ok" | "failed" | "pending";
 export type FieldValues = Record<string, string>;
 
+/**
+ * Fields the server does not send yet; every screen that uses one works without it and switches on when it appears.
+ * See _lib/backend-contract.ts for what each one means and which parameter goes with it.
+ */
+export interface FutureRowFields {
+  classification_confidence?: number | null;
+  classification_needs_review?: boolean;
+  review?: ReviewOverride | null;
+  body?: string | null;
+}
+
 // ---- results ----
-export interface ResultRow {
+export interface ResultRow extends FutureRowFields {
   email_id: string;
   from: string;
   subject: string;
@@ -60,10 +72,12 @@ export interface StatsSummary {
   defect_field_frequency: { field: string; count: number }[];
   providers: Record<string, number>;
   last_updated_at: string | null;
+  /** Not sent yet: how many emails the classifier was unsure about */
+  classification_needs_review?: number;
 }
 
 // ---- conflicts ----
-export interface ConflictPair {
+export interface ConflictPair extends FutureRowFields {
   email_id: string;
   from: string;
   subject: string;

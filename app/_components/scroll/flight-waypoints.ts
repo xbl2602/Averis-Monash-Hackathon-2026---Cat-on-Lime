@@ -21,7 +21,7 @@ export const WAYPOINTS: Vec[] = [
   /* 8 */ [0.74, 0.42], // through the beam
   /* 9 */ [0.66, 0.68], // lands as the SI sheet
   /* 10 */ [0.68, 0.92], // slips out below the report
-  /* 11 */ [0.48, 0.72],
+  /* 11 */ [0.53, 0.72],
   /* 12 */ [0.6, 0.52], // hesitates at the fork
   /* 13 */ [0.86, 0.24], // human marker
   /* 14 */ [1.12, 0.05], // leaves through the top-right corner; flies back in to dock in the final card

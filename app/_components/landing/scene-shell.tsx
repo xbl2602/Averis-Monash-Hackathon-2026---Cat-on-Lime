@@ -1,20 +1,24 @@
 import type { CSSProperties, ReactNode, Ref } from "react";
+import { BUILD } from "../scroll/scene-config";
 
 /**
- * Frame shared by the four pinned scenes: a tall wrapper holding one sticky 100vh stage.
+ * Frame shared by the pinned scenes: a tall wrapper holding one sticky 100vh stage.
  * The wrapper's height comes from `pin` (see globals.css `.scene`); in the plain document it is
  * just a section. Children are the text column and the visual column (a 12-column grid on desktop).
  */
 export function SceneShell({
   id,
   pin,
-  jump = 0.16,
+  jump = (pin * BUILD) / 100,
   ref,
   children,
 }: {
   id: string;
   pin: number;
-  /** Anchor links land this far (in viewport heights) into the scene so it is not blank on arrival */
+  /**
+   * Anchor links land this far (in viewport heights) into the scene. The default is the moment the scene
+   * has finished building, so a menu click shows the whole scene, not a half-drawn one.
+   */
   jump?: number;
   ref?: Ref<HTMLElement>;
   children: ReactNode;

@@ -1,17 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { ApiErrorInfo } from "../../../_components/api-error";
 import { ErrorNotice } from "../../../_components/error-notice";
 import { Icon } from "../../../_components/icon";
 import { PipelineFlow, type FlowState } from "../../../_components/pipeline/pipeline-flow";
+import { PairResults } from "../../../_components/results/pair-results";
 import { postJson } from "../../../_lib/api-client";
 import type { SandboxResult } from "../../../_lib/contracts";
 import { fileToBase64 } from "../../../_lib/format";
 import type { ProviderOption } from "../../../_lib/provider-options";
 import { DropZone } from "./drop-zone";
 import { EXAMPLE_BODY, EXAMPLE_SUBJECT, exampleFiles } from "./example-docs";
-import { SandboxResults } from "./sandbox-results";
 
 export function SandboxWorkbench({ providers }: { providers: ProviderOption[] }) {
   const [si, setSi] = useState<File | null>(null);
@@ -83,19 +84,7 @@ export function SandboxWorkbench({ providers }: { providers: ProviderOption[] })
           </div>
         </details>
 
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="block min-w-56 flex-1 text-sm sm:max-w-xs">
-            <span className="mb-1.5 block text-xs font-semibold text-fg-muted">Model (optional)</span>
-            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
-              <option value="">Default: rules first, model only if needed</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="flex flex-wrap items-center gap-4">
           <button type="button" onClick={run} disabled={!ready} className="btn btn-primary btn-shine !px-8 !py-3">
             <Icon name="play" size={17} />
             {flow === "running" ? "Checking…" : "Check these documents"}
@@ -106,9 +95,34 @@ export function SandboxWorkbench({ providers }: { providers: ProviderOption[] })
           </button>
         </div>
 
+        <details className="group rounded-2xl border border-line bg-sunken">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
+            <Icon name="sliders" size={18} className="text-accent-strong" />
+            Advanced options
+            <Icon name="chevronDown" size={16} className="ml-auto text-fg-faint transition group-open:rotate-180" />
+          </summary>
+          <div className="px-4 pb-4">
+            <label className="block max-w-sm text-sm">
+              <span className="mb-1.5 block text-xs font-semibold text-fg-muted">Language model to use</span>
+              <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
+                <option value="">Automatic (recommended)</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                    {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </details>
+
         <div className="flex items-center gap-2 text-xs text-fg-faint">
           <Icon name="shield" size={15} className="text-ok" />
           Nothing is saved and no database is needed. The files are read, checked and thrown away.
+          <Link href="/features/import" className="ml-1 font-semibold text-accent-strong underline-offset-2 hover:underline">
+            Already uploaded some? Check a pair from the pool
+          </Link>
         </div>
       </div>
 
@@ -119,7 +133,7 @@ export function SandboxWorkbench({ providers }: { providers: ProviderOption[] })
       )}
 
       {error && <ErrorNotice error={error} />}
-      {result && <SandboxResults result={result} />}
+      {result && <PairResults result={result} />}
     </div>
   );
 }

@@ -7,48 +7,18 @@ import { Icon } from "../../../_components/icon";
 import { Notice } from "../../../_components/notice";
 import { CategoryBadge, ProviderChip, ReasonNote, StatusBadge } from "../../../_components/results/badges";
 import { CompareView } from "../../../_components/results/compare-view";
+import { ConfidenceChip } from "../../../_components/results/confidence-chip";
+import { SystemVsPerson } from "../../../_components/results/decision-panel";
+import { EmailMessage } from "../../../_components/results/email-message";
 import { queryString } from "../../../_lib/api-client";
 import type { ResultList, ResultRow } from "../../../_lib/contracts";
-import { fieldLabel } from "../../../_lib/labels";
 import type { ProviderOption } from "../../../_lib/provider-options";
 import { fullDate, relativeTime } from "../../../_lib/format";
 import { useApi } from "../../../_lib/use-api";
 import { ActionBar } from "./action-bar";
 import { HistoryTimeline } from "./history-timeline";
-import { DISPOSITION_LABELS, REVIEW_STATE_META, historyUrl, type ApplyReviewActionRequest, type HistoryResponse, type ReviewModule, type ReviewQueueItem } from "./review-api";
-import { Badge } from "../../../_components/results/badges";
+import { historyUrl, type ApplyReviewActionRequest, type HistoryResponse, type ReviewModule, type ReviewQueueItem } from "./review-api";
 import { useReviewActions } from "./use-review-actions";
-
-function DecisionCard({ item }: { item: ReviewQueueItem }) {
-  const o = item.override;
-  if (!o) {
-    return (
-      <div className="rounded-2xl border border-dashed border-line-strong p-4 text-sm text-fg-muted">
-        <div className="font-semibold text-fg">No decision yet</div>
-        <p className="mt-1 text-xs">Nobody has confirmed, corrected or set this aside.</p>
-      </div>
-    );
-  }
-  const meta = REVIEW_STATE_META[o.review_state];
-  return (
-    <div className="animate-pop space-y-2 rounded-2xl border border-accent/40 bg-accent/[0.06] p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={meta.tone} icon={o.review_state === "confirmed" ? "checkCircle" : o.review_state === "deferred" ? "pause" : "edit"}>{meta.label}</Badge>
-        <span className="text-xs text-fg-faint">
-          {o.decided_by} · {relativeTime(o.updated_at)}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {o.category && <CategoryBadge category={o.category} />}
-        {o.comparison_status && <StatusBadge status={o.comparison_status} />}
-        {o.review_reason && <ReasonNote reason={o.review_reason} />}
-        {o.disposition && <span className="rounded-full bg-sunken px-2.5 py-0.5 font-semibold">{DISPOSITION_LABELS[o.disposition] ?? o.disposition}</span>}
-      </div>
-      {o.defect_fields && o.defect_fields.length > 0 && <div className="text-xs text-fg-muted">Differing fields: {o.defect_fields.map(fieldLabel).join(", ")}</div>}
-      {o.note && <p className="rounded-xl bg-sunken px-3 py-2 text-xs text-fg-muted">{o.note}</p>}
-    </div>
-  );
-}
 
 function Evidence({ module, item, row }: { module: ReviewModule; item: ReviewQueueItem; row: ResultRow | null }) {
   if (module === "pipeline") {
@@ -131,6 +101,7 @@ export function ReviewDetail({
           <span className="font-mono text-base font-bold text-accent-strong">{item.email_id}</span>
           <StatusBadge status={item.comparison_status} processing={item.processing_status} />
           <CategoryBadge category={item.category} />
+          <ConfidenceChip confidence={item.classification_confidence} needsReview={item.classification_needs_review} />
           <ProviderChip provider={item.model_provider} />
         </div>
         <h2 className="text-xl font-extrabold leading-snug">{item.subject || "(no subject)"}</h2>
@@ -144,22 +115,11 @@ export function ReviewDetail({
         <ReasonNote reason={item.review_reason} />
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-line bg-sunken p-4">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-faint">The system said</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={item.comparison_status} processing={item.processing_status} />
-            <CategoryBadge category={item.category} />
-          </div>
-          {item.defect_fields.length > 0 && <div className="mt-2 text-xs text-fg-muted">Differing fields: {item.defect_fields.map(fieldLabel).join(", ")}</div>}
-        </div>
-        <div>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-faint">A person decided</div>
-          <DecisionCard item={item} />
-        </div>
-      </div>
+      <SystemVsPerson system={{ category: item.category, comparison_status: item.comparison_status, processing_status: item.processing_status, defect_fields: item.defect_fields }} override={item.override} />
 
       {rows.loading && !row ? <p className="text-sm text-fg-faint">Loading the extracted fields…</p> : <Evidence module={module} item={item} row={row} />}
+      {/* A classification review is a judgement about the message itself, so it opens already unfolded */}
+      <EmailMessage body={item.body ?? row?.body} from={item.from ?? row?.from} subject={item.subject} defaultOpen={module === "classification"} />
 
       <section className="space-y-4">
         <h3 className="text-sm font-bold">Actions</h3>

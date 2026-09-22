@@ -91,19 +91,6 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">
-          <label className="block text-sm">
-            <span className="mb-2 block font-semibold">Fallback model</span>
-            <select value={provider} onChange={(e) => setProviderChoice(e.target.value)} className="field">
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1.5 block text-xs text-fg-faint">Rules run first; the model only steps in when they can&rsquo;t settle a field.</span>
-          </label>
-
           {saving ? (
             <label className="block text-sm">
               <span className="mb-2 block font-semibold">Emails to process (1 to 520)</span>
@@ -119,21 +106,33 @@ export function VerificationPanel({ providers }: { providers: ProviderOption[] }
               <span className="mt-2.5 block text-xs text-fg-faint">Public previews are capped at 20 emails per run.</span>
             </label>
           )}
-        </div>
 
-        <label className="block text-sm">
-          <span className="mb-2 block font-semibold">Specific email IDs (optional)</span>
-          <input value={emailIdsText} onChange={(e) => setEmailIdsText(e.target.value)} placeholder="email_004, email_107" className="field font-mono !text-xs" />
-          <span className="mt-1.5 block text-xs text-fg-faint">Leave empty to run the first emails in the inbox.</span>
-        </label>
+          <label className="block text-sm">
+            <span className="mb-2 block font-semibold">Specific email IDs (optional)</span>
+            <input value={emailIdsText} onChange={(e) => setEmailIdsText(e.target.value)} placeholder="email_004, email_107" className="field font-mono !text-xs" />
+            <span className="mt-1.5 block text-xs text-fg-faint">Leave empty to run the first emails in the inbox.</span>
+          </label>
+        </div>
 
         <details className="group rounded-2xl border border-line bg-sunken">
           <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
             <Icon name="sliders" size={18} className="text-accent-strong" />
-            Advanced
+            Advanced options
             <Icon name="chevronDown" size={16} className="ml-auto text-fg-faint transition group-open:rotate-180" />
           </summary>
           <div className="grid gap-5 px-4 pb-4 md:grid-cols-2">
+            <label className="block text-sm md:col-span-2 md:max-w-sm">
+              <span className="mb-2 block font-semibold">Language model to use</span>
+              <select value={provider} onChange={(e) => setProviderChoice(e.target.value)} className="field">
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                    {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1.5 block text-xs text-fg-faint">Used only for the parts that need reading between the lines. The default is fine for most runs.</span>
+            </label>
             <label className="block text-sm">
               <span className="mb-2 flex justify-between font-semibold">
                 At the same time <span className="font-mono text-fg-muted">{concurrency}</span>

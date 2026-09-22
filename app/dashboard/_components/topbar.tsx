@@ -7,16 +7,11 @@ import { Icon } from "../../_components/icon";
 import { ThemeToggle } from "../../_components/theme-toggle";
 import { AdminChip } from "../../_components/admin/admin-chip";
 import { pageTitle } from "./nav-items";
-import { useSearch } from "./search-context";
 
 export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { query, setQuery } = useSearch();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // Module search only filters the overview grid, so it is shown there and nowhere else
-  const showSearch = pathname === "/dashboard";
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -38,34 +33,14 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
         <Icon name="menu" size={22} />
       </button>
 
-      {showSearch ? (
-        <div className="relative max-w-md flex-1">
-          <Icon
-            name="search"
-            size={18}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-fg-faint"
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            type="search"
-            placeholder="Search modules (classify, extract, compare)"
-            aria-label="Search modules"
-            className="field !py-2.5 !pl-11"
-          />
-        </div>
-      ) : (
-        <div className="flex-1 truncate text-sm font-semibold text-fg-muted">
-          {pageTitle(pathname)}
-        </div>
-      )}
+      <div className="flex-1 truncate text-sm font-semibold text-fg-muted">{pageTitle(pathname)}</div>
 
       <Link
         href="/features/verification"
         className="btn btn-glass hidden !py-2 sm:inline-flex"
       >
         <Icon name="play" size={16} />
-        Run pipeline
+        Run verification
       </Link>
 
       <AdminChip />

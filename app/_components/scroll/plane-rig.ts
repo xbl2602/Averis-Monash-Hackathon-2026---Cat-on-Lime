@@ -2,7 +2,7 @@ import { gsap, ScrollTrigger } from "./gsap";
 import { PLANE_H, PLANE_W } from "./paper-plane";
 import { SEGMENT_COUNT, U, WAYPOINTS, type Vec } from "./flight-waypoints";
 import { applyThemeMix, clearThemeMix, themeScrollAllowed } from "./scene-palette";
-import { SCENE_VH, type SceneName } from "./scene-config";
+import { SCENE_VH, sceneAt, sceneEnd } from "./scene-config";
 
 /**
  * Everything the plane is, as ONE object that is a function of scroll.
@@ -28,6 +28,13 @@ export interface PlaneState {
   dock: number;
 }
 
+/** The sheet behind the hero card, and the plane in flight, are deliberately small: the protagonist must never crowd the copy */
+const SHEET_SCALE = 1.6;
+const FLIGHT_SCALE = 0.9;
+const STAGE_SHEET_SCALE = 1.3;
+/** How faint the plane gets while it passes over text (0 = invisible) */
+const GHOST_ALPHA = 0.2;
+
 const WING_ANGLE = 46;
 const BODY_TILT = 36;
 
@@ -38,11 +45,25 @@ const range = (v: number, a: number, b: number) => clamp01((v - a) / (b - a));
 
 export type RigMode = "story" | "mobile";
 
+/**
+ * A block of text (or a card with text) that the plane fades out of the way of. Blocks inside a pinned
+ * scene are measured once relative to their stage, which fills the viewport while the scene shows;
+ * blocks in normal flow (hero, final section) have no stage and are measured live.
+ */
+interface Avoid {
+  el: HTMLElement;
+  stage: HTMLElement | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export class PlaneRig {
   private readonly state: PlaneState = {
     u: 0,
     fold: 0,
-    scale: 2.1,
+    scale: SHEET_SCALE,
     alpha: 1,
     wobAmp: 0,
     wobT: 0,
@@ -62,6 +83,10 @@ export class PlaneRig {
   private hidden = false;
   private cta: HTMLElement | null = null;
   private lastFill = "";
+  /** Regions of readable text the plane must not hide (elements marked data-avoid) */
+  private avoids: Avoid[] = [];
+  /** 1 = solid, GHOST_ALPHA = faint: eases towards whichever the plane needs right now */
+  private ghost = 1;
 
   private readonly plane: HTMLElement;
   private readonly body: HTMLElement;
@@ -186,16 +211,18 @@ export class PlaneRig {
     this.ctx?.revert();
     this.buildPath();
     this.cta = document.querySelector<HTMLElement>("[data-cta]");
+    this.collectAvoids();
     Object.assign(this.state, {
       u: 0,
       fold: 0,
-      scale: 2.1,
+      scale: SHEET_SCALE,
       alpha: 1,
       wobAmp: 0,
       wobT: 0,
       mix: 0,
       dock: 0,
     } satisfies PlaneState);
+    this.ghost = 1;
     this.lastKey = "";
 
     this.ctx = gsap.context(() => {
@@ -224,47 +251,45 @@ export class PlaneRig {
         tl.fromTo(s, from, { ...to, duration: span(a, b), ease }, at(a));
       };
 
-      const { inbox, scanner, compare, handoff, landing } = SCENE_VH;
-      const sceneEnd = (name: Exclude<SceneName, "fold" | "landing">) => {
-        const scene = SCENE_VH[name];
-        return scene.start + scene.pin;
-      };
+      // Every event below is placed inside a scene's BUILD (sceneAt(name, 0..1)), so the plane, like the
+      // scene's content, has finished moving by the time the scene starts to hold.
+      const { inbox, compare } = SCENE_VH;
 
       // -- Route: which stretch of the path each scene flies
       tween({ u: 0 }, { u: U.heroEnd }, 0, inbox.start, "power1.inOut");
-      tween({ u: U.heroEnd }, { u: U.inboxEnd }, inbox.start, sceneEnd("inbox"));
-      tween({ u: U.inboxEnd }, { u: U.scannerEnd }, scanner.start, sceneEnd("scanner"));
-      tween({ u: U.scannerEnd }, { u: U.compareEnd }, compare.start, sceneEnd("compare"));
-      tween({ u: U.compareEnd }, { u: U.handoffHover }, handoff.start, handoff.start + 40);
-      tween({ u: U.handoffHover }, { u: U.handoffNode }, handoff.start + 40, handoff.start + 75);
-      tween({ u: U.handoffNode }, { u: U.handoffEnd }, handoff.start + 75, sceneEnd("handoff"));
-      if (endVH > landing.start) tween({ u: U.handoffEnd }, { u: U.landingEnd }, landing.start, endVH);
+      tween({ u: U.heroEnd }, { u: U.inboxEnd }, sceneAt("inbox", 0), sceneAt("inbox", 1));
+      tween({ u: U.inboxEnd }, { u: U.scannerEnd }, sceneAt("scanner", 0), sceneAt("scanner", 1));
+      tween({ u: U.scannerEnd }, { u: U.compareEnd }, sceneAt("compare", 0), sceneAt("compare", 1));
+      tween({ u: U.compareEnd }, { u: U.handoffHover }, sceneAt("handoff", 0), sceneAt("handoff", 0.333));
+      tween({ u: U.handoffHover }, { u: U.handoffNode }, sceneAt("handoff", 0.333), sceneAt("handoff", 0.625));
+      tween({ u: U.handoffNode }, { u: U.handoffEnd }, sceneAt("handoff", 0.625), sceneAt("handoff", 1));
+      // After the handoff the plane leaves through the top-right corner, so the workspace scene is never covered
+      tween({ u: U.handoffEnd }, { u: U.landingEnd }, sceneAt("workspace", 0), sceneAt("workspace", 0.35));
 
       // -- Fold: page -> plane (hero), plane -> two sheets (scanner), sheets -> plane (handoff)
       tween({ fold: 0 }, { fold: 1 }, 0, 70, "power2.inOut");
-      tween({ fold: 1 }, { fold: 0 }, scanner.start + 100, scanner.start + 150, "power2.inOut");
-      tween({ fold: 0 }, { fold: 1 }, sceneEnd("compare") + 8, sceneEnd("compare") + 50, "power2.inOut");
+      tween({ fold: 1 }, { fold: 0 }, sceneAt("scanner", 0.59), sceneAt("scanner", 0.88), "power2.inOut");
+      tween({ fold: 0 }, { fold: 1 }, sceneAt("handoff", 0.07), sceneAt("handoff", 0.42), "power2.inOut");
 
-      // -- Size: big sheet behind the card, plane while flying, sheet again in the scanner
-      tween({ scale: 2.1 }, { scale: 1.35 }, 0, 80, "power2.inOut");
-      tween({ scale: 1.35 }, { scale: 1.6 }, scanner.start + 100, scanner.start + 150, "power2.inOut");
-      tween({ scale: 1.6 }, { scale: 1.35 }, sceneEnd("compare") + 8, sceneEnd("compare") + 50, "power2.inOut");
+      // -- Size: a modest sheet behind the card, a small plane in flight, a sheet again in the scanner
+      tween({ scale: SHEET_SCALE }, { scale: FLIGHT_SCALE }, 0, 80, "power2.inOut");
+      tween({ scale: FLIGHT_SCALE }, { scale: STAGE_SHEET_SCALE }, sceneAt("scanner", 0.59), sceneAt("scanner", 0.88), "power2.inOut");
+      tween({ scale: STAGE_SHEET_SCALE }, { scale: FLIGHT_SCALE }, sceneAt("handoff", 0.07), sceneAt("handoff", 0.42), "power2.inOut");
 
       // -- Visibility: the comparison scene's own sheets take over from the plane, then hand it back
       tween({ alpha: 1 }, { alpha: 0 }, compare.start - 2, compare.start + 12);
-      tween({ alpha: 0 }, { alpha: 1 }, sceneEnd("compare") - 18, sceneEnd("compare"));
+      tween({ alpha: 0 }, { alpha: 1 }, sceneEnd("compare") - 10, sceneEnd("compare") + 4);
 
       // -- Handoff: the plane hesitates
-      tween({ wobAmp: 0 }, { wobAmp: 1 }, handoff.start + 20, handoff.start + 45);
-      tween({ wobAmp: 1 }, { wobAmp: 0 }, handoff.start + 78, handoff.start + 100);
-      tween({ wobT: 0 }, { wobT: Math.PI * 14 }, handoff.start + 15, handoff.start + 100);
+      tween({ wobAmp: 0 }, { wobAmp: 1 }, sceneAt("handoff", 0.167), sceneAt("handoff", 0.375));
+      tween({ wobAmp: 1 }, { wobAmp: 0 }, sceneAt("handoff", 0.65), sceneAt("handoff", 0.83));
+      tween({ wobT: 0 }, { wobT: Math.PI * 14 }, sceneAt("handoff", 0.125), sceneAt("handoff", 0.83));
 
-      // -- Theme: light -> dusk (end of the inbox) -> dark -> dusk (end of the handoff) -> light
-      tween({ mix: 0 }, { mix: 0.5 }, inbox.start + 85, sceneEnd("inbox"));
-      tween({ mix: 0.5 }, { mix: 1 }, scanner.start, scanner.start + 65);
-      tween({ mix: 1 }, { mix: 0.5 }, handoff.start + 60, sceneEnd("handoff"));
-      const lightAt = Math.max(landing.start + 20, Math.min(landing.start + 70, endVH - 5));
-      if (endVH > landing.start) tween({ mix: 0.5 }, { mix: 0 }, landing.start, lightAt);
+      // -- Theme: light -> dusk (end of the inbox) -> dark -> dusk (end of the handoff) -> light (workspace)
+      tween({ mix: 0 }, { mix: 0.5 }, sceneAt("inbox", 0.5), sceneAt("inbox", 1));
+      tween({ mix: 0.5 }, { mix: 1 }, sceneAt("scanner", 0), sceneAt("scanner", 0.38));
+      tween({ mix: 1 }, { mix: 0.5 }, sceneAt("handoff", 0.5), sceneAt("handoff", 1));
+      tween({ mix: 0.5 }, { mix: 0 }, sceneAt("workspace", 0.05), sceneAt("workspace", 0.55));
 
       // Timeline is exactly one unit long so scroll fraction == timeline progress
       tl.set({}, {}, 1);
@@ -285,6 +310,47 @@ export class PlaneRig {
         });
       }
     });
+  }
+
+  // ------------------------------------------------------- keeping clear of text
+
+  /** Measure every block marked data-avoid. Blocks in a pinned scene are stored relative to their stage. */
+  private collectAvoids(): void {
+    const PAD = 10;
+    this.avoids = Array.from(document.querySelectorAll<HTMLElement>("[data-avoid]")).map((el) => {
+      const stage = el.closest<HTMLElement>(".scene-stage");
+      if (!stage) return { el, stage: null, x: 0, y: 0, w: 0, h: 0 };
+      const r = el.getBoundingClientRect();
+      const s = stage.getBoundingClientRect();
+      return { el, stage, x: r.left - s.left - PAD, y: r.top - s.top - PAD, w: r.width + PAD * 2, h: r.height + PAD * 2 };
+    });
+  }
+
+  /** 1 when the plane is in clear space, GHOST_ALPHA when it overlaps text that is on screen right now */
+  private ghostTarget(px: number, py: number, scale: number): number {
+    // Before the first scroll the sheet sits BEHIND the hero card (lower layer), so there is nothing to hide
+    if (window.scrollY <= 24) return 1;
+    const vh = window.innerHeight;
+    const reach = Math.max(PLANE_W, PLANE_H * 0.72) * scale * 0.5;
+
+    for (const a of this.avoids) {
+      let { x, y, w, h } = a;
+      if (a.stage) {
+        // GSAP writes the stage's fade as an inline opacity: a hidden scene has nothing to protect
+        if (Number.parseFloat(a.stage.style.opacity || "0") < 0.3) continue;
+      } else {
+        const r = a.el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > vh) continue;
+        x = r.left - 10;
+        y = r.top - 10;
+        w = r.width + 20;
+        h = r.height + 20;
+      }
+      const nearestX = Math.min(Math.max(px, x), x + w);
+      const nearestY = Math.min(Math.max(py, y), y + h);
+      if ((px - nearestX) ** 2 + (py - nearestY) ** 2 < reach * reach) return GHOST_ALPHA;
+    }
+    return 1;
   }
 
   // ------------------------------------------------------------ per frame
@@ -347,7 +413,14 @@ export class PlaneRig {
 
     const sx = rect ? lerp(s.scale, rect.width / PLANE_W, settle) : s.scale;
     const sy = rect ? lerp(s.scale, rect.height / PLANE_H, settle) : s.scale;
-    const alpha = s.alpha * (1 - range(s.dock, 0.86, 1));
+
+    // Over readable text the plane fades to a faint ghost and comes back once it is clear of it.
+    // Only in the last stretch of docking into the call-to-action does it turn solid: it is about to become the card.
+    const ghostTarget = glide > 0.85 ? 1 : this.ghostTarget(px, py, s.scale);
+    this.ghost += (ghostTarget - this.ghost) * 0.22;
+    if (Math.abs(ghostTarget - this.ghost) < 0.01) this.ghost = ghostTarget;
+    else this.lastKey = ""; // still easing: run again next frame even if nothing else moved
+    const alpha = s.alpha * this.ghost * (1 - range(s.dock, 0.86, 1));
 
     this.plane.style.opacity = String(alpha);
     this.plane.style.setProperty("--fold", fold.toFixed(3));

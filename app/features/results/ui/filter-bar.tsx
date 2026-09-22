@@ -40,7 +40,8 @@ function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-export function FilterBar({ filters, onChange }: { filters: ResultFilters; onChange: (next: Partial<ResultFilters>) => void }) {
+/** `classifierUncertainty`: the server reports how sure the classifier was, so filtering on it is possible. */
+export function FilterBar({ filters, onChange, classifierUncertainty }: { filters: ResultFilters; onChange: (next: Partial<ResultFilters>) => void; classifierUncertainty: boolean }) {
   const active = countActiveFilters(filters);
   // Any filter change goes back to the first page
   const set = (next: Partial<ResultFilters>) => onChange({ ...next, offset: 0 });
@@ -97,6 +98,11 @@ export function FilterBar({ filters, onChange }: { filters: ResultFilters; onCha
             {CATEGORY_META[category].label}
           </Chip>
         ))}
+        {(classifierUncertainty || filters.classificationReview) && (
+          <Chip active={filters.classificationReview} color="var(--warn)" onClick={() => set({ classificationReview: !filters.classificationReview })}>
+            Classifier unsure
+          </Chip>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 border-t border-line pt-4 lg:flex-row lg:items-center lg:justify-between">
@@ -114,7 +120,9 @@ export function FilterBar({ filters, onChange }: { filters: ResultFilters; onCha
               </button>
             ))}
           </div>
-          <input value={filters.provider} onChange={(e) => set({ provider: e.target.value })} placeholder="Engine, e.g. jev or degraded" aria-label="Filter by engine" className="field !w-56 font-mono !text-xs" />
+          <Chip active={filters.provider === "degraded"} color="var(--warn)" onClick={() => set({ provider: filters.provider === "degraded" ? "" : "degraded" })}>
+            Fallback answers only
+          </Chip>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

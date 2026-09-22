@@ -90,42 +90,22 @@ export const MESSY_INTRO = {
   heading: "Tell a real discrepancy from a formatting quirk.",
 };
 
-export const REST_SNIPPET = `curl -X POST https://<your-host>/features/classification/api \\
-  -H "Content-Type: application/json" \\
-  -d '{ "email_id": "email_004" }'`;
-
-export const MCP_SNIPPET = `{
-  "mcpServers": {
-    "shipping-doc-verifier": {
-      "url": "https://<your-host>/core/mcp-server"
-    }
-  }
-}`;
-
-export const MCP_TOOLS = [
-  "classify_email",
-  "extract_document_fields",
-  "compare_documents",
-  "run_batch",
-  "list_results",
-  "export_results",
-];
-
 export const SURFACES: { icon: IconName; title: string; text: string }[] = [
-  { icon: "laptop", title: "Web app", text: "A responsive interface for operations teams. Works on desktop and phone browsers." },
-  { icon: "code", title: "REST API", text: "Plain HTTP endpoints for classification, extraction, comparison, batch runs and results." },
-  {
-    icon: "plug",
-    title: "MCP server",
-    text: "The same capabilities as MCP tools, over streamable HTTP, for Claude Desktop and other AI agents.",
-  },
+  { icon: "laptop", title: "Web app", text: "Made for operations teams. Works on desktop and on your phone." },
+  { icon: "code", title: "REST API", text: "Send documents from your own systems and get the same verdict back." },
+  { icon: "plug", title: "MCP server", text: "Let an AI assistant such as Claude run the same checks for you." },
 ];
+
+export const ACCURACY_INTRO = {
+  eyebrow: "Measured accuracy",
+  heading: "Tested against the answer key, not just promised.",
+  text: "Every one of the organisers’ 520 sample emails was run through the real system, and each verdict was compared with the official answer.",
+};
 
 export const ACCESS_INTRO = {
   eyebrow: "Use it your way",
-  heading: "One engine, three ways in.",
-  text: "The web app, the REST API and the MCP server all run the same verification logic, so a result is the same wherever you ask for it.",
-  restNote: "Read endpoints are open. Anything that writes results needs an admin token; public batch runs are preview-only.",
+  heading: "One check, three ways in.",
+  text: "Use the web app with your team, or connect other software and AI assistants. A result is the same wherever you ask for it.",
 };
 
 export const RELIABILITY_INTRO = {
@@ -133,7 +113,7 @@ export const RELIABILITY_INTRO = {
   headingLead: "Accurate answers, honest",
   headingEmphasis: "uncertainty",
   text: "Accuracy means finding the right requests and the right discrepancies without false alarms. Reliability means knowing when not to decide alone.",
-  /** Same sentence as the hero paragraph's last line, used as the scene's pull quote */
+  /** Same sentence as the hero paragraph"s last line, used as the scene"s pull quote */
   quote: "When it can't be sure, it asks a person instead of guessing.",
 };
 
@@ -144,46 +124,75 @@ export const RELIABILITY_POINTS: { icon: IconName; title: string; text: string }
     text: "Every uncertain case carries a reason and the source line it came from.",
   },
   {
-    icon: "refresh",
-    title: "Failures are visible, and retryable",
-    text: "One bad document never stops a batch. Failed or degraded emails can be re-run in one click.",
+    icon: "flag",
+    title: "Every decision is recorded",
+    text: "Confirm, correct or set aside. Each action is logged and can be undone.",
   },
   {
-    icon: "layers",
-    title: "Fallback across models",
-    text: "If one model fails, the next takes over. A rules-first engine keeps working with no API key at all.",
+    icon: "refresh",
+    title: "Failures stay visible",
+    text: "One bad document never stops a batch, and failed emails re-run in one click.",
   },
   {
     icon: "shield",
-    title: "Safe by default",
-    text: "Reading is open, but writing results needs an admin token. Public runs are preview-only.",
+    title: "Changes need permission",
+    text: "Anyone can look. Only authorised people can save, review or upload.",
   },
 ];
 
-export const RELIABILITY_STATS = [
-  { v: "520", l: "sample emails processed end to end" },
-  { v: "100%", l: "category match in self-evaluation" },
-  { v: "8", l: "documents processed in parallel, max" },
-  { v: "7", l: "fields compared per document pair" },
-];
-
-export const MODELS = ["Gemini", "Claude", "ChatGPT", "DeepSeek", "LM Studio (local)", "Jev (structured decisions)"];
-
-export const MODELS_COPY = {
-  heading: "Choose your model",
-  text: "Switch the language model per run. Deterministic rules go first and a model only steps in when they cannot settle a field. Local models run only where your own machine hosts them.",
+/** Scene 5: what the user gets once the check has run. Every item is a page that exists in the app. */
+export const WORKSPACE_INTRO = {
+  eyebrow: "Your workspace",
+  heading: "Everything after the check, in one place.",
+  text: "Look up any result, see exactly where two documents disagree, settle the doubtful ones and export a file you can trust.",
 };
 
-export const DEPLOYMENTS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "cloud", title: "Cloud", text: "Deploy to Vercel with one push and share a public URL." },
-  { icon: "laptop", title: "Local", text: "npm install, npm run dev. Works on any machine with Node.js." },
-  { icon: "box", title: "Docker", text: "One image, one command. No Node.js needed on the host." },
-];
+export type WorkspaceKey = "results" | "conflicts" | "review" | "export" | "sandbox" | "documents";
 
-export const DEPLOY_COPY = {
-  heading: "Run it anywhere",
-  text: "The same code runs in three places, configured only through environment variables.",
-};
+export const WORKSPACE_FEATURES: { key: WorkspaceKey; icon: IconName; title: string; text: string; href: string }[] = [
+  {
+    key: "results",
+    icon: "table",
+    title: "Every result, searchable",
+    text: "Filter by outcome or category, then open a row to see the SI and BL side by side with the source line of each value.",
+    href: "/features/results",
+  },
+  {
+    key: "conflicts",
+    icon: "swap",
+    title: "Conflicts at a glance",
+    text: "The differing characters are marked, numbers can be matched with a tolerance, and a fix request is one click to copy.",
+    href: "/features/results/conflicts",
+  },
+  {
+    key: "review",
+    icon: "flag",
+    title: "Review in one click",
+    text: "Confirm, correct, set aside or re-run. Every action is recorded and can be undone.",
+    href: "/features/review",
+  },
+  {
+    key: "export",
+    icon: "shield",
+    title: "Export you can trust",
+    text: "Before you submit, a checklist tells you whether anything is missing, out of date or contradictory.",
+    href: "/features/results",
+  },
+  {
+    key: "sandbox",
+    icon: "sparkles",
+    title: "Try your own files",
+    text: "Drop in any SI and BL and get a verdict in seconds. Nothing is saved.",
+    href: "/features/sandbox",
+  },
+  {
+    key: "documents",
+    icon: "folder",
+    title: "Upload documents",
+    text: "Add files or a whole folder. Each one is identified by what is inside it, not by its name.",
+    href: "/features/import",
+  },
+];
 
 export const HOW_IT_WORKS = {
   eyebrow: "How it works",

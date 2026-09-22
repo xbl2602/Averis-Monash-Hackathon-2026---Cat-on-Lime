@@ -5,7 +5,7 @@ import { Icon } from "../icon";
 import { SCENE_VH } from "../scroll/scene-config";
 import { scrub, useScene } from "../scroll/use-scene";
 import { WAYPOINTS } from "../scroll/flight-waypoints";
-import { CAPABILITIES, RELIABILITY_INTRO, RELIABILITY_POINTS, RELIABILITY_STATS } from "./content";
+import { CAPABILITIES, RELIABILITY_INTRO, RELIABILITY_POINTS } from "./content";
 import { SceneEyebrow, SceneShell } from "./scene-shell";
 
 const cap = CAPABILITIES[3];
@@ -29,7 +29,7 @@ function forkPaths(w: number, h: number) {
 }
 
 /**
- * Scene 4, "The Handoff" (640-760vh, pinned 120vh). The one sentence that is a product decision:
+ * Scene 4, "The Handoff" (670-800vh, pinned 130vh). The one sentence that is a product decision:
  * when it can't be sure, it asks a person. The plane hesitates at a fork (wobble, a "?" halo),
  * one branch resolves on its own, and the plane takes the other, up to a person.
  */
@@ -66,7 +66,6 @@ export function SceneHandoff() {
 
       scrub(tl, q("[data-copy] > *"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.07, stagger: 0.02 }, 0.02);
       scrub(tl, q("[data-point]"), { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.07, stagger: 0.06 }, 0.36);
-      scrub(tl, q("[data-stat]"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.05, stagger: 0.03 }, 0.74);
 
       // The fork draws itself as the plane approaches it
       draw("[data-stem]", 0.02, 0.3);
@@ -82,17 +81,18 @@ export function SceneHandoff() {
       scrub(tl, q("[data-auto-end]"), { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.04, ease: "back.out(2)" }, 0.68);
       draw("[data-human]", 0.62, 0.32);
       scrub(tl, q("[data-human-end]"), { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.05, ease: "back.out(2.4)" }, 0.9);
-      scrub(tl, q("[data-received]"), { scale: 0.6, opacity: 0.9 }, { scale: 2.1, opacity: 0, duration: 0.07 }, 0.94);
-    },
-    { fadeOut: 0.04 }
+      scrub(tl, q("[data-received]"), { scale: 0.6, opacity: 0.9 }, { scale: 2.1, opacity: 0, duration: 0.05 }, 0.9);
+      // The person receives it: the item lands in their review queue
+      scrub(tl, q("[data-review-card]"), { opacity: 0, y: 16, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.06, ease: "power2.out" }, 0.92);
+    }
   );
 
   const strokeProps = { fill: "none", strokeLinecap: "round" as const };
 
   return (
     <SceneShell id="reliability" pin={SCENE_VH.handoff.pin} ref={ref}>
-      <div data-copy className="story:col-span-5">
-        <SceneEyebrow>{RELIABILITY_INTRO.eyebrow}</SceneEyebrow>
+      <div data-copy data-avoid className="story:col-span-5">
+        <SceneEyebrow>{cap.step}</SceneEyebrow>
         <h2 className="mt-3 text-3xl font-extrabold leading-tight sm:text-4xl">
           {RELIABILITY_INTRO.headingLead} <span className="text-gradient">{RELIABILITY_INTRO.headingEmphasis}</span>.
         </h2>
@@ -101,24 +101,19 @@ export function SceneHandoff() {
           {RELIABILITY_INTRO.quote}
         </p>
 
-        <div className="card mt-5 p-5">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-royal text-white shadow-md">
-              <Icon name={cap.icon} size={22} />
-            </span>
-            <div className="eyebrow">{cap.step}</div>
-          </div>
-          <h3 className="mt-3 text-lg font-bold">{cap.title}</h3>
-          <p className="mt-1 text-sm leading-relaxed text-fg-muted">{cap.text}</p>
-          <ul className="mt-3 grid gap-x-4 gap-y-1 text-[13px] sm:grid-cols-2">
-            {cap.points.map((p) => (
-              <li key={p} className="flex items-start gap-2">
-                <Icon name="check" size={14} className="mt-0.5 shrink-0 text-accent-strong" />
-                <span>{p}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+          {RELIABILITY_POINTS.map((p) => (
+            <li key={p.title} data-point className="card flex items-start gap-3 p-3.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
+                <Icon name={p.icon} size={18} />
+              </span>
+              <div>
+                <h3 className="text-[13px] font-bold leading-snug">{p.title}</h3>
+                <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{p.text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="story:col-span-7">
@@ -168,28 +163,36 @@ export function SceneHandoff() {
           />
         </div>
 
-        {/* The four reliability points sit in the lower right, clear of the route */}
-        <ul className="mt-8 grid gap-3 sm:grid-cols-2 story:absolute story:bottom-[15%] story:left-[46%] story:right-[4%] story:mt-0 story:gap-3">
-          {RELIABILITY_POINTS.map((p) => (
-            <li key={p.title} data-point className="card flex items-start gap-3 p-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent-strong">
-                <Icon name={p.icon} size={20} />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold">{p.title}</h3>
-                <p className="mt-1 text-xs leading-relaxed text-fg-muted">{p.text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-6 grid grid-cols-2 gap-6 border-t border-line pt-5 sm:grid-cols-4 story:absolute story:bottom-[3%] story:left-[46%] story:right-[4%] story:mt-0 story:border-t-0 story:pt-0">
-          {RELIABILITY_STATS.map((s) => (
-            <div key={s.l} data-stat>
-              <div className="text-2xl font-bold">{s.v}</div>
-              <div className="mt-0.5 text-[11px] leading-snug text-fg-muted">{s.l}</div>
-            </div>
-          ))}
+        {/* Where the plane lands: a person's review queue, with the doubtful item waiting for them */}
+        <div
+          data-review-card
+          aria-hidden="true"
+          className="card pointer-events-none absolute hidden w-[268px] p-4 story:block"
+          style={{ left: `${hx - 24}%`, top: `${hy + 11}%` }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn">
+              <Icon name="flag" size={12} />
+              Needs review
+            </span>
+            <span className="font-mono text-[11px] text-fg-faint">email_004</span>
+          </div>
+          <div className="mt-2.5 text-[13px] font-semibold">Container count</div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
+            <span className="rounded-md bg-sunken px-2 py-0.5">SI 3</span>
+            <Icon name="swap" size={13} />
+            <span className="rounded-md bg-bad-soft px-2 py-0.5 font-semibold text-bad">BL 4</span>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-white">
+              <Icon name="check" size={12} />
+              Confirm
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-1 text-[11px] font-semibold">
+              <Icon name="edit" size={12} />
+              Correct
+            </span>
+          </div>
         </div>
       </div>
     </SceneShell>

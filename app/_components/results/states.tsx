@@ -41,8 +41,7 @@ export function DatabaseDown({ what = "This page" }: { what?: string }) {
           </div>
         }
       >
-        {what} reads saved results from Supabase, and this server does not have one connected yet. Add the project URL and key
-        to the server settings and reload. Pipeline previews and the sandbox work without a database.
+        {what} reads saved results from a database, and this server is not connected to one yet. Ask whoever runs it to connect one in the data settings, then reload. Previews and the sandbox work without a database.
       </EmptyState>
     </div>
   );

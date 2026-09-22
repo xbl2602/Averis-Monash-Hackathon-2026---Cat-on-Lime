@@ -99,3 +99,19 @@ export const TONE_CLASSES: Record<Tone, string> = {
   info: "bg-accent/12 text-accent-strong",
   muted: "bg-sunken text-fg-muted",
 };
+
+/** What a person's decision is called, wherever it is shown (queue, results, conflicts). */
+export const REVIEW_STATE_META: Record<"confirmed" | "corrected" | "deferred", { label: string; tone: "ok" | "info" | "warn" }> = {
+  confirmed: { label: "Confirmed", tone: "ok" },
+  corrected: { label: "Corrected", tone: "info" },
+  deferred: { label: "Set aside", tone: "warn" },
+};
+
+export const DISPOSITION_LABELS: Record<string, string> = {
+  accepted: "Accepted as is",
+  corrected: "Corrected",
+  routed: "Routed to another flow",
+  returned: "Returned for a re-run",
+  awaiting_input: "Waiting for documents",
+  unprocessable: "Cannot be processed",
+};

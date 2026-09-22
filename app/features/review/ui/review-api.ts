@@ -4,14 +4,17 @@ import type {
   BulkReviewActionResult,
   ReviewActionRow,
   ReviewDisposition,
-  ReviewQueueItem,
+  ReviewQueueItem as ServerReviewQueueItem,
   ReviewState,
 } from "@/lib/shared/review/types";
-import type { ComparisonStatus } from "../../../_lib/contracts";
+import type { ComparisonStatus, FutureRowFields } from "../../../_lib/contracts";
 import { queryString } from "../../../_lib/api-client";
 import type { IconName } from "../../../_components/icon";
 
-export type { ApplyReviewActionRequest, ApplyReviewActionResult, BulkReviewActionResult, ReviewActionRow, ReviewDisposition, ReviewQueueItem, ReviewState };
+export type { ApplyReviewActionRequest, ApplyReviewActionResult, BulkReviewActionResult, ReviewActionRow, ReviewDisposition, ReviewState };
+
+/** A queue item as the server sends it today, plus the fields the screens are ready for (see _lib/backend-contract.ts). */
+export type ReviewQueueItem = ServerReviewQueueItem & Pick<FutureRowFields, "classification_confidence" | "classification_needs_review" | "body"> & { from?: string };
 
 export type ReviewModule = "comparison" | "extraction" | "classification" | "pipeline";
 
@@ -58,21 +61,7 @@ export function queueUrl(module: ReviewModule, f: QueueFilters): string {
 
 export const historyUrl = (module: ReviewModule, emailId: string) => `${reviewBase(module)}/history${queryString({ email_id: emailId })}`;
 
-/** The one-line meaning of each review state, shown as a chip on queue items. */
-export const REVIEW_STATE_META: Record<ReviewState, { label: string; tone: "ok" | "info" | "warn" }> = {
-  confirmed: { label: "Confirmed", tone: "ok" },
-  corrected: { label: "Corrected", tone: "info" },
-  deferred: { label: "Set aside", tone: "warn" },
-};
-
-export const DISPOSITION_LABELS: Record<string, string> = {
-  accepted: "Accepted as is",
-  corrected: "Corrected",
-  routed: "Routed to another flow",
-  returned: "Returned for a re-run",
-  awaiting_input: "Waiting for documents",
-  unprocessable: "Cannot be processed",
-};
+export { DISPOSITION_LABELS, REVIEW_STATE_META } from "../../../_lib/labels";
 
 export const ACTION_LABELS: Record<string, string> = {
   confirm: "Confirmed",

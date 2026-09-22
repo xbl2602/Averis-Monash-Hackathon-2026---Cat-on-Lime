@@ -42,19 +42,17 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const trimmed = token.trim();
     if (!trimmed) return { ok: false as const, message: "Enter the admin token first." };
 
-    // A write request with an empty change list is a harmless way to ask "is this token accepted?":
-    // the server checks the token before anything else, so a wrong one answers 401/403 and a right
-    // one answers 400 (or 503 when no database is connected). Nothing is ever written.
-    const probe = await apiRequest<unknown>("/features/config/api", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", "x-admin-token": trimmed },
-      body: JSON.stringify({ updates: [] }),
+    // Purpose-built check: it only compares the token and touches no data. 200 = accepted,
+    // 401 = wrong, 403 = this server has no admin token configured, so writing is switched off.
+    const probe = await apiRequest<{ ok: boolean }>("/features/config/api/verify", {
+      method: "POST",
+      headers: { "x-admin-token": trimmed },
     });
-    if (!probe.ok && probe.status === 401) return { ok: false as const, message: "That token was not accepted." };
-    if (!probe.ok && probe.status === 403) {
-      return { ok: false as const, message: "Writing is switched off on this server because no admin token is configured." };
+    if (!probe.ok) {
+      if (probe.status === 401) return { ok: false as const, message: "That token was not accepted." };
+      if (probe.status === 403) return { ok: false as const, message: "Writing is switched off on this server because no admin token is configured." };
+      return { ok: false as const, message: probe.error.message };
     }
-    if (!probe.ok && probe.status === 0) return { ok: false as const, message: probe.error.message };
 
     tokenRef.current = trimmed;
     setUnlocked(true);

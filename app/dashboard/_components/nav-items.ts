@@ -4,7 +4,6 @@ export interface NavItem {
   href: string;
   label: string;
   icon: IconName;
-  badge?: string;
 }
 
 export interface NavGroup {
@@ -12,32 +11,31 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** Every screen in the app, in the order the sidebar shows them. The top bar reads its page titles from here too. */
+/**
+ * Every screen a person using the product needs, in the order the sidebar shows them.
+ * Internal tools (the Jev model lab, developer mode) are deliberately not here: they still exist at
+ * their own addresses, but the product's navigation is for the people doing the work.
+ * The top bar reads its page titles from this list too.
+ */
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Workspace",
     items: [
       { href: "/dashboard", label: "Overview", icon: "home" },
-      { href: "/features/verification", label: "Full pipeline", icon: "play" },
-      { href: "/features/results", label: "Results", icon: "table", badge: "New" },
-      { href: "/features/results/conflicts", label: "Conflicts", icon: "swap", badge: "New" },
-      { href: "/features/review", label: "Review queue", icon: "flag", badge: "New" },
-    ],
-  },
-  {
-    title: "Modules",
-    items: [
-      { href: "/features/classification", label: "Email classification", icon: "mail" },
-      { href: "/features/extraction", label: "Field extraction", icon: "list" },
-      { href: "/features/comparison", label: "SI / BL comparison", icon: "compare" },
-      { href: "/features/jev-lab", label: "Model lab (Jev)", icon: "flask" },
+      { href: "/features/verification", label: "Run verification", icon: "play" },
+      { href: "/features/results", label: "Results", icon: "table" },
+      { href: "/features/results/conflicts", label: "Conflicts", icon: "swap" },
+      { href: "/features/review", label: "Review queue", icon: "flag" },
     ],
   },
   {
     title: "Tools",
     items: [
-      { href: "/features/sandbox", label: "Try your own", icon: "sparkles", badge: "New" },
-      { href: "/features/import", label: "Documents", icon: "folder", badge: "New" },
+      { href: "/features/classification", label: "Classify emails", icon: "mail" },
+      { href: "/features/extraction", label: "Extract fields", icon: "list" },
+      { href: "/features/comparison", label: "Compare SI & BL", icon: "compare" },
+      { href: "/features/sandbox", label: "Try your own files", icon: "sparkles" },
+      { href: "/features/import", label: "Upload documents", icon: "folder" },
     ],
   },
 ];
@@ -56,8 +54,16 @@ export function activeNavHref(pathname: string): string | null {
   return best;
 }
 
+/** Pages that exist but are deliberately kept out of the sidebar; the top bar still needs their name. */
+const UNLISTED_TITLES: Record<string, string> = {
+  [SETTINGS_HREF]: "Settings",
+  "/features/devmode": "Developer mode",
+  "/features/jev-lab": "Model lab",
+};
+
 export function pageTitle(pathname: string): string {
-  if (pathname === SETTINGS_HREF) return "Settings";
+  const unlisted = UNLISTED_TITLES[pathname];
+  if (unlisted) return unlisted;
   const href = activeNavHref(pathname);
   return ALL_ITEMS.find((item) => item.href === href)?.label ?? "Dashboard";
 }

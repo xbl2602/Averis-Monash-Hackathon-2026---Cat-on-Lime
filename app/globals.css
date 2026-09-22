@@ -471,7 +471,7 @@ body::before {
  * stacked sections showing their finished state.
  * A scene is a tall wrapper (pin + 100vh) holding one sticky 100vh stage. The negative
  * bottom margin makes the next scene's wrapper start exactly where this one unpins, so
- * the pinned ranges sit back to back: 100-270, 270-440, 440-640, 640-760 (vh). */
+ * the pinned ranges sit back to back: 100-280, 280-460, 460-670, 670-800, 800-950 (vh). */
 html[data-story="on"] .scene {
   position: relative;
   height: calc((var(--pin) + 100) * 1vh);

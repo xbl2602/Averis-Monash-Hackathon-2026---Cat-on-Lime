@@ -10,14 +10,12 @@ import { ExtractionCard } from "../../../_components/results/extraction-card";
 import { postJson } from "../../../_lib/api-client";
 import { attachmentKind, fileName, type EmailOption } from "../../../_lib/attachments";
 import type { ExtractDocumentResult } from "../../../_lib/contracts";
-import type { ProviderOption } from "../../../_lib/provider-options";
 
-export function ExtractionPanel({ emails, providers }: { emails: EmailOption[]; providers: ProviderOption[] }) {
+export function ExtractionPanel({ emails }: { emails: EmailOption[] }) {
   const [emailId, setEmailId] = useState(emails.find((e) => e.email_id === "email_004")?.email_id ?? emails[0]?.email_id ?? "");
   const email = emails.find((e) => e.email_id === emailId);
   const [attachment, setAttachment] = useState("");
   const [typeChoice, setTypeChoice] = useState<"SI" | "BL">("SI");
-  const [provider, setProvider] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ title: string; data: ExtractDocumentResult } | null>(null);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
@@ -34,7 +32,6 @@ export function ExtractionPanel({ emails, providers }: { emails: EmailOption[]; 
     const response = await postJson<ExtractDocumentResult>("/features/extraction/api", {
       attachment_path: chosen,
       documentType,
-      ...(provider ? { provider } : {}),
     });
     setLoading(false);
     if (response.ok) setResult({ title: `What was read from ${fileName(chosen)}`, data: response.data });
@@ -44,7 +41,7 @@ export function ExtractionPanel({ emails, providers }: { emails: EmailOption[]; 
   return (
     <div className="space-y-6">
       <Notice title="How it reads a document">
-        Label-based rules read the fields first, so &ldquo;Load Port&rdquo; and &ldquo;Port of Loading&rdquo; land in the same field. A model is only asked for fields the rules could not find. Supports PDF, Word, Excel and text files.
+        Fields are found by their meaning, so &ldquo;Load Port&rdquo; and &ldquo;Port of Loading&rdquo; land in the same place. Every value shows the line it came from. Works with PDF, Word, Excel and text files.
       </Notice>
 
       <div className="card space-y-5 p-6 sm:p-8">
@@ -52,21 +49,7 @@ export function ExtractionPanel({ emails, providers }: { emails: EmailOption[]; 
           <Notice tone="warn" title="The sample inbox could not be read">This page reads sample attachments, so it needs the data in data/sample.</Notice>
         ) : (
           <>
-            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_18rem]">
-              <EmailPicker emails={emails} value={emailId} onChange={(id) => { setEmailId(id); setAttachment(""); setResult(null); }} />
-              <label className="block text-sm">
-                <span className="mb-2 block font-semibold">Fallback model</span>
-                <select value={provider} onChange={(e) => setProvider(e.target.value)} className="field">
-                  <option value="">Default (Gemini, only if needed)</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                      {p.ready ? "" : p.localOnly ? " · local only" : " · key missing"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <EmailPicker emails={emails} value={emailId} onChange={(id) => { setEmailId(id); setAttachment(""); setResult(null); }} />
 
             {email && email.attachments.length === 0 && <Notice tone="warn" title="This email has no attachments">There is nothing to extract. In the full pipeline this becomes a &ldquo;missing attachment&rdquo; review case.</Notice>}
 

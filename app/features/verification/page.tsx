@@ -4,7 +4,7 @@ import { listProviderOptions } from "../../_lib/provider-options";
 import { VerificationPanel } from "./ui";
 
 export const metadata: Metadata = {
-  title: "Full pipeline · Shipping Doc Verifier",
+  title: "Run verification · Shipping Doc Verifier",
 };
 
 // Provider readiness comes from server environment variables, so it is read on every visit
@@ -16,9 +16,9 @@ export default function VerificationPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="All-in-one"
-        title="Full pipeline"
-        description="Classify, extract and compare a batch of sample emails in one run. Public runs are previews: results are calculated and shown here, never saved."
+        eyebrow="Workspace"
+        title="Run verification"
+        description="Sort a batch of emails, read their SI and BL attachments and compare them in one go. A preview shows the outcome without saving anything."
       />
       <VerificationPanel providers={providers} />
     </div>

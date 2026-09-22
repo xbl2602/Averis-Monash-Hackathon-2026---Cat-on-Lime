@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import type { ReviewOverride } from "@/lib/shared/review/types";
 import { Icon } from "../../../_components/icon";
 import { ReasonNote, StatusBadge } from "../../../_components/results/badges";
 import { CompareView } from "../../../_components/results/compare-view";
+import { ConfidenceChip } from "../../../_components/results/confidence-chip";
+import { SystemVsPerson } from "../../../_components/results/decision-panel";
+import { EmailMessage } from "../../../_components/results/email-message";
+import { ReviewChip } from "../../../_components/results/review-chip";
 import { useToast } from "../../../_components/toast";
 import type { ConflictPair } from "../../../_lib/contracts";
 import { fieldLabel } from "../../../_lib/labels";
@@ -19,7 +24,7 @@ function amendmentText(pair: ConflictPair): string {
   return [`Draft BL check for ${pair.email_id}${pair.subject ? ` (${pair.subject})` : ""}`, "", ...lines].join("\n");
 }
 
-export function ConflictCard({ pair, index }: { pair: ConflictPair; index: number }) {
+export function ConflictCard({ pair, review, index }: { pair: ConflictPair; review: ReviewOverride | null; index: number }) {
   const toast = useToast();
 
   async function copyAmendment() {
@@ -39,6 +44,8 @@ export function ConflictCard({ pair, index }: { pair: ConflictPair; index: numbe
             <span className="font-mono text-sm font-bold text-accent-strong">{pair.email_id}</span>
             <StatusBadge status={pair.status} />
             <ReasonNote reason={pair.review_reason} />
+            <ReviewChip review={review} />
+            <ConfidenceChip confidence={pair.classification_confidence} needsReview={pair.classification_needs_review} />
           </div>
           <h3 className="mt-1.5 truncate text-base font-bold">{pair.subject || "(no subject)"}</h3>
           <p className="truncate text-xs text-fg-faint">
@@ -51,6 +58,8 @@ export function ConflictCard({ pair, index }: { pair: ConflictPair; index: numbe
         </div>
       </header>
 
+      {review && <SystemVsPerson system={{ comparison_status: pair.status, defect_fields: pair.defect_fields }} override={review} />}
+
       <CompareView
         si={pair.si_values}
         bl={pair.bl_values}
@@ -60,6 +69,8 @@ export function ConflictCard({ pair, index }: { pair: ConflictPair; index: numbe
         siTitle={pair.si_file ? `SI · ${pair.si_file.split("/").pop()}` : "SI (reference)"}
         blTitle={pair.bl_file ? `BL · ${pair.bl_file.split("/").pop()}` : "Draft BL"}
       />
+
+      <EmailMessage body={pair.body} from={pair.from} subject={pair.subject} />
 
       <footer className="flex flex-wrap items-center justify-end gap-3">
         {pair.defect_fields.length > 0 && (

@@ -11,7 +11,6 @@ import { useToast } from "../../../_components/toast";
 // those must never end up in a client bundle.
 import {
   DEVMODE_DATA_TABLES,
-  DEVMODE_WARNING,
   RESTORE_CONFIRM_PHRASE,
   WIPE_CONFIRM_PHRASE,
   type DevModeDataTable,
@@ -37,7 +36,11 @@ function DevModeBanner() {
         <Icon name="alert" size={24} className="mt-0.5 shrink-0 text-bad" />
         <div className="min-w-0 text-sm">
           <div className="font-bold text-bad">Developer mode — not a product feature</div>
-          <p className="mt-1 leading-relaxed text-fg-muted">{DEVMODE_WARNING}</p>
+          {/* Same warning as logic/types.ts DEVMODE_WARNING, in English: the product is English-only,
+              and user-facing wording belongs in the UI layer. Keep the two in step if either changes. */}
+          <p className="mt-1 leading-relaxed text-fg-muted">
+            For the team and the judges during testing only. Everything here changes the shared database directly and cannot be undone. Do not use it unless you are sure what it does.
+          </p>
         </div>
       </div>
     </div>

@@ -21,7 +21,6 @@ export function ExtractionCard({ title, result, index = 0 }: { title: string; re
         <h3 className="text-base font-bold">{title}</h3>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={result.document_type === "SI" || result.document_type === "BL" ? "info" : "warn"} icon="file">{result.document_type}</Badge>
-          <Badge tone="muted" icon={result.extracted_by === "rules" ? "list" : "sparkles"}>{result.extracted_by === "rules" ? "Read by rules" : "Model helped"}</Badge>
         </div>
       </header>
       <p className="mt-1 text-xs text-fg-faint">

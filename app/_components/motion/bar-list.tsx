@@ -12,14 +12,14 @@ export interface BarItem {
 }
 
 /** Horizontal bars that grow in one after another. Each row can link somewhere (e.g. a filtered results view). */
-export function BarList({ items, empty = "Nothing to show yet." }: { items: BarItem[]; empty?: string }) {
+export function BarList({ items, empty = "Nothing to show yet.", spread = false }: { items: BarItem[]; empty?: string; spread?: boolean }) {
   const ready = useReady();
   const max = Math.max(1, ...items.map((item) => item.value));
 
   if (items.length === 0) return <p className="py-6 text-center text-sm text-fg-faint">{empty}</p>;
 
   return (
-    <ul className="space-y-3" data-ready={ready}>
+    <ul className={spread ? "flex h-full flex-col justify-between gap-3" : "space-y-3"} data-ready={ready}>
       {items.map((item, i) => {
         const row = (
           <>
