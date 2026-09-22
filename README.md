@@ -33,7 +33,7 @@
 > 🎬 下面是本项目的**宣传片（约2分钟，讲故事用），不是给裁判打分的依据视频**。评分以线上 demo 实测 + submission 导出为准。
 
 <p align="center">
-  <video width="800" controls src="https://user-attachments/Paste-Your-Uploaded-Video-URL-Here.mp4"></video>
+  <video width="800" controls src="https://github.com/user-attachments/assets/f7e4e417-85d0-435d-9798-1a4af1f2d808"></video>
 </p>
 
 <!-- 宣传片内联播放说明：GitHub README 不认仓库里的相对路径 mp4，只认网页端拖传后的 user-attachments 链接。操作：去 GitHub 网页打开 README 点铅笔 → 把 mp4 拖进编辑框 → 把生成的 user-attachments 链接贴到上面 src 里。不要换成外跳链接，保持内联播放。 -->
