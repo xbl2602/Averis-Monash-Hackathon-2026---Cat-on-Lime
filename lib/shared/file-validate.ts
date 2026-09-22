@@ -1,9 +1,12 @@
 /**
- * 上传文件校验的通用逻辑（原来只在 import 模块里，P2 新增 sandbox 模块也需要同一套
- * 校验，所以提出来放公共区）。不碰数据库、不碰请求对象，纯函数，方便复用和单独验证。
+ * Common logic for validating uploaded files (originally only lived in the import module;
+ * the P2 sandbox module needs the same validation, so it was pulled out into the shared
+ * area). Touches neither the database nor the request object — pure functions, easy to reuse
+ * and to unit test in isolation.
  *
- * 错误统一抛 FileValidationError（400 语义），各调用方按自己的错误类型再包一层
- * （比如 import 模块继续对外抛 ImportRequestError，保持原有对外契约不变）。
+ * All errors are thrown as FileValidationError (400 semantics); each caller wraps it in its
+ * own error type as needed (e.g. the import module still throws ImportRequestError to the
+ * outside world, keeping its existing external contract unchanged).
  */
 
 export class FileValidationError extends Error {
@@ -13,62 +16,64 @@ export class FileValidationError extends Error {
   }
 }
 
-/** 取扩展名：只在最后一个路径分隔符之后找点，防止 "a.pdf/../x" 这类名字干扰 */
+/** Extracts the extension: only looks for the dot after the last path separator, so a name like "a.pdf/../x" can't confuse it */
 export function extensionOf(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? name;
   const dot = base.lastIndexOf(".");
   return dot === -1 ? "" : base.slice(dot + 1).toLowerCase();
 }
 
-/** 扩展名白名单校验；不在名单里抛 FileValidationError */
+/** Validates the extension against an allowlist; throws FileValidationError if it isn't on the list */
 export function assertAllowedExtension(name: string, allowedExtensions: readonly string[]): string {
   const extension = extensionOf(name);
   if (!allowedExtensions.includes(extension)) {
     throw new FileValidationError(
-      `不支持的文件类型 ".${extension || "无扩展名"}"：只允许 ${allowedExtensions.map((e) => `.${e}`).join(" / ")}`
+      `Unsupported file type ".${extension || "no extension"}": only ${allowedExtensions.map((e) => `.${e}`).join(" / ")} are allowed`
     );
   }
   return extension;
 }
 
 /**
- * base64 → Buffer。除了格式校验，还做"解码再编码必须与输入一致"的复核：
- * 解析结果和声明对不上（填充不标准/夹带字符/长度被改）就拒绝，防止伪造。
+ * base64 -> Buffer. Besides format validation, this also re-checks that "decoding then
+ * re-encoding matches the input exactly": if the decoded result doesn't match what was
+ * declared (non-standard padding/stray characters/altered length), it's rejected, to guard
+ * against forgery.
  */
 export function decodeBase64File(dataBase64: string): Buffer {
   const cleaned = dataBase64.replace(/\s+/g, "");
   if (cleaned === "") {
-    throw new FileValidationError("data_base64 为空（文件内容没有传上来）");
+    throw new FileValidationError("data_base64 is empty (no file content was sent)");
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned) || cleaned.length % 4 !== 0) {
-    throw new FileValidationError("data_base64 不是合法的 base64 内容");
+    throw new FileValidationError("data_base64 is not valid base64 content");
   }
   const content = Buffer.from(cleaned, "base64");
   if (content.length === 0) {
-    throw new FileValidationError("base64 解码后是空文件");
+    throw new FileValidationError("Decoding the base64 produced an empty file");
   }
   if (content.toString("base64") !== cleaned) {
-    throw new FileValidationError("base64 解码校验失败（内容与声明对不上），已拒绝");
+    throw new FileValidationError("base64 round-trip validation failed (decoded content doesn't match what was declared), rejected");
   }
   return content;
 }
 
-/** 魔数校验（不信任客户端传来的 mime，以文件头/字节内容为准）；pdf/docx/xlsx 之外的扩展名当纯文本查 */
+/** Magic-byte validation (never trust the mime type the client sent — go by the file header/byte content instead); extensions other than pdf/docx/xlsx are checked as plain text */
 export function checkMagicBytes(extension: string, content: Buffer): string | null {
   if (extension === "pdf") {
     return content.subarray(0, 4).toString("latin1") === "%PDF"
       ? null
-      : "PDF 文件必须以 %PDF 开头（可能是改了扩展名的假 PDF）";
+      : "A PDF file must start with %PDF (this may be a fake PDF with a renamed extension)";
   }
   if (extension === "docx" || extension === "xlsx") {
     return isZipContainer(content)
       ? null
-      : `${extension} 是 ZIP 容器格式，必须以 PK 开头（文件损坏或扩展名不符）`;
+      : `${extension} is a ZIP container format and must start with PK (the file is corrupted or the extension doesn't match its content)`;
   }
   const badByte = findBinaryControlByte(content);
   return badByte === null
     ? null
-    : `文本文件里出现二进制控制字符（第 ${badByte + 1} 个字节），可能是改了扩展名的二进制文件`;
+    : `Found a binary control character in a text file (byte #${badByte + 1}) — this may be a binary file with a renamed extension`;
 }
 
 function isZipContainer(content: Buffer): boolean {
@@ -81,7 +86,7 @@ function isZipContainer(content: Buffer): boolean {
   );
 }
 
-// 文本里允许的只有 \t \n \r，其余 < 0x20 的控制字符和 DEL(0x7F) 一律视为二进制内容
+// The only control characters allowed in text are \t \n \r; every other control character below 0x20, plus DEL(0x7F), is treated as binary content
 function findBinaryControlByte(content: Buffer): number | null {
   for (let i = 0; i < content.length; i++) {
     const byte = content[i];
@@ -92,8 +97,10 @@ function findBinaryControlByte(content: Buffer): number | null {
 }
 
 /**
- * 文件名净化：去掉路径分隔符/控制字符/各系统保留字符，防路径注入（"../"、"\\"）。
- * 只用于 Storage 路径和库里的展示名，不影响扩展名校验（那是用原始名字做的）。
+ * Filename sanitization: strips path separators/control characters/characters reserved by
+ * various OSes, to prevent path injection ("../", "\\"). Only used for the Storage path and
+ * the display name stored in the database — it doesn't affect extension validation (that's
+ * done against the original name).
  */
 export function sanitizeFileName(name: string, maxLength: number): string {
   const base = name.split(/[\\/]/).pop() ?? "";
@@ -116,7 +123,7 @@ function truncateKeepingExtension(name: string, maxLength: number): string {
   return `${stem.slice(0, keep)}${extension}`;
 }
 
-/** 估算 base64 解码后的字节数（用于整批大小检查，避免整批解码两遍） */
+/** Estimates the number of bytes after base64 decoding (used for whole-batch size checks, to avoid decoding the whole batch twice) */
 export function estimateBase64DecodedBytes(dataBase64: string): number {
   const cleaned = dataBase64.replace(/\s+/g, "");
   if (cleaned === "") return 0;
@@ -124,7 +131,7 @@ export function estimateBase64DecodedBytes(dataBase64: string): number {
   return Math.max(0, Math.floor((cleaned.length * 3) / 4) - padding);
 }
 
-/** 给错误提示用的人类可读大小 */
+/** Human-readable size, used in error messages */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

@@ -1,9 +1,11 @@
 /**
- * 比对模块：
- * - compareDocuments：按 provider 单一入口（给 REST/MCP/界面用）
- * - compareDocumentsHybrid：流水线默认的混合模式——规范化后先精确比，
- *   有"文字字段对不上"时才把候选差异交给 Jev（一次问完，noul 判断"是不是同一个东西"）；
- *   数字字段直接由代码判定（Jev 不擅长数字，实测会把 "5 x 20'GP" vs "6 x 20'GP" 判成一样）。
+ * Comparison module:
+ * - compareDocuments: a single entry point keyed by provider (for REST/MCP/UI use)
+ * - compareDocumentsHybrid: the pipeline's default hybrid mode — normalize, then do an exact
+ *   comparison first, and only hand candidate differences to Jev when "text fields don't match"
+ *   (asked in one batch, noul judges "is this the same thing or not"); numeric fields are decided
+ *   directly by code (Jev isn't good with numbers — testing showed it judges "5 x 20'GP" vs
+ *   "6 x 20'GP" as the same).
  */
 import { callJev, isJevAvailable, type JevQuestion, type LLMProvider } from "@/lib/llm";
 import { callWithCache } from "@/lib/shared/llm-cache";
@@ -20,9 +22,10 @@ export interface CompareDocumentsInput {
   si: ExtractedDocumentFields;
   bl: ExtractedDocumentFields;
   /**
-   * 用哪种方式比对。不传 = 逐字符精确比较（不调用模型；缺省值是 gemini，
-   * 但该路径根本不会走到模型，改成 gemini 只是让"缺省 provider"口径一致）。
-   * 传 "jev" 时会让 Jev 逐字段判断两边是否指同一个东西。
+   * Which comparison method to use. Omit for exact character-by-character comparison (no model call;
+   * the default is gemini, but this path never actually reaches a model — defaulting to gemini just
+   * keeps the "default provider" convention consistent). Passing "jev" has Jev judge field-by-field
+   * whether both sides refer to the same thing.
    */
   provider?: LLMProvider;
 }
@@ -36,22 +39,26 @@ export interface CompareDocumentsResult {
 
 export interface HybridCompareResult extends CompareDocumentsResult {
   /**
-   * rules = 规范化精确比（含"没有 Jev key"的保守路径）；
-   * rules+jev = 文字字段的候选差异复核过 Jev；
-   * rules-degraded = Jev 调用失败，候选差异按保守口径（全部计入不一致）处理、可一键重试
+   * rules = normalized exact comparison (including the conservative path when there's no Jev key);
+   * rules+jev = candidate differences in text fields were reviewed by Jev;
+   * rules-degraded = the Jev call failed; candidate differences were handled by the conservative
+   *   rule (all counted as mismatches), retryable with one click
    */
   engine: "rules" | "rules+jev" | "rules-degraded";
 }
 
-// Jev 对每个字段返回"两边是否一致"的概率，低于这个值就算不一致（与分类的置信度阈值统一为 0.85，偏保守）。
-// 样例数据实测：0.85 仍然 0 漏报 0 误报（真实差异最高 0.52、真实一致最低 0.88）；再往上（0.9）会开始误报，
-// 所以 0.85 是上限值，不要随意上调。改动前先重跑阈值校准（scripts/evaluate.ts + DECISION_LOG 决策 22）。
+// Jev returns, for each field, the probability that "both sides match"; below this value it counts as
+// a mismatch (unified with classification's confidence threshold of 0.85, leaning conservative).
+// Tested against the sample data: 0.85 still gives 0 false negatives and 0 false positives (the highest
+// real mismatch scored 0.52, the lowest real match scored 0.88); going higher (0.9) starts producing
+// false positives, so 0.85 is the ceiling — don't raise it casually. Rerun the threshold calibration
+// before changing it (scripts/evaluate.ts + DECISION_LOG decision 22).
 const JEV_MISMATCH_THRESHOLD = 0.85;
 
 export async function compareDocuments(
   input: CompareDocumentsInput
 ): Promise<CompareDocumentsResult> {
-  // 缺省值只影响"非 jev"分支（精确比较，不走模型）；jev 分支单独处理
+  // The default only affects the "non-jev" branch (exact comparison, no model call); the jev branch is handled separately
   const provider = input.provider ?? "gemini";
   if (provider === "jev") {
     return compareWithJev(input.si, input.bl);
@@ -60,8 +67,10 @@ export async function compareDocuments(
 }
 
 /**
- * 混合比对（流水线用）：规范化 → 精确比 → 文字字段候选差异交 Jev 复核。
- * 没有 Jev key 时降级：文字候选差异直接算差异（偏保守，不会漏报）。
+ * Hybrid comparison (used by the pipeline): normalize → exact comparison → hand text-field candidate
+ * differences to Jev for review.
+ * Degrades when there's no Jev key: text candidate differences are counted as mismatches directly
+ * (leaning conservative, so nothing is missed).
  */
 export async function compareDocumentsHybrid(input: {
   si: ExtractedDocumentFields;
@@ -69,7 +78,7 @@ export async function compareDocumentsHybrid(input: {
 }): Promise<HybridCompareResult> {
   const { si, bl } = input;
 
-  // 一边有值一边没有：正常流程会先判 missing_value，这里防御性地按"不一致"处理
+  // One side has a value and the other doesn't: the normal flow would classify this as missing_value first; here it's defensively treated as a mismatch
   const oneSidedDefects = COMPARED_FIELDS.filter(
     (field) => hasValue(si[field]) !== hasValue(bl[field])
   );
@@ -94,14 +103,15 @@ export async function compareDocumentsHybrid(input: {
   for (const field of textCandidates) {
     questions[field] = {
       type: "noul",
-      instructions: `SI 和 BL 的 ${field} 指的是同一个东西吗？容忍大小写、空格、标点、表述顺序差异；如果指的对象/地点不同则不是。`,
-      criteria: { true: "含义一致", false: "含义不同或无法确认一致" },
+      instructions: `Do the SI and BL refer to the same thing for ${field}? Tolerate differences in case, whitespace, punctuation, and word order; if the referenced object/place differs, they are not the same.`,
+      criteria: { true: "Same meaning", false: "Different meaning or cannot confirm they match" },
     };
   }
 
-  // Jev 复核失败（网络/额度/格式异常）不再让整封邮件失败（2026-09-21 P1-5）：
-  // 保守降级为"候选差异全部计入不一致"（和没有 Jev key 时的口径一致，宁多勿漏），
-  // engine 标 rules-degraded 供一键重试筛选，失败原因只进服务端日志。
+  // A Jev review failure (network/quota/format anomaly) no longer fails the whole email
+  // (2026-09-21 P1-5): conservatively degrade to "count every candidate difference as a mismatch"
+  // (consistent with the no-Jev-key case, erring on the side of over-flagging), tag engine as
+  // rules-degraded so it can be filtered for one-click retry, and log the failure reason server-side only.
   let jevDefects: ComparedField[];
   let engine: HybridCompareResult["engine"] = "rules+jev";
   try {
@@ -116,13 +126,13 @@ export async function compareDocumentsHybrid(input: {
     jevDefects = textCandidates.filter((field) => {
       const answer = value.answers[field];
       if (!answer || answer.type !== "noul") {
-        throw new Error(`Jev 返回的比对结果格式异常：字段 ${field} 缺少 noul 答案`);
+        throw new Error(`Jev returned a malformed comparison result: field ${field} is missing a noul answer`);
       }
       return answer.noul < JEV_MISMATCH_THRESHOLD;
     });
   } catch (err) {
     console.warn(
-      `[comparison] Jev 复核失败，候选差异按保守口径处理（全部计为不一致）：${err instanceof Error ? err.message : err}`
+      `[comparison] Jev review failed; candidate differences handled by the conservative rule (all counted as mismatches): ${err instanceof Error ? err.message : err}`
     );
     jevDefects = textCandidates;
     engine = "rules-degraded";
@@ -149,7 +159,7 @@ function dedupe(fields: ComparedField[]): ComparedField[] {
   return [...new Set(fields)];
 }
 
-// 原逻辑：逐字段完全相等才算 OK（格式差异会被误判为 defect，所以才有 Jev 这条路）
+// Original logic: OK only if every field matches exactly (formatting differences would be misjudged as defects, which is why the Jev path exists)
 function compareByExactValue(
   si: ExtractedDocumentFields,
   bl: ExtractedDocumentFields
@@ -166,7 +176,7 @@ function compareByExactValue(
   };
 }
 
-// 用 Jev 的 noul（是/否概率）逐字段判断，容忍格式差异但不放过真实不一致
+// Uses Jev's noul (yes/no probability) to judge field by field, tolerating formatting differences without letting real mismatches slip through
 async function compareWithJev(
   si: ExtractedDocumentFields,
   bl: ExtractedDocumentFields
@@ -175,7 +185,7 @@ async function compareWithJev(
     (field) => hasValue(si[field]) || hasValue(bl[field])
   );
 
-  // 两边都没抽到任何可比较的字段，不能当作"全部一致"，交给上层处理
+  // Neither side extracted any comparable fields — this can't be treated as "everything matches"; hand it to the caller
   if (comparableFields.length === 0) {
     return {
       status: "NEEDS_REVIEW",
@@ -189,10 +199,10 @@ async function compareWithJev(
   for (const field of comparableFields) {
     questions[field] = {
       type: "noul",
-      instructions: `SI 和 BL 上的 ${field} 指的是同一个东西吗？`,
+      instructions: `Do the SI and BL refer to the same thing for ${field}?`,
       criteria: {
-        true: "完全相同，或只是格式/大小写/空格不同但含义一致",
-        false: "含义不同，或有一边缺失、无法确认一致",
+        true: "Identical, or differs only in formatting/case/whitespace while meaning the same thing",
+        false: "Different meaning, or one side is missing and a match cannot be confirmed",
       },
     };
   }
@@ -210,7 +220,7 @@ async function compareWithJev(
   const defect_fields = comparableFields.filter((field) => {
     const answer = value.answers[field];
     if (!answer || answer.type !== "noul") {
-      throw new Error(`Jev 返回的比对结果格式异常：字段 ${field} 缺少 noul 答案`);
+      throw new Error(`Jev returned a malformed comparison result: field ${field} is missing a noul answer`);
     }
     return answer.noul < JEV_MISMATCH_THRESHOLD;
   });
@@ -224,9 +234,9 @@ async function compareWithJev(
 }
 
 /**
- * 模型输入的扁平化契约（见 docs/DECISION_SPEC.md §4.2/§6）：
- * 发给 Jev 的只有"字段名 + SI 原值 + BL 原值"的单层数组；
- * 不发整份单据对象、不发解析文本、不发规范化后的值。
+ * The flattened contract for model input (see docs/DECISION_SPEC.md §4.2/§6):
+ * only a flat array of "field name + raw SI value + raw BL value" is sent to Jev;
+ * never the whole document object, never the parsed text, never normalized values.
  */
 interface FlatFieldPair {
   field: ComparedField;

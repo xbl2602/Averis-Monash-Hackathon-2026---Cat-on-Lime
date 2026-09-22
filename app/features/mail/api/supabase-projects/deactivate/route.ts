@@ -1,14 +1,15 @@
 /**
- * POST /features/mail/api/supabase-projects/deactivate  停用启用项目（写保护）
+ * POST /features/mail/api/supabase-projects/deactivate  Deactivate the active project (write-protected)
  * body: { id? }
  *
- * 用途（可运维性恢复通道）：激活了一个地址不可达/凭据错误的 Supabase 项目后，
- * 所有走 getSupabaseServiceClientAsync() 的接口都会失败；本接口负责"退回去"：
- * - 传 id：只停用该项目（项目不存在 → 404 可读错误）
- * - 不传 id：停用当前所有 is_active=true 的项目，回到环境变量方案
+ * Purpose (an operability recovery channel): after activating a Supabase project with an unreachable
+ * address/wrong credentials, every endpoint going through getSupabaseServiceClientAsync() will fail;
+ * this endpoint handles "backing out":
+ * - Passing id: only deactivates that project (if it doesn't exist -> readable 404 error)
+ * - Omitting id: deactivates all currently is_active=true projects, falling back to the environment-variable configuration
  *
- * 并发约定（SPEC 第 6 节）：条件 update（is_active=true [且 id=...]），不先读后写。
- * 响应：{ deactivated: number, items: [...] }（service_key 是掩码，与 GET 列表一致）。
+ * Concurrency convention (SPEC section 6): a conditional update (is_active=true [and id=...]), never read-then-write.
+ * Response: { deactivated: number, items: [...] } (service_key is masked, consistent with the GET list).
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";

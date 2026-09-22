@@ -1,17 +1,21 @@
 /**
- * 批量入口（整箱流水线）的唯一实现：REST（api/）和 MCP（mcp/）都只调用这里。
+ * The single implementation of the batch entry point (full-shipment pipeline): both REST (api/) and MCP (mcp/) call only into here.
  *
- * 编排全部交给 lib/shared 的公共能力，本模块只负责"请求 → 选邮件 → 增量跳过 →
- * 分块限量并发跑批 → 分批 upsert 结果 → 汇总响应"这条流程，不重复实现任何引擎逻辑：
- * - lib/shared/sample-inputs.ts       读样例邮件 + 解析附件
- * - lib/shared/pipeline.ts            单封/批量流水线、输入指纹、引擎版本
- * - lib/shared/verification-store.ts  结果表读写（upsert）
+ * All orchestration is delegated to the shared capabilities in lib/shared; this module is only
+ * responsible for the flow of "request -> select emails -> skip incrementally -> run in
+ * rate-limited concurrent chunks -> upsert results in batches -> summarize the response" — it
+ * doesn't reimplement any engine logic:
+ * - lib/shared/sample-inputs.ts       reads sample emails + parses attachments
+ * - lib/shared/pipeline.ts            single-email/batch pipeline, input fingerprinting, engine version
+ * - lib/shared/verification-store.ts  results table read/write (upsert)
  *
- * 分块与 deadline（2026-09-20 性能/可靠性评审）：
- * - 每块大小 = 一个并发波次（max(1, concurrency)），块结束才检查 deadline，
- *   这样"在途块"的最坏时长有上界（不会再出现 10 封×4 次调用×20s 的失控块）
- * - 结果行攒到 FLUSH_EVERY 条就 upsert 一次；deadline 停止/全部结束时补 flush
- * - ran/remaining 统一按"实际完成数 processed"计算，deadline 截断时不谎报跑完（B1 修法）
+ * Chunking and the deadline (2026-09-20 performance/reliability review):
+ * - Each chunk size = one concurrency wave (max(1, concurrency)); the deadline is only checked once
+ *   a chunk finishes, so the worst-case duration of an "in-flight chunk" has an upper bound (no more
+ *   of the runaway-chunk problem we used to see with 10 emails x 4 calls x 20s)
+ * - Result rows are upserted once they reach FLUSH_EVERY; a final flush happens on deadline-stop or completion
+ * - ran/remaining are both computed from the "actual completed count" (processed), so a deadline
+ *   truncation never falsely reports everything as done (the B1 fix)
  */
 import {
   PIPELINE_LOGIC_VERSION,
@@ -45,7 +49,7 @@ export { BatchRequestError, StoreUnavailableError } from "./errors";
 export type { BatchFailure, RunBatchRequest, RunBatchSummary } from "./types";
 
 export interface RunPipelineBatchOptions {
-  /** 这次调用是不是匿名（未带 x-admin-token）；只影响 dry_run 预览的封顶与 remaining 口径 */
+  /** Whether this call is anonymous (no x-admin-token); only affects the dry_run preview cap and the remaining calculation */
   anonymous?: boolean;
 }
 
@@ -55,22 +59,22 @@ export async function runPipelineBatch(
 ): Promise<RunBatchSummary> {
   const startedAt = Date.now();
 
-  // 要写库却没有 service key：在跑模型之前就拒绝，别白白烧调用额度
+  // Needs to write to the database but has no service key: reject before running any model calls, so we don't waste call quota for nothing
   if (!request.dryRun && !isSupabaseServiceAvailable()) {
     throw new StoreUnavailableError(
-      "批量处理会写结果表，但当前环境缺少 SUPABASE_SERVICE_ROLE_KEY；只想算不写库请传 dry_run=true"
+      "Batch processing writes to the results table, but the current environment is missing SUPABASE_SERVICE_ROLE_KEY; pass dry_run=true if you only want to compute without writing"
     );
   }
 
   const allIds = await listSampleEmailIds();
-  // 一键重试（P0-2/P1-9）：目标名单由服务端从结果表里挑（failed 或降级），并强制重算
+  // One-click retry (P0-2/P1-9): the target list is picked by the server from the results table (failed or degraded), and recomputation is forced
   const resolved = request.retryFailed
     ? { ...request, emailIds: await resolveRetryEmailIds(new Set(allIds)), force: true }
     : request;
   validateRequestedIds(resolved.emailIds, allIds);
   const scope = resolved.emailIds ?? allIds;
 
-  // 匿名 dry_run 只预览清单头部的固定前缀：先截 id 再解析，匿名请求不会把整箱都读一遍/跑一遍
+  // Anonymous dry_run only previews a fixed-size prefix of the head of the list: truncate the ids before parsing, so an anonymous request never reads/runs the whole shipment
   const anonymousPreview = options.anonymous === true && resolved.dryRun;
   const effectiveIds = anonymousPreview
     ? scope.slice(0, Math.min(resolved.limit, ANONYMOUS_DRY_RUN_MAX_LIMIT))
@@ -80,11 +84,11 @@ export async function runPipelineBatch(
   const hashByEmail = new Map<string, string>();
   const { toRun, skipped } = await selectToRun(inputs, resolved, hashByEmail);
 
-  // remaining 的"目标"：匿名预览 = 本次 scope 的清单规模；其余 = 增量筛选后的待跑总数
+  // The "target" for remaining: for an anonymous preview = the size of this run's scope; otherwise = the total pending after incremental filtering
   const target = anonymousPreview ? scope.length : toRun.length;
   const batch = toRun.slice(0, resolved.limit);
 
-  // 每块 = 一个并发波次，块结束后检查 deadline（30s），到了就不再取新块
+  // Each chunk = one concurrency wave; the deadline (30s) is checked after each chunk, and no new chunk is picked up once reached
   const chunkSize = Math.max(1, resolved.concurrency);
   let processed = 0;
   let succeeded = 0;
@@ -127,7 +131,7 @@ export async function runPipelineBatch(
     }
   }
 
-  // deadline 停止或全部结束：把没落库的尾巴补上（dry_run 不写库）
+  // Stopped by the deadline or finished entirely: flush whatever's left unwritten (dry_run never writes)
   if (!resolved.dryRun && pendingRows.length > 0) {
     wrote += await flushPendingRows(pendingRows);
     pendingRows = [];
@@ -153,8 +157,9 @@ export async function runPipelineBatch(
 }
 
 /**
- * 增量选择：内容指纹 + 引擎版本都没变、且上次是成功结果的邮件直接跳过。
- * dry_run / force 时不做增量（全部进本次待跑列表）。
+ * Incremental selection: an email is skipped outright when its content fingerprint and engine
+ * version are both unchanged and the previous result was a success.
+ * No incremental filtering happens for dry_run / force (everything goes into this run's pending list).
  */
 async function selectToRun(
   inputs: PipelineEmailInput[],
@@ -191,7 +196,7 @@ async function selectToRun(
   return { toRun, skipped };
 }
 
-/** 失败明细最多留 BATCH_MAX_FAILURES 条（其余看 failed 计数和结果表） */
+/** At most BATCH_MAX_FAILURES failure details are kept (the rest can be seen via the failed count and the results table) */
 function appendFailures(
   failures: BatchFailure[],
   failedRows: { input: PipelineEmailInput; error: unknown }[]
@@ -205,7 +210,7 @@ function appendFailures(
   }
 }
 
-/** 一批结果行随块 upsert；返回实际写入行数（由调用方累计到 wrote） */
+/** One batch of result rows is upserted per chunk; returns the number of rows actually written (accumulated by the caller into wrote) */
 async function flushPendingRows(rows: VerificationResultRow[]): Promise<number> {
   if (rows.length === 0) return 0;
   await upsertVerificationRows(rows);
@@ -213,9 +218,12 @@ async function flushPendingRows(rows: VerificationResultRow[]): Promise<number> 
 }
 
 /**
- * 一键重试的目标（2026-09-21 P0-2/P1-9）：结果表里"处理失败"或"降级"的行。
- * 降级 = model_provider 里带 degraded（分类全失败尽力兜底 / 比对 Jev 失败保守降级）。
- * 只挑样例清单里仍然存在的 id，排序后返回；后面统一 force=true 重算。
+ * Targets for the one-click retry (2026-09-21 P0-2/P1-9): rows in the results table that "failed
+ * processing" or were "degraded".
+ * Degraded = model_provider contains degraded (classification fell back as best-effort after
+ * total failure / comparison conservatively degraded after Jev failed).
+ * Only picks ids that still exist in the sample list, returns them sorted; recomputation is
+ * uniformly forced afterward with force=true.
  */
 async function resolveRetryEmailIds(knownIds: Set<string>): Promise<string[]> {
   const stored = await loadStoredVerificationRows();
@@ -234,14 +242,14 @@ function validateRequestedIds(requested: string[] | undefined, allIds: string[])
   const known = new Set(allIds);
   const unknown = requested.filter((id) => !known.has(id));
   if (unknown.length > 0) {
-    throw new BatchRequestError(`样例数据里没有这些邮件：${unknown.join(" / ")}`);
+    throw new BatchRequestError(`These emails aren't in the sample data: ${unknown.join(" / ")}`);
   }
 }
 
 function inputHashOf(hashByEmail: Map<string, string>, input: PipelineEmailInput): string {
   const hash = hashByEmail.get(input.email.email_id);
   if (!hash) {
-    throw new Error(`内部错误：邮件 ${input.email.email_id} 缺少输入指纹`);
+    throw new Error(`Internal error: email ${input.email.email_id} is missing its input fingerprint`);
   }
   return hash;
 }

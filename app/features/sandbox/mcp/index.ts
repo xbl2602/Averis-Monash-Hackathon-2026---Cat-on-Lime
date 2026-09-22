@@ -3,29 +3,29 @@ import { LLM_PROVIDER_IDS } from "@/lib/llm";
 import { runAdhocTest } from "../logic";
 
 const fileSchema = z.object({
-  name: z.string().describe('文件名，含扩展名，例如 "my_si.pdf"'),
-  data_base64: z.string().describe("文件内容的 base64 编码"),
+  name: z.string().describe('File name including extension, e.g. "my_si.pdf"'),
+  data_base64: z.string().describe("Base64-encoded file content"),
 });
 
 /**
- * sandbox 模块的 MCP tool（只读——不写任何库，用完即丢）。
- * 给 AI agent / 评委临时测自己的 SI+BL 文档对用，不依赖仓库自带样例数据。
+ * MCP tool for the sandbox module (read-only — writes to no database, discarded after use).
+ * Lets an AI agent / judge run an ad-hoc test with their own SI+BL document pair, without depending on the repo's built-in sample data.
  */
 export const sandboxMcpTool = {
   name: "run_adhoc_test",
   description:
-    "拿一份自己的 SI + BL 文档（base64 编码，不是仓库自带样例）跑一次分类（给了邮件主题/正文才跑）" +
-    "+ 抽取 + 比对，返回结果。不写库、不需要 Supabase 配置。",
+    "Run classification (only runs if an email subject/body is given) on your own SI + BL documents (base64-encoded, not the repo's sample data), " +
+    "then extraction + comparison, and return the results. Writes to no database, no Supabase configuration required.",
   inputSchema: {
-    subject: z.string().optional().describe("邮件主题，给了才会跑分类"),
-    body: z.string().optional().describe("邮件正文，给了才会跑分类"),
-    from: z.string().optional().describe("发件人"),
+    subject: z.string().optional().describe("Email subject; classification only runs if given"),
+    body: z.string().optional().describe("Email body; classification only runs if given"),
+    from: z.string().optional().describe("Sender"),
     si: fileSchema,
     bl: fileSchema,
     provider: z
       .enum(LLM_PROVIDER_IDS)
       .optional()
-      .describe("不传 = 和线上默认引擎一致（规则优先，缺字段才用 Gemini 兜底，比对用 Jev 复核）"),
+      .describe("Omit to match the default production engine (rules first, Gemini fallback only for missing fields, Jev for comparison review)"),
   },
   annotations: {
     readOnlyHint: true,

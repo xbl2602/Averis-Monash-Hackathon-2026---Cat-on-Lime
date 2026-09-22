@@ -1,13 +1,17 @@
 /**
- * 冲突搜索的"数值口径"（2026-09-21 P1-6，见 DECISION_LOG 决策 28）。
+ * "Numeric comparison mode" for conflict search (2026-09-21 P1-6, see DECISION_LOG decision 28).
  *
- * 只服务"查询/筛选"这一层，两个能力：
- * ① 模糊口径（numeric_mode=fuzzy）：两侧差值在容差内的数字字段不算冲突（吸收换算/四舍五入尾差）；
- * ② 按值搜索（value_field + value）：找 SI/BL 任一侧等于（精确）或≈（模糊+容差）输入值的冲突对。
+ * Serves only the "query/filter" layer, with two capabilities:
+ * (1) Fuzzy mode (numeric_mode=fuzzy): numeric fields whose two-sided difference is within tolerance
+ *     don't count as a conflict (absorbs conversion/rounding residuals);
+ * (2) Search by value (value_field + value): find conflict pairs where either the SI or BL side equals
+ *     (exact) or approximately equals (fuzzy + tolerance) the input value.
  *
- * 重要边界：官方提交路径永远保持精确比对（comparison 模块负责，不含容差——
- * 官方缺陷注入的重量差是 ±500~2000kg，容差会得不偿失；依据见 docs/FINALS_ROADMAP.md 3.5/4.4）。
- * 本文件是纯函数，不碰数据库；由 conflicts.ts 在取回行之后套用。
+ * Important boundary: the official submission path always stays an exact comparison (handled by the
+ * comparison module, no tolerance — the official defect-injection weight differences are +-500~2000kg,
+ * so tolerance would do more harm than good; see docs/FINALS_ROADMAP.md 3.5/4.4 for the rationale).
+ * This file contains pure functions and never touches the database; conflicts.ts applies it after
+ * fetching rows.
  */
 import { NUMERIC_SEARCH_FIELDS, type ConflictPair, type ConflictQuery, type NumericSearchField } from "./types";
 
@@ -16,8 +20,10 @@ export function usesNumericFeatures(query: ConflictQuery): boolean {
 }
 
 /**
- * 按查询口径处理一条冲突对；返回 null 表示这条在模糊口径下"不再算冲突"（从结果里去掉）。
- * 只有"删除数字缺陷字段"和"按值过滤"两件事；其余字段照抄存储值，不改状态语义。
+ * Process one conflict pair according to the query mode; returning null means this pair "no longer
+ * counts as a conflict" under fuzzy mode (and is dropped from the results).
+ * Only does two things: "remove numeric defect fields" and "filter by value"; every other field is
+ * copied from the stored value as-is, without changing status semantics.
  */
 export function applyNumericQuery(pair: ConflictPair, query: ConflictQuery): ConflictPair | null {
   let defectFields = pair.defect_fields;
@@ -30,7 +36,7 @@ export function applyNumericQuery(pair: ConflictPair, query: ConflictQuery): Con
           withinTolerance(field, pair.si_values[field], pair.bl_values[field], query.tolerance)
         )
     );
-    // 小尾差被吸收后没有别的缺陷了：MISMATCH 不再是冲突；NEEDS_REVIEW 保持原样（不确定≠差异）
+    // If absorbing small residuals leaves no other defects: MISMATCH is no longer a conflict; NEEDS_REVIEW stays as-is (uncertain != different)
     if (pair.status === "MISMATCH" && defectFields.length === 0) return null;
   }
 
@@ -51,7 +57,7 @@ export function isNumericField(field: string): field is NumericSearchField {
   return (NUMERIC_SEARCH_FIELDS as readonly string[]).includes(field);
 }
 
-/** 取出字段里的数字：重量取第一个数字（含小数）；箱数取开头数字（"3 x 40'GP" → 3） */
+/** Extract the number from a field: for weight, take the first number (decimals included); for container count, take the leading number ("3 x 40'GP" -> 3) */
 export function parseFieldNumber(
   field: NumericSearchField,
   value: string | undefined
@@ -66,7 +72,7 @@ export function parseFieldNumber(
   return match ? Number(match[1]) : null;
 }
 
-/** 容差：用户给了就用用户的；没给用默认（重量 max(0.5kg, 0.1%)，箱数 0） */
+/** Tolerance: use the user-supplied value if given; otherwise use the default (weight max(0.5kg, 0.1%), container count 0) */
 export function toleranceFor(
   field: NumericSearchField,
   a: number | null,
@@ -89,7 +95,7 @@ function withinTolerance(
 ): boolean {
   const a = parseFieldNumber(field, siValue);
   const b = parseFieldNumber(field, blValue);
-  if (a === null || b === null) return false; // 解析不了就不吸收，保持原判
+  if (a === null || b === null) return false; // If it can't be parsed, don't absorb it — keep the original verdict
   return Math.abs(a - b) <= toleranceFor(field, a, b, userTolerance) + Number.EPSILON;
 }
 

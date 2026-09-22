@@ -1,4 +1,4 @@
-/** What the export's response headers say about how complete the file is (see SHARED_INTERFACES.md, "导出"). */
+/** What the export's response headers say about how complete the file is (see SHARED_INTERFACES.md, "Export"). */
 export interface Completeness {
   items: number;
   incomplete: boolean;

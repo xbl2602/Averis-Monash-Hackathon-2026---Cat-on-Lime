@@ -1,9 +1,11 @@
 /**
- * 人工复核闭环的数据访问层：review_overrides / review_actions 的读写，
- * 以及复核队列的查询（读 verification_overview + 按 target_kind 叠加 override）。
+ * Data access layer for the human-review loop: reads/writes of review_overrides /
+ * review_actions, plus querying the review queue (reads verification_overview and layers the
+ * override on top, per target_kind).
  *
- * 写入一律 upsert（冲突键 target_kind+email_id，见 CLAUDE.md「高并发」），
- * 不做"先查再插"。读用 anon key（三表读都对 anon 开放），写用 service role key。
+ * Writes always use upsert (conflict key target_kind+email_id, see the "High Concurrency"
+ * section of CLAUDE.md), never "query then insert". Reads use the anon key (all three tables
+ * are readable by anon), writes use the service role key.
  */
 import { randomUUID } from "node:crypto";
 import { getSupabaseClient, getSupabaseServiceClient } from "@/lib/shared/supabase";
@@ -18,18 +20,20 @@ import {
 } from "./types";
 
 /**
- * 包一层 getSupabaseClient/getSupabaseServiceClient：没配置 Supabase 时统一抛
- * ReviewStoreUnavailableError（映射 503），而不是让原始的通用 Error 掉进
- * request-errors.ts 的"未知错误"兜底变成 500 + 不可读文案——results 模块的
- * `getReadClient()`（app/features/results/logic/db.ts）就是这个模式，这里对齐它，
- * 修正队友A在接 GUI 时发现的"没配数据库时，review 是 500，别的模块是 503"不一致。
+ * Wraps getSupabaseClient/getSupabaseServiceClient: when Supabase isn't configured, this
+ * uniformly throws ReviewStoreUnavailableError (mapped to 503), instead of letting a plain
+ * generic Error fall into request-errors.ts's "unknown error" fallback and turn into a 500
+ * with an unreadable message — this mirrors the pattern already used by the results module's
+ * `getReadClient()` (app/features/results/logic/db.ts); we align with it here, fixing the
+ * inconsistency teammate A found while wiring up the GUI ("without a configured database,
+ * review returns 500 while other modules return 503").
  */
 function getReadClient() {
   try {
     return getSupabaseClient();
   } catch (err) {
     throw new ReviewStoreUnavailableError(
-      err instanceof Error ? err.message : "Supabase 只读客户端初始化失败"
+      err instanceof Error ? err.message : "Failed to initialize the Supabase read-only client"
     );
   }
 }
@@ -39,13 +43,15 @@ function getWriteClient() {
     return getSupabaseServiceClient();
   } catch (err) {
     throw new ReviewStoreUnavailableError(
-      err instanceof Error ? err.message : "Supabase 服务端客户端初始化失败"
+      err instanceof Error ? err.message : "Failed to initialize the Supabase service-side client"
     );
   }
 }
 
-// 队列一次最多取这么多行再在内存里筛选/分页（和 verification-store.ts 的 loadStoredVerificationRows
-// 用同一个量级：样例数据 3288 行，一次读完比拼 SQL 过滤简单，量级也扛得住）
+// The queue fetches at most this many rows at once, then filters/paginates in memory (the same
+// order of magnitude used by loadStoredVerificationRows in verification-store.ts: the sample
+// data has 3288 rows, reading it all at once is simpler than fighting with SQL filters, and
+// the scale is manageable)
 const OVERVIEW_FETCH_LIMIT = 5000;
 
 interface OverviewQueueRow {
@@ -63,7 +69,7 @@ interface OverviewQueueRow {
 const OVERVIEW_COLUMNS =
   "email_id,subject,category,comparison_status,review_reason,defect_fields,processing_status,model_provider,updated_at";
 
-/** 这一行是不是这个 target_kind 默认队列该看的"异常项"（D3：默认异常驱动） */
+/** Whether this row belongs in the default queue for this target_kind, i.e. an "exception item" it should show (D3: default anomaly-driven) */
 function isInDefaultQueue(targetKind: ReviewTargetKind, row: OverviewQueueRow): boolean {
   const provider = row.model_provider ?? "";
   switch (targetKind) {
@@ -77,8 +83,10 @@ function isInDefaultQueue(targetKind: ReviewTargetKind, row: OverviewQueueRow): 
           row.review_reason === "unreadable")
       );
     case "classification":
-      // 分类的"置信度<0.85"目前没有持久化到 verification_results（只有单文档接口即时返回，
-      // 见 DECISION_LOG 决策30旁注 / TODO.md P1-1），这里只能覆盖"全模型失败降级"这一种情况。
+      // Classification's "confidence < 0.85" isn't currently persisted into
+      // verification_results (only the single-document endpoint returns it immediately, see
+      // DECISION_LOG decision 30's side note / TODO.md P1-1) — this can only cover the "every
+      // model failed and degraded" case for now.
       return provider.startsWith("degraded/");
     case "pipeline":
       return row.processing_status === "failed" || provider.includes("degraded");
@@ -88,11 +96,11 @@ function isInDefaultQueue(targetKind: ReviewTargetKind, row: OverviewQueueRow): 
 export interface ListQueueOptions {
   includeOk?: boolean;
   q?: string;
-  /** 按系统比对状态筛选（OK/MISMATCH/NEEDS_REVIEW） */
+  /** Filter by the system's comparison status (OK/MISMATCH/NEEDS_REVIEW) */
   status?: ComparisonStatus;
-  /** 按系统复核原因筛选 */
+  /** Filter by the system's review reason */
   reason?: ReviewReason;
-  /** 按人工覆盖的 review_state 筛选；传 "none" = 只看还没有任何人工覆盖的项 */
+  /** Filter by the human override's review_state; pass "none" = only items with no human override yet */
   reviewState?: "confirmed" | "corrected" | "deferred" | "none";
   limit?: number;
   offset?: number;
@@ -107,7 +115,7 @@ export async function listReviewQueue(
     .from("verification_overview")
     .select(OVERVIEW_COLUMNS)
     .limit(OVERVIEW_FETCH_LIMIT);
-  if (error) throw new Error(`读取 verification_overview 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read verification_overview: ${error.message}`);
 
   const rows = (data ?? []) as OverviewQueueRow[];
   let filtered = rows.filter((row) => options.includeOk || isInDefaultQueue(targetKind, row));
@@ -157,7 +165,7 @@ function toQueueItem(row: OverviewQueueRow, override: ReviewOverride | null): Re
   };
 }
 
-/** 单条邮件在 verification_overview 里的原始行（rerun/merge 用得到分类等基础信息时复用这个） */
+/** The raw row for a single email in verification_overview (reused by rerun/merge whenever they need basic info like the category) */
 export async function getQueueItem(
   targetKind: ReviewTargetKind,
   emailId: string
@@ -168,7 +176,7 @@ export async function getQueueItem(
     .select(OVERVIEW_COLUMNS)
     .eq("email_id", emailId)
     .maybeSingle();
-  if (error) throw new Error(`读取 verification_overview 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read verification_overview: ${error.message}`);
   if (!data) return null;
   const override = await getOverride(targetKind, emailId);
   return toQueueItem(data as OverviewQueueRow, override);
@@ -185,17 +193,19 @@ export async function getOverride(
     .eq("target_kind", targetKind)
     .eq("email_id", emailId)
     .maybeSingle();
-  if (error) throw new Error(`读取 review_overrides 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read review_overrides: ${error.message}`);
   return (data as ReviewOverride | null) ?? null;
 }
 
 /**
- * 按 target_kind 取回全部 override，再在内存里按 emailIds 过滤（如果传了的话）。
+ * Fetches every override for a target_kind, then filters by emailIds in memory (if provided).
  *
- * 不用 `.in("email_id", emailIds)`：results 导出会传全量 520+ 个 email_id 进来，
- * PostgREST 把这么大一个数组拼进 URL 查询参数会超长直接 400（实测报 "Bad Request"）。
- * review_overrides 本来就只有"被人工处理过的那一小撮"，全量读一次再过滤，比拼超长 IN 列表安全，
- * 量级也稳（不会随邮件总数增长而变大，只随"人工处理过多少条"增长）。
+ * We don't use `.in("email_id", emailIds)`: the results export can pass in 520+ email_ids at
+ * once, and PostgREST choking on such a large array packed into the URL query string returns
+ * a flat 400 (observed in practice as "Bad Request"). review_overrides only ever holds "the
+ * small subset that's actually been touched by a human", so reading it all once and filtering
+ * is safer than fighting with an oversized IN list, and it scales fine (it grows with "how
+ * much has been reviewed", not with the total email count).
  */
 export async function listOverrides(
   targetKind: ReviewTargetKind,
@@ -208,7 +218,7 @@ export async function listOverrides(
     .from("review_overrides")
     .select("*")
     .eq("target_kind", targetKind);
-  if (error) throw new Error(`读取 review_overrides 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read review_overrides: ${error.message}`);
   const wanted = emailIds ? new Set(emailIds) : null;
   for (const row of (data ?? []) as ReviewOverride[]) {
     if (wanted && !wanted.has(row.email_id)) continue;
@@ -217,7 +227,7 @@ export async function listOverrides(
   return map;
 }
 
-/** upsert（冲突键 target_kind+email_id），不是"先查再插" */
+/** upsert (conflict key target_kind+email_id), never "query then insert" */
 export async function upsertOverride(
   row: Omit<ReviewOverride, "created_at" | "updated_at"> & { updated_at: string }
 ): Promise<ReviewOverride> {
@@ -227,7 +237,7 @@ export async function upsertOverride(
     .upsert(row, { onConflict: "target_kind,email_id" })
     .select("*")
     .single();
-  if (error) throw new Error(`写入 review_overrides 失败：${error.message}`);
+  if (error) throw new Error(`Failed to write review_overrides: ${error.message}`);
   return data as ReviewOverride;
 }
 
@@ -238,7 +248,7 @@ export async function deleteOverride(targetKind: ReviewTargetKind, emailId: stri
     .delete()
     .eq("target_kind", targetKind)
     .eq("email_id", emailId);
-  if (error) throw new Error(`删除 review_overrides 失败：${error.message}`);
+  if (error) throw new Error(`Failed to delete review_overrides: ${error.message}`);
 }
 
 export async function insertAction(
@@ -250,7 +260,7 @@ export async function insertAction(
     .insert(row)
     .select("*")
     .single();
-  if (error) throw new Error(`写入 review_actions 失败：${error.message}`);
+  if (error) throw new Error(`Failed to write review_actions: ${error.message}`);
   return data as ReviewActionRow;
 }
 
@@ -265,11 +275,11 @@ export async function listActions(
     .eq("target_kind", targetKind)
     .eq("email_id", emailId)
     .order("created_at", { ascending: false });
-  if (error) throw new Error(`读取 review_actions 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read review_actions: ${error.message}`);
   return (data ?? []) as ReviewActionRow[];
 }
 
-/** 最新一条"有效"动作（不是 undo、没被撤销过）：撤销默认目标 + 并发冲突判断都靠它 */
+/** The latest "effective" action (not an undo, and not itself undone): both the default undo target and the concurrency-conflict check rely on this */
 export async function getLatestEffectiveAction(
   targetKind: ReviewTargetKind,
   emailId: string
@@ -279,7 +289,7 @@ export async function getLatestEffectiveAction(
   return actions.find((a) => a.action_type !== "undo" && !undoneIds.has(a.id)) ?? null;
 }
 
-/** 最新一条指定类型的动作（undefer 找对应的 defer 时用） */
+/** The latest action of a given type (used by undefer to find the matching defer) */
 export async function getLatestActionOfType(
   targetKind: ReviewTargetKind,
   emailId: string,

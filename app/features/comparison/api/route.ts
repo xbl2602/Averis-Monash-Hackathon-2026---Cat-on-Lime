@@ -5,10 +5,10 @@ import { isLLMProvider } from "@/lib/llm";
 import { toClientError } from "@/lib/shared/request-errors";
 
 // POST { "si": {...}, "bl": {...}, "provider": "jev" } -> ComparisonResult
-// provider 可省略：不传时逐字符精确比较（不调用模型）
+// provider is optional: when omitted, compares exactly character-by-character (no model call)
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// 单文档请求最多 1 次外部调用（20s 超时），30s 足够且能更快暴露问题
+// A single-document request makes at most 1 external call (20s timeout); 30s is enough and surfaces problems faster
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
@@ -16,22 +16,22 @@ export async function POST(req: NextRequest) {
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ error: "请求体不是合法 JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Request body is not valid JSON" }, { status: 400 });
   }
 
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return NextResponse.json({ error: "请求体必须是一个 JSON 对象" }, { status: 400 });
+    return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
   }
   const body = raw as { si?: unknown; bl?: unknown; provider?: unknown };
 
   if (!isPlainObject(body.si) || !isPlainObject(body.bl)) {
-    return NextResponse.json({ error: "需要 si 和 bl 两个字段对象" }, { status: 400 });
+    return NextResponse.json({ error: "Both si and bl field objects are required" }, { status: 400 });
   }
 
   const provider = body.provider;
   if (provider !== undefined && !isLLMProvider(provider)) {
     return NextResponse.json(
-      { error: `不支持的 provider：${String(provider)}` },
+      { error: `Unsupported provider: ${String(provider)}` },
       { status: 400 }
     );
   }
@@ -49,17 +49,17 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** 浏览器/工具直接打开这个地址时，返回接口用法说明（不执行任何处理） */
+/** When a browser/tool opens this address directly, return usage instructions for the endpoint (no processing performed) */
 export async function GET() {
   return NextResponse.json({
     endpoint: "/features/comparison/api",
     method: "POST",
     description:
-      "比对 SI 和 BL 的抽取字段，返回 OK/MISMATCH/NEEDS_REVIEW 与不一致的字段列表。不传 provider 时逐字符精确比较（不调用模型）",
+      "Compares the extracted fields of SI and BL, returning OK/MISMATCH/NEEDS_REVIEW and the list of mismatched fields. When provider is omitted, compares exactly character-by-character (no model call)",
     body: {
-      si: "从 extraction 拿到的 SI 字段对象（7 个字段，值都是字符串）",
-      bl: "从 extraction 拿到的 BL 字段对象",
-      provider: "可选：claude | openai | deepseek | gemini | lmstudio | jev；选 jev 可容忍格式差异",
+      si: "The SI field object obtained from extraction (7 fields, all string values)",
+      bl: "The BL field object obtained from extraction",
+      provider: "Optional: claude | openai | deepseek | gemini | lmstudio | jev; choose jev to tolerate formatting differences",
     },
     example: {
       si: { shipper: "ACME SHIPPING CO., LTD." },

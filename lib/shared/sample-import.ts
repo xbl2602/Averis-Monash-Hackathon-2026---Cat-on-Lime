@@ -1,11 +1,14 @@
 /**
- * 把官方样例数据（data/sample/）重新写进 raw_emails / parsed_attachments 两张表。
+ * Re-writes the official sample data (data/sample/) back into the raw_emails /
+ * parsed_attachments tables.
  *
- * 只给"开发者模式 - 恢复到官方样例状态"用（app/features/devmode/），不在正常业务路径
- * 上跑。复用和 scripts/import-sample-data.mjs 同一套共享基础设施（inbox.ts 读文件、
- * attachment-text.ts 解析、supabase.ts 服务端客户端），避免脚本和运行时各写一份解析
- * 逻辑、算出不一致的指纹。批量解析走 mapWithConcurrencyLimit（单个附件解析失败只影响
- * 那一条，不拖垮整批）。
+ * This is only for "Developer Mode - Restore to official sample state"
+ * (app/features/devmode/) and does not run on the normal business path. It reuses the same
+ * shared infrastructure as scripts/import-sample-data.mjs (inbox.ts for reading files,
+ * attachment-text.ts for parsing, supabase.ts for the server-side client) so the script and
+ * the runtime don't each maintain their own parsing logic and end up computing inconsistent
+ * fingerprints. Batch parsing goes through mapWithConcurrencyLimit (a single attachment
+ * failing to parse only affects that one row, it doesn't take down the whole batch).
  */
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -50,7 +53,7 @@ async function buildAttachmentRow(job: AttachmentJob): Promise<Record<string, un
   return { ...row, content_hash: hashObject(row) };
 }
 
-/** 官方样例邮件 + 附件重新写库（增量 upsert，内容没变的行指纹相同、Supabase 端不产生实际变更） */
+/** Re-writes the official sample emails + attachments to the database (incremental upsert; rows whose content is unchanged get the same fingerprint, so Supabase sees no real change) */
 export async function reimportSampleData(): Promise<SampleImportStats> {
   const emails = await listSampleEmails();
   const supabase = getSupabaseServiceClient();
@@ -75,15 +78,16 @@ export async function reimportSampleData(): Promise<SampleImportStats> {
   const attachmentRows = succeeded.map((entry) => entry.result);
   const unreadable = attachmentRows
     .filter((row) => row.parse_status === "unreadable")
-    .map((row) => `${row.file_path}（${row.parse_error ?? ""}）`);
-  // buildAttachmentRow 已经把预期内的失败（文件读不到/解析失败）转成 unreadable 行返回，
-  // 这里 failed 只会有真正意料之外的异常——照实告诉调用方，不静默吞掉
+    .map((row) => `${row.file_path} (${row.parse_error ?? ""})`);
+  // buildAttachmentRow already converts expected failures (file unreadable/parse failure)
+  // into "unreadable" rows and returns them, so anything in `failed` here is a genuinely
+  // unexpected exception — report it to the caller as-is, don't swallow it silently
   for (const entry of failed) {
-    unreadable.push(`${entry.item.attachmentPath}（未预期的错误：${String(entry.error)}）`);
+    unreadable.push(`${entry.item.attachmentPath} (unexpected error: ${String(entry.error)})`);
   }
 
   const { error: emailsErr } = await supabase.from("raw_emails").upsert(emailRows, { onConflict: "email_id" });
-  if (emailsErr) throw new Error(`写入 raw_emails 失败：${emailsErr.message}`);
+  if (emailsErr) throw new Error(`Failed to write raw_emails: ${emailsErr.message}`);
 
   const batchSize = 50;
   for (let i = 0; i < attachmentRows.length; i += batchSize) {
@@ -92,7 +96,7 @@ export async function reimportSampleData(): Promise<SampleImportStats> {
       .from("parsed_attachments")
       .upsert(batch, { onConflict: "email_id,file_path" });
     if (error) {
-      throw new Error(`写入 parsed_attachments 第 ${i + 1}~${i + batch.length} 行失败：${error.message}`);
+      throw new Error(`Failed to write parsed_attachments rows ${i + 1}-${i + batch.length}: ${error.message}`);
     }
   }
 

@@ -1,55 +1,60 @@
 /**
- * 批量入口（整箱流水线）的类型与常量。
+ * Types and constants for the batch entry point (full-shipment pipeline).
  *
- * 对外契约（POST /features/pipeline/api 与 MCP tool run_batch）写在
- * SHARED_INTERFACES.md「pipeline 模块（批量入口）」一节，两边改动要同步。
+ * The external contract (POST /features/pipeline/api and the MCP tool run_batch) is written in the
+ * "pipeline module (batch entry point)" section of SHARED_INTERFACES.md — keep both in sync when changing either.
  */
 import type { LLMProvider } from "@/lib/llm";
 
-/** 一次最多跑几封（样例数据总共 520 封） */
+/** Max emails per run (the sample data totals 520 emails) */
 export const BATCH_MAX_LIMIT = 520;
-/** 不传 limit 时的默认值：控制单次耗时，大任务分批调用（响应里有 remaining） */
+/** Default value when limit isn't passed: controls how long a single call takes, with large jobs called in batches (remaining is in the response) */
 export const BATCH_DEFAULT_LIMIT = 50;
-/** 同时最多处理几封（见 CLAUDE.md「高并发」的限量并发要求） */
+/** Max number processed concurrently (see the "high concurrency" rate-limiting requirement in CLAUDE.md) */
 export const BATCH_MAX_CONCURRENCY = 8;
 export const BATCH_DEFAULT_CONCURRENCY = 4;
-/** 响应里最多列几条失败明细（其余的看 failed 计数和结果表） */
+/** Max number of failure details listed in the response (the rest can be seen via the failed count and the results table) */
 export const BATCH_MAX_FAILURES = 20;
 
 /**
- * 匿名 dry_run 预览单次最多解析/处理多少封。
- * 匿名请求（未带 x-admin-token）的 dry_run 只允许看清单头部固定前缀，
- * 防止匿名访客把整箱 520 封都解析+跑一遍（security/performance 评审）。
+ * Max number of emails an anonymous dry_run preview may parse/process.
+ * An anonymous request's (no x-admin-token) dry_run may only look at a fixed-size prefix of the head
+ * of the list, to prevent an anonymous visitor from parsing+running the entire 520-email shipment in
+ * one go (per the security/performance review).
  */
 export const ANONYMOUS_DRY_RUN_MAX_LIMIT = 20;
 
 /**
- * 批量运行的软截止时间（毫秒）：**每处理完一块后**检查，到了就不再取新块。
- * 平台函数上限 60s，留余量给响应/写库；在途的那一块不受它约束（见 SHARED_INTERFACES）。
+ * Soft deadline for a batch run (milliseconds): checked **after each chunk finishes**; once reached,
+ * no new chunk is picked up.
+ * The platform function cap is 60s; this leaves headroom for the response/database write. The chunk
+ * already in flight isn't bound by it (see SHARED_INTERFACES).
  */
 export const BATCH_DEADLINE_MS = 30_000;
 
 /**
- * 结果行最多在内存里攒多少条就 upsert 一次（!dryRun 时）。
- * 一起攒的目的是少写几次库；上限是为了"进程被平台杀掉时最多丢这么多行"。
+ * Max number of result rows to accumulate in memory before upserting (when !dryRun).
+ * Batching writes reduces the number of database round-trips; the cap exists so that "if the process
+ * gets killed by the platform, at most this many rows are lost."
  */
 export const FLUSH_EVERY = 20;
 
 export interface RunBatchRequest {
-  /** 只跑这几封；不传 = 全部样例邮件（不能和 retryFailed 同时用） */
+  /** Only run these emails; omit = all sample emails (cannot be combined with retryFailed) */
   emailIds?: string[];
   limit: number;
-  /** true = 忽略增量指纹强制重算 */
+  /** true = ignore the incremental fingerprint and force recomputation */
   force: boolean;
-  /** true = 只算不写库（不需要 service key，适合云端预览） */
+  /** true = only compute, don't write to the database (no service key needed, suited to cloud previews) */
   dryRun: boolean;
-  /** 抽取/分类兜底用的文本模型，默认 gemini；不能用 jev */
+  /** Text model used as the extraction/classification fallback, default gemini; cannot use jev */
   provider?: LLMProvider;
   concurrency: number;
   /**
-   * 一键重试（2026-09-21 P0-2/P1-9）：true = 不传 email_ids，由服务端从结果表里
-   * 自动挑出"处理失败（processing_status=failed）或降级（model_provider 带 degraded）"的邮件，
-   * 强制重算。没有目标时本次 ran=0，正常返回。
+   * One-click retry (2026-09-21 P0-2/P1-9): true = don't pass email_ids; the server automatically
+   * picks out emails from the results table that are "failed to process (processing_status=failed)
+   * or degraded (model_provider contains degraded)" and forces recomputation. If there's no target,
+   * this run has ran=0 and returns normally.
    */
   retryFailed: boolean;
 }
@@ -60,26 +65,26 @@ export interface BatchFailure {
 }
 
 export interface RunBatchSummary {
-  /** 样例邮件总数 */
+  /** Total number of sample emails */
   total_emails: number;
-  /** 本次选中的邮件数（email_ids 过滤后；匿名 dry_run = 实际解析数，≤20） */
+  /** Number of emails selected this run (after filtering by email_ids; for anonymous dry_run = the actual number parsed, <=20) */
   selected: number;
-  /** 因"内容没变 + 引擎版本没变"而跳过的数量 */
+  /** Number skipped because "content unchanged + engine version unchanged" */
   skipped: number;
-  /** 本次真正完成的数量（成功 + 失败）——deadline 截断时小于待跑总数，不谎报 */
+  /** Number actually completed this run (succeeded + failed) — smaller than the total pending when truncated by the deadline, never overstated */
   ran: number;
   succeeded: number;
   failed: number;
-  /** 写入结果表的行数（成功 + 失败；dry_run 时为 0） */
+  /** Number of rows written to the results table (succeeded + failed; 0 for dry_run) */
   wrote: number;
   /**
-   * 还有多少封没跑 = 目标 − 已完成数。
-   * 目标口径：匿名 dry_run 预览 = 本次 scope 的清单规模（scope = email_ids ?? 全部）；
-   * 其余情况 = 增量筛选后本次待跑的总数（不受 limit 截断影响）。
-   * 大于 0 时再调一次（写模式会自动跳过已算好的），或调大 limit。
+   * How many are still left to run = target - number completed.
+   * Target definition: for an anonymous dry_run preview = the size of this run's scope (scope = email_ids ?? everything);
+   * otherwise = the total pending this run after incremental filtering (unaffected by limit truncation).
+   * When greater than 0, call again (write mode automatically skips ones already computed), or increase limit.
    */
   remaining: number;
-  /** true = 到了批量 deadline 且还有没跑完的目标（此时 remaining > 0） */
+  /** true = the batch deadline was reached with targets still not finished (in which case remaining > 0) */
   stopped_by_deadline: boolean;
   dry_run: boolean;
   logic_version: string;

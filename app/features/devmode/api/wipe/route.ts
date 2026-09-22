@@ -1,11 +1,13 @@
 /**
- * ⚠️ 开发者模式：POST /features/devmode/api/wipe
- * 清空全部核验数据表（不动 app_config/mail_accounts/supabase_projects 这类连接配置）。
- * 不可逆——清完之后只能靠 /features/devmode/api/restore 或重新跑一次 npm run import:data
- * 找回样例数据，verification_results 里的人工复核记录会永久丢失，没有备份机制。
+ * ⚠️ Developer mode: POST /features/devmode/api/wipe
+ * Wipes every verification data table (leaves connection configuration like
+ * app_config/mail_accounts/supabase_projects untouched).
+ * Irreversible — after wiping, the only way to get the sample data back is
+ * /features/devmode/api/restore or rerunning npm run import:data; the manual review records in
+ * verification_results are lost permanently, with no backup mechanism.
  *
- * 两道门槛：请求头 x-admin-token（和其它写操作一致）+ 请求体 { "confirm": "WIPE ALL DATA" }
- * 逐字匹配，两个都满足才会真的执行。
+ * Two gates: the x-admin-token header (same as other write operations) + the request body's
+ * { "confirm": "WIPE ALL DATA" } must match exactly — both must be satisfied before it actually runs.
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";
@@ -37,14 +39,14 @@ export async function POST(request: Request) {
   }
 }
 
-/** 浏览器直接打开时给出用法说明，不执行任何操作 */
+/** Gives usage instructions when opened directly in a browser; performs no action */
 export async function GET() {
   return NextResponse.json({
     warning: DEVMODE_WARNING,
     endpoint: "/features/devmode/api/wipe",
     method: "POST",
-    description: "清空全部核验数据表，不可逆。仅供开发者模式页面调用，不是正式产品功能。",
-    headers: { "x-admin-token": "必填，和其它写操作一样" },
-    body: { confirm: `必填，必须逐字等于 "${WIPE_CONFIRM_PHRASE}"` },
+    description: "Wipes every verification data table. Irreversible. Callable only from the developer-mode page — not an official product feature.",
+    headers: { "x-admin-token": "Required, same as other write operations" },
+    body: { confirm: `Required, must equal "${WIPE_CONFIRM_PHRASE}" exactly` },
   });
 }

@@ -1,8 +1,10 @@
 /**
- * ⚠️ 开发者模式（devmode）：不是本产品的正式功能，仅供团队/评委在验证阶段查看和重置数据。
- * 见 docs/SHARED_INTERFACES.md「开发者模式（仅内部使用）」一节的完整警示与边界。
+ * ⚠️ Developer mode (devmode): not an official feature of this product, for the team/judges to
+ * view and reset data during verification only.
+ * See the full warnings and boundaries in the "Developer mode (internal use only)" section of
+ * docs/SHARED_INTERFACES.md.
  *
- * GET /features/devmode/api  查看各数据表当前行数（需要 x-admin-token；只读，不改数据）
+ * GET /features/devmode/api  View the current row count of each data table (requires x-admin-token; read-only, changes no data)
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";

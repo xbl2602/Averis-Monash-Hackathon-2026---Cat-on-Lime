@@ -1,8 +1,8 @@
 /**
- * 字段抽取（混合）：标签规则优先，缺字段时才调 LLM 兜底。
- * - 规则覆盖样例里全部正常文档（242 个可读文档中 237 个完整抽出、5 个是"类型不对"陷阱）
- * - LLM 兜底只在规则缺字段时触发；prompt 明确要求"找不到填 null、占位符填 null"，防止编造
- * - 明显不是 SI/BL 的文档直接返回 document_type=OTHER（上层据此判 wrong_doc_type），不浪费调用
+ * Field extraction (hybrid): label rules first, calling the LLM as a fallback only for missing fields.
+ * - Rules cover every normal document in the samples (237 of 242 readable documents fully extracted; the other 5 are "wrong document type" traps)
+ * - The LLM fallback only fires when rules leave fields missing; the prompt explicitly requires "fill null if not found, null for placeholders" to prevent fabrication
+ * - A document that's clearly not SI/BL returns document_type=OTHER directly (the caller uses this to flag wrong_doc_type), avoiding a wasted call
  */
 import { callLLM, type LLMProvider } from "@/lib/llm";
 import { callWithCache } from "@/lib/shared/llm-cache";
@@ -22,7 +22,7 @@ import {
 export interface ExtractFieldsInput {
   documentText: string;
   documentType: "SI" | "BL";
-  /** 规则缺字段时用哪个文本模型兜底，默认 gemini */
+  /** Which text model to fall back to when rules leave fields missing; defaults to gemini */
   provider?: LLMProvider;
 }
 
@@ -44,12 +44,12 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
   }
 
   const llmFields = await tryLlmExtraction(input);
-  // 规则抽到的值经过校验、更可靠：规则优先，LLM 只补缺
+  // Values from rules are validated and more reliable: rules take priority, the LLM only fills gaps
   const merged: ExtractedDocumentFields = { ...(llmFields ?? {}), ...ruleFields };
   const usedLlm = (Object.keys(llmFields ?? {}) as ComparedField[]).some(
     (field) => !ruleFields[field]
   );
-  // 出处：规则字段带行号+原句；LLM 补上的字段只标来源（没有行证据，不给假出处）
+  // Provenance: rule-extracted fields carry a line number + original text; LLM-filled fields only note the source (no line evidence, so no fake provenance is attached)
   const evidence: ExtractedDocumentEvidence = { ...parsed.evidence };
   if (llmFields) {
     for (const field of Object.keys(llmFields) as ComparedField[]) {
@@ -65,9 +65,9 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
 }
 
 /**
- * 模型输入的扁平化契约（见 docs/DECISION_SPEC.md §3.3/§6）：
- * 只发 documentType（SI/BL）+ 单一纯文本文档内容；
- * 文件名、附件路径、解析元数据一律不进模型输入。
+ * The model-input flattening contract (see docs/DECISION_SPEC.md §3.3/§6):
+ * only documentType (SI/BL) + a single plain-text document body are sent;
+ * filenames, attachment paths, and parsing metadata never go into the model input.
  */
 async function tryLlmExtraction(
   input: ExtractFieldsInput
@@ -85,15 +85,16 @@ async function tryLlmExtraction(
     });
     const parsed = parseJsonObject(raw);
     if (!parsed) {
-      console.warn(`[extraction] LLM 兜底返回的不是合法 JSON，本次只用规则结果：${raw.slice(0, 200)}`);
+      console.warn(`[extraction] The LLM fallback did not return valid JSON; using rule results only this time: ${raw.slice(0, 200)}`);
       return null;
     }
     return sanitizeLlmFields(parsed);
   } catch (err) {
-    // LLM 兜底失败（例如没配 key）时降级为"只用规则结果"：缺的字段会在上层被判 missing_value，
-    // 不会因为一次兜底失败把整批拖垮；这里打印原因，方便排查（不是静默吞掉）
+    // If the LLM fallback fails (e.g. no key configured), degrade to "rule results only": any
+    // missing field will be flagged missing_value further up, so one failed fallback doesn't
+    // drag down the whole batch; the reason is logged here for debugging (never swallowed silently)
     console.warn(
-      `[extraction] LLM 兜底调用失败（${provider}），本次只用规则结果：`,
+      `[extraction] LLM fallback call failed (${provider}); using rule results only this time:`,
       err instanceof Error ? err.message : err
     );
     return null;
@@ -101,20 +102,20 @@ async function tryLlmExtraction(
 }
 
 function buildExtractionPrompt(input: ExtractFieldsInput): string {
-  return `你是航运单证助手。请从下面的 ${input.documentType} 文档文本中抽取 7 个字段（按"含义"对齐，不要按原文字段名对齐）。
+  return `You are a shipping-document assistant. Extract 7 fields from the ${input.documentType} document text below (match by meaning, not by the exact field names used in the original text).
 
-字段列表：${COMPARED_FIELDS.join(", ")}
+Fields: ${COMPARED_FIELDS.join(", ")}
 
-规则：
-- 只抽取文档里真实存在的值，绝对不要猜测
-- 找不到的字段填 null；占位符（如 TBA / N/A / ____MT / 空白）也填 null
-- 只输出一个 JSON 对象，不要解释、不要代码块
+Rules:
+- Only extract values that genuinely exist in the document — never guess
+- Fill null for any field you can't find; also fill null for placeholders (e.g. TBA / N/A / ____MT / blank)
+- Output a single JSON object only — no explanation, no code block
 
-文档文本：
+Document text:
 ${input.documentText}`;
 }
 
-// 容忍模型把 JSON 包在代码块或多余文字里的情况
+// Tolerate the model wrapping the JSON in a code block or surrounding it with extra text
 function parseJsonObject(text: string): Record<string, unknown> | null {
   const withoutFence = text.replace(/```(?:json)?/gi, "");
   const start = withoutFence.indexOf("{");

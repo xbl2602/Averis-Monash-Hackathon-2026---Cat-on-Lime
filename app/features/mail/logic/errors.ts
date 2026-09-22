@@ -1,9 +1,9 @@
 /**
- * mail 模块的错误分类（api/params.ts 按类型映射 HTTP 状态码，见 PHASE2_SPEC 第 1 节）。
- * 显式设置 name：MCP/请求错误映射按稳定 name 匹配（见 lib/shared/request-errors.ts）。
+ * Error classification for the mail module (api/params.ts maps these to HTTP status codes by type, see PHASE2_SPEC section 1).
+ * name is set explicitly: MCP/request error mapping matches on the stable name (see lib/shared/request-errors.ts).
  */
 
-/** 请求参数不合法（缺字段、格式不对、目标不存在）→ HTTP 400 */
+/** Invalid request parameters (missing field, wrong format, target doesn't exist) -> HTTP 400 */
 export class MailRequestError extends Error {
   constructor(message: string) {
     super(message);
@@ -11,7 +11,7 @@ export class MailRequestError extends Error {
   }
 }
 
-/** 目标资源不存在（比如要停用的项目 id 查无此行）→ HTTP 404；继承 MailRequestError 以复用上层 catch */
+/** Target resource doesn't exist (e.g. no row found for the project id to deactivate) -> HTTP 404; extends MailRequestError to reuse the upstream catch */
 export class MailNotFoundError extends MailRequestError {
   constructor(message: string) {
     super(message);
@@ -19,7 +19,7 @@ export class MailNotFoundError extends MailRequestError {
   }
 }
 
-/** 邮件相关数据表读不到/写不了（缺 Supabase service key、表未建、连接失败）→ HTTP 503 */
+/** Mail-related data tables can't be read/written (missing Supabase service key, table not created, connection failure) -> HTTP 503 */
 export class MailStoreUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -27,7 +27,7 @@ export class MailStoreUnavailableError extends Error {
   }
 }
 
-/** Supabase 调用返回错误（表结构不对、网络失败等）→ HTTP 500 */
+/** A Supabase call returned an error (wrong table structure, network failure, etc.) -> HTTP 500 */
 export class MailDataError extends Error {
   constructor(message: string) {
     super(message);

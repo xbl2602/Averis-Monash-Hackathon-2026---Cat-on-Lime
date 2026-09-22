@@ -1,13 +1,13 @@
 /**
- * 加密模块自测（不需要真实 key：脚本自己生成临时主密钥，用完即弃）。
+ * Encryption module self-test (no real key needed: the script generates its own temporary master key and discards it when done).
  *
- * 用法：npm run test:crypto
+ * Usage: npm run test:crypto
  *
- * 覆盖 4 项：
- *   1. 加解密往返（含密文格式 v1.<iv>.<tag>.<cipher>）
- *   2. 篡改密文必须报错（AES-GCM 认证标签，防静默解出垃圾）
- *   3. 缺 ENCRYPTION_MASTER_KEY 时拒绝加密（安全默认）
- *   4. maskSecret 不包含完整明文、短值全打码
+ * Covers 4 cases:
+ *   1. Encrypt/decrypt round trip (including the ciphertext format v1.<iv>.<tag>.<cipher>)
+ *   2. Tampering with ciphertext must raise an error (AES-GCM auth tag, prevents silently decrypting garbage)
+ *   3. Encryption is refused when ENCRYPTION_MASTER_KEY is missing (secure default)
+ *   4. maskSecret never contains the full plaintext; short values are fully masked
  */
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -18,37 +18,37 @@ const PLAIN = "sk-test-abcd1234567890";
 function run(name, fn) {
   try {
     fn();
-    console.log(`  [通过] ${name}`);
+    console.log(`  [PASS] ${name}`);
   } catch (err) {
-    console.error(`  [失败] ${name}：${err instanceof Error ? err.message : err}`);
+    console.error(`  [FAIL] ${name}: ${err instanceof Error ? err.message : err}`);
     process.exitCode = 1;
   }
 }
 
-console.log("crypto-self-test：\n");
+console.log("crypto-self-test:\n");
 
-run("加解密往返", () => {
+run("encrypt/decrypt round trip", () => {
   process.env.ENCRYPTION_MASTER_KEY = randomBytes(32).toString("base64");
   const cipher = encryptSecret(PLAIN);
-  assert.match(cipher, /^v1\./, "密文应带 v1. 版本前缀");
-  assert.notEqual(cipher, PLAIN, "密文不能等于明文");
-  assert.ok(!cipher.includes(PLAIN), "密文不应包含明文");
-  assert.equal(decryptSecret(cipher), PLAIN, "解密结果应还原明文");
+  assert.match(cipher, /^v1\./, "Ciphertext should carry the v1. version prefix");
+  assert.notEqual(cipher, PLAIN, "Ciphertext must not equal the plaintext");
+  assert.ok(!cipher.includes(PLAIN), "Ciphertext should not contain the plaintext");
+  assert.equal(decryptSecret(cipher), PLAIN, "Decryption should restore the original plaintext");
 });
 
-run("篡改密文必须报错", () => {
+run("tampered ciphertext must raise an error", () => {
   process.env.ENCRYPTION_MASTER_KEY = randomBytes(32).toString("base64");
   const cipher = encryptSecret(PLAIN);
   const parts = cipher.split(".");
-  // 解出密文字节后翻转 1 bit 再编码回去：保证真的改了字节
-  // （直接翻 base64 最后一个字符不可靠：它可能只编码了填充位，解码结果不变）
+  // Decode the ciphertext bytes, flip 1 bit, then re-encode: this guarantees a byte actually changed
+  // (flipping the last base64 character directly is unreliable: it may only encode padding bits, leaving the decoded result unchanged)
   const bytes = Buffer.from(parts[3], "base64");
   bytes[0] ^= 0x01;
   const tampered = [...parts.slice(0, 3), bytes.toString("base64")].join(".");
   assert.throws(() => decryptSecret(tampered), /解密失败/);
 });
 
-run("缺 ENCRYPTION_MASTER_KEY 时拒绝加密", () => {
+run("encryption is refused when ENCRYPTION_MASTER_KEY is missing", () => {
   delete process.env.ENCRYPTION_MASTER_KEY;
   assert.throws(
     () => encryptSecret(PLAIN),
@@ -56,14 +56,14 @@ run("缺 ENCRYPTION_MASTER_KEY 时拒绝加密", () => {
   );
 });
 
-run("maskSecret 不泄露明文", () => {
+run("maskSecret does not leak the plaintext", () => {
   const masked = maskSecret(PLAIN);
-  assert.ok(!masked.includes(PLAIN), "掩码不应包含完整明文");
-  assert.equal(maskSecret("short"), "•••", "短值应全部打码");
+  assert.ok(!masked.includes(PLAIN), "The mask should not contain the full plaintext");
+  assert.equal(maskSecret("short"), "•••", "Short values should be fully masked");
 });
 
 if (process.exitCode === 1) {
-  console.error("\n存在失败项。");
+  console.error("\nThere are failing checks.");
 } else {
-  console.log("\n全部通过。");
+  console.log("\nAll passed.");
 }

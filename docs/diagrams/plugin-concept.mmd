@@ -1,8 +1,8 @@
-%% 源码：README Architecture 节"一切皆插件"概念图 + docs/diagrams/plugin-concept.png。
-%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/plugin-concept.mmd -o docs/diagrams/plugin-concept.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% 例证数字见 caption（config/mail/import/results/review/sandbox 六次新建文件夹接入）。
+%% Source: the README Architecture section "everything is a plugin" concept diagram + docs/diagrams/plugin-concept.png.
+%% Re-render command (from repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/plugin-concept.mmd -o docs/diagrams/plugin-concept.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% See the caption for supporting numbers (six new folders added for config/mail/import/results/review/sandbox).
 flowchart TB
-    T["入口薄<br/>Web / REST / MCP 只做参数适配"]
-    F["插件肥<br/>每个功能自带 logic"]
-    S["核心小<br/>只放跨模块共享"]
+    T["Thin entry points<br/>Web / REST / MCP only adapt parameters"]
+    F["Fat plugins<br/>each feature carries its own logic"]
+    S["Small core<br/>only holds cross-module shared code"]
     T --> F --> S

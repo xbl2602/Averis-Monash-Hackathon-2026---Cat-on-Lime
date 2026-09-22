@@ -1,12 +1,15 @@
 /**
- * 读取官方提供的样例邮件数据（本地静态文件版，对应 data/sample/）。
- * 这是给三个 feature 模块共用的基础设施，不是业务逻辑，所以放在 /lib/shared。
- * 如果以后要换成官方 Docker API 版本（见 data/sample/README.md 里的 HTTP 用法），
- * 只需要改这一个文件，其他模块不用动。
+ * Reads the official sample email data (local static-file version, corresponding to
+ * data/sample/). This is shared infrastructure used by all three feature modules, not
+ * business logic, so it lives in /lib/shared.
+ * If we switch to the official Docker API version later (see the HTTP usage in
+ * data/sample/README.md), only this one file needs to change — no other module needs to be
+ * touched.
  *
- * 安全约定（防路径穿越）：所有对外部传入路径的读取都先过 resolveInside()——
- * 只允许 data/sample 目录内的相对路径，跨盘/UNC/`..` 一律抛 SampleDataPathError；
- * 文件不存在时抛 SampleNotFoundError（不把服务器的绝对路径带出去）。
+ * Security convention (path-traversal prevention): every read of an externally supplied path
+ * first goes through resolveInside() — only relative paths inside the data/sample directory
+ * are allowed; anything that crosses drives/UNC/uses `..` always throws SampleDataPathError;
+ * a file that doesn't exist throws SampleNotFoundError (without leaking the server's absolute path).
  */
 import { readFile, readdir } from "fs/promises";
 import path from "path";
@@ -14,7 +17,7 @@ import type { InboxEmail } from "./types";
 
 const SAMPLE_DATA_DIR = path.join(process.cwd(), "data", "sample");
 
-/** 路径不合法（不在样例目录内 / 试图跳出 / 跨盘） */
+/** The path is invalid (not inside the sample directory / attempts to escape it / crosses drives) */
 export class SampleDataPathError extends Error {
   constructor(message: string) {
     super(message);
@@ -22,7 +25,7 @@ export class SampleDataPathError extends Error {
   }
 }
 
-/** 样例数据里找不到对应文件（邮件/附件） */
+/** The corresponding file (email/attachment) can't be found in the sample data */
 export class SampleNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -30,7 +33,7 @@ export class SampleNotFoundError extends Error {
   }
 }
 
-/** email_id 白名单：只允许字母/数字/下划线/连字符（样例数据里就是这么命名的） */
+/** email_id allowlist: only letters/digits/underscore/hyphen are allowed (that's how the sample data is named) */
 const EMAIL_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export async function listSampleEmails(): Promise<InboxEmail[]> {
@@ -46,8 +49,9 @@ export async function listSampleEmails(): Promise<InboxEmail[]> {
 }
 
 /**
- * 只列 inbox 目录里的文件名（去掉 .json），不解析 JSON。
- * 批量入口 / 导出用它们拿"官方样例清单"（分母锚定），比全量解析一遍便宜得多。
+ * Lists only the filenames in the inbox directory (with .json stripped), without parsing the JSON.
+ * Used by the batch entry point / export to get the "official sample list" (used as the
+ * denominator anchor) — much cheaper than parsing everything.
  */
 export async function listSampleEmailIds(): Promise<string[]> {
   const inboxDir = path.join(SAMPLE_DATA_DIR, "inbox");
@@ -58,32 +62,34 @@ export async function listSampleEmailIds(): Promise<string[]> {
 export async function getSampleEmail(emailId: string): Promise<InboxEmail> {
   if (!EMAIL_ID_PATTERN.test(emailId)) {
     throw new SampleDataPathError(
-      "email_id 不合法：只允许字母、数字、下划线、连字符（例如 email_004）"
+      "Invalid email_id: only letters, digits, underscores, and hyphens are allowed (e.g. email_004)"
     );
   }
   const filePath = resolveInside(SAMPLE_DATA_DIR, path.join("inbox", `${emailId}.json`));
-  const raw = await readTextOrNotFound(filePath, `找不到样例邮件 ${emailId}`);
+  const raw = await readTextOrNotFound(filePath, `Could not find sample email ${emailId}`);
   return JSON.parse(raw) as InboxEmail;
 }
 
-// attachmentPath 就是 email.attachments 里的字符串，例如 "attachments/email_004_SI.txt"
+// attachmentPath is exactly the string found in email.attachments, e.g. "attachments/email_004_SI.txt"
 export async function readSampleAttachmentText(attachmentPath: string): Promise<string> {
   const filePath = resolveInside(SAMPLE_DATA_DIR, attachmentPath);
-  return readTextOrNotFound(filePath, `找不到附件 ${attachmentPath}`);
+  return readTextOrNotFound(filePath, `Could not find attachment ${attachmentPath}`);
 }
 
-// 附件原始内容（pdf/xlsx/docx 需要 Buffer 交给各自的解析器，不能按文本读）
+// The attachment's raw content (pdf/xlsx/docx need a Buffer to hand to their respective parsers, they can't be read as text)
 export async function readSampleAttachmentBuffer(attachmentPath: string): Promise<Buffer> {
   const filePath = resolveInside(SAMPLE_DATA_DIR, attachmentPath);
-  return readBufferOrNotFound(filePath, `找不到附件 ${attachmentPath}`);
+  return readBufferOrNotFound(filePath, `Could not find attachment ${attachmentPath}`);
 }
 
 /**
- * 把外部传入的相对路径解析到 baseDir 内部；不合法就抛 SampleDataPathError。
+ * Resolves an externally supplied relative path to somewhere inside baseDir; throws
+ * SampleDataPathError if it's invalid.
  *
- * 判定（2026-09-20 安全评审定的严格口径）：
- * - 解析结果必须在 baseDir 之内（path.relative 不以 ".." 开头、不是绝对路径）
- * - 解析结果的根（盘符 / UNC）必须与 baseDir 相同 → Windows 跨盘、`\\?\`、UNC 一律拒绝
+ * Rules (the strict criteria decided in the 2026-09-20 security review):
+ * - The resolved result must be inside baseDir (path.relative must not start with ".." and must not be absolute)
+ * - The resolved result's root (drive letter / UNC) must match baseDir's -> crossing Windows
+ *   drives, `\\?\`, or UNC paths are all rejected
  */
 function resolveInside(baseDir: string, relativePath: string): string {
   const resolved = path.resolve(baseDir, relativePath);
@@ -91,13 +97,13 @@ function resolveInside(baseDir: string, relativePath: string): string {
   const inside = rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
   if (!inside || !sameRoot(resolved, baseDir)) {
     throw new SampleDataPathError(
-      "路径不合法：只允许读取 data/sample 目录内的样例文件（相对路径）"
+      "Invalid path: only sample files (relative paths) inside the data/sample directory may be read"
     );
   }
   return resolved;
 }
 
-// path.parse(root) 在 win32 上挑出盘符/UNC 根；大小写不敏感比较（C:\ 与 c:\ 同根）
+// path.parse(root) picks out the drive letter/UNC root on win32; compared case-insensitively (C:\ and c:\ are the same root)
 function sameRoot(a: string, b: string): boolean {
   return path.parse(a).root.toLowerCase() === path.parse(b).root.toLowerCase();
 }

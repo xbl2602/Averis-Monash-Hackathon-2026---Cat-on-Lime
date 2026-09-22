@@ -1,14 +1,18 @@
 /**
- * 导出的唯一编排入口：按 scope 取数 → 按 format 序列化 → 返回文件内容。
- * HTTP 层只负责把 ExportDocument 变成带下载头的响应；MCP 层只负责把 content
- * 作为 text 返回（文件名/完整性元信息放在 _meta），两边都不重新拼内容。
+ * The single orchestration entry point for export: fetch data by scope -> serialize by format ->
+ * return file content. The HTTP layer is only responsible for turning an ExportDocument into a
+ * response with download headers; the MCP layer is only responsible for returning content as text
+ * (filename/completeness metadata goes in _meta) — neither layer re-assembles the content.
  *
- * 完整性判定（2026-09-20 安全评审的 fail-closed 口径）：
- * - 分母优先锚定"官方样例清单"（listSampleEmailIds，只 readdir、不解析 JSON）；
- *   读不到清单时降级用数据库总数，并强制 incomplete=true（expectedSource=db-fallback）
- * - 逐 key 求缺失集合；logic_version 与当前引擎版本不一致的结果行计入 stale
- * - 注意：这里**直接**从 @/lib/shared/inbox / versions 取数，不经过 sample-inputs，
- *   避免把附件解析依赖（mammoth/pdf-parse 等）拖进导出函数包（next.config 只带文件名清单）
+ * Completeness determination (fail-closed approach from the 2026-09-20 security review):
+ * - The denominator is anchored first to the "official sample list" (listSampleEmailIds, which only
+ *   does readdir, never parses JSON); if the list can't be read, fall back to the database total and
+ *   force incomplete=true (expectedSource=db-fallback)
+ * - Compute the missing set key by key; result rows whose logic_version doesn't match the current
+ *   engine version count as stale
+ * - Note: this fetches data **directly** from @/lib/shared/inbox / versions, bypassing sample-inputs,
+ *   to avoid dragging attachment-parsing dependencies (mammoth/pdf-parse etc.) into the export function
+ *   bundle (next.config only carries the filename list)
  */
 import { listSampleEmailIds } from "@/lib/shared/inbox";
 import { applyOverridesToSubmission } from "@/lib/shared/review/merge";
@@ -37,7 +41,7 @@ const MIME_TYPES: Record<ExportFormat, string> = {
   csv: "text/csv; charset=utf-8",
 };
 
-// 官方提交文件要"全部已处理的邮件"，不接受筛选；limit/offset 会被 listAllResults 忽略
+// The official submission file needs "all processed emails" with no filtering; limit/offset are ignored by listAllResults
 const ALL_RESULTS_QUERY: ResultQuery = { sortBy: "email_id", order: "asc", limit: 1, offset: 0 };
 
 export async function exportResults(request: ExportRequest): Promise<ExportDocument> {
@@ -60,7 +64,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
         ? describeConflictFilters(request.conflictQuery)
         : request.scope === "results"
           ? describeResultFilters(request.query)
-          : "（全量，无筛选）",
+          : "(full set, no filters)",
     stats,
     results,
     conflicts,
@@ -88,7 +92,7 @@ export async function exportResults(request: ExportRequest): Promise<ExportDocum
   };
 }
 
-/** 官方提交格式：{ email_id: EmailVerificationResult }，不带任何包装字段 */
+/** Official submission format: { email_id: EmailVerificationResult }, with no wrapper fields */
 async function buildSubmissionDocument(
   stats: StatsSummary,
   failedCount: number,
@@ -98,7 +102,7 @@ async function buildSubmissionDocument(
   const systemPayload: Record<string, EmailVerificationResult> = {};
 
   for (const row of rows) {
-    if (!row.category || !row.comparison_status) continue; // failed 行没有合法结果，跳过
+    if (!row.category || !row.comparison_status) continue; // Failed rows have no valid result, skip them
     systemPayload[row.email_id] = {
       category: row.category,
       status: row.comparison_status,
@@ -108,7 +112,7 @@ async function buildSubmissionDocument(
     };
   }
 
-  // 人工复核覆盖只套用在 submission 导出上（§5.3）；results/conflicts 仍展示系统原值
+  // Manual review overrides are applied only to the submission export (§5.3); results/conflicts still show the system's original values
   const { payload, reviewPending, reviewDeferred } = await applyOverridesToSubmission(systemPayload);
 
   const itemCount = Object.keys(payload).length;
@@ -118,7 +122,7 @@ async function buildSubmissionDocument(
   const present = new Set(Object.keys(payload));
   const missingIds =
     expected.source === "sample" ? expected.ids.filter((id) => !present.has(id)) : [];
-  // 只有"有合法结果"的行才算 stale：pending 行（没结果）算缺失、failed 行由 failedCount 覆盖
+  // Only rows with a valid result count as stale: pending rows (no result) count as missing, and failed rows are covered by failedCount
   const staleIds = rows
     .filter(
       (row) =>
@@ -156,11 +160,12 @@ async function buildSubmissionDocument(
 }
 
 /**
- * 提交文件的合法性校验（2026-09-21 P0-4，规则来自官方 data/sample/README.md）：
- * - MISMATCH：defect_fields 非空、has_defect 为 true、review_reason 为空
- * - NEEDS_REVIEW：review_reason 有值（官方四类之一）、defect_fields 为空（不确定不许当缺陷导出）
- * - OK：defect_fields 为空、has_defect 为 false、review_reason 为空
- * 违反任一条的行进 invalidIds：导出不拦截，但 incomplete 强制为 true + 专用响应头，绝不悄悄放过。
+ * Validity checks for the submission file (2026-09-21 P0-4, rules from the official data/sample/README.md):
+ * - MISMATCH: defect_fields non-empty, has_defect true, review_reason null
+ * - NEEDS_REVIEW: review_reason set (one of the four official reasons), defect_fields empty (uncertainty must not be exported as a defect)
+ * - OK: defect_fields empty, has_defect false, review_reason null
+ * Rows violating any of these go into invalidIds: the export isn't blocked, but incomplete is forced
+ * true plus a dedicated response header — never let it slip through silently.
  */
 function findInvalidSubmissionIds(payload: Record<string, EmailVerificationResult>): string[] {
   const invalid: string[] = [];
@@ -184,17 +189,17 @@ interface ExpectedSampleIds {
   ids: string[];
 }
 
-/** 分母锚定官方样例清单；清单读不到/为空时降级数据库总数（fail-closed，见文件头注释） */
+/** The denominator is anchored to the official sample list; falls back to the database total if the list can't be read/is empty (fail-closed, see file header comment) */
 async function resolveExpectedSampleIds(stats: StatsSummary): Promise<ExpectedSampleIds> {
   try {
     const ids = await listSampleEmailIds();
     if (ids.length > 0) {
       return { source: "sample", total: ids.length, ids };
     }
-    console.warn("[results/export] 样例清单为空，降级用数据库总数（incomplete 强制为 true）");
+    console.warn("[results/export] Sample list is empty, falling back to the database total (incomplete forced to true)");
   } catch (err) {
     console.warn(
-      "[results/export] 读取样例清单失败，降级用数据库总数（incomplete 强制为 true）：",
+      "[results/export] Failed to read the sample list, falling back to the database total (incomplete forced to true):",
       err instanceof Error ? err.message : err
     );
   }

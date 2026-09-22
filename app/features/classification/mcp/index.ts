@@ -5,21 +5,23 @@ import { LLM_PROVIDER_IDS, type LLMProvider } from "@/lib/llm";
 import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 
 /**
- * 这个模块要暴露成 MCP tool 的定义，被 /app/core/mcp-server 汇总注册。
- * 只是"定义"，不在这里启动 server（见 CLAUDE.md "产品形态要求"）。
- * 注解硬约定：只读 tool 必须显式声明 readOnlyHint: true（见 app/core/mcp-server/tools.ts）。
+ * This module's MCP tool definitions, aggregated and registered by /app/core/mcp-server.
+ * This file only provides the "definitions" — the server is not started here (see CLAUDE.md
+ * "product form requirements").
+ * Hard rule for annotations: a read-only tool must explicitly declare readOnlyHint: true
+ * (see app/core/mcp-server/tools.ts).
  */
 export const classificationMcpTool = {
   name: "classify_email",
   description:
-    "判断一封航运相关邮件属于 BL_COMPARISON / SI_REQUEST / INVOICE_QUERY / GENERAL / SPAM 中的哪一类",
+    "Determines which category a shipping-related email belongs to: BL_COMPARISON / SI_REQUEST / INVOICE_QUERY / GENERAL / SPAM",
   inputSchema: {
-    email_id: z.string().describe("样例数据里的邮件ID，例如 email_004"),
+    email_id: z.string().describe("The email ID in the sample data, e.g. email_004"),
     provider: z
       .enum(LLM_PROVIDER_IDS)
       .optional()
       .describe(
-        "用哪个模型；不传 = 混合引擎（规则 → Jev → Gemini 文本兜底），选 jev 时会额外返回置信度"
+        "Which model to use; omit for the hybrid engine (rules → Jev → Gemini text fallback), choosing jev also returns a confidence score"
       ),
   },
   annotations: {
@@ -38,5 +40,5 @@ export const classificationMcpTool = {
   },
 };
 
-// 人工复核闭环（P1-1）：队列目前只覆盖"全模型失败降级"，见 docs/TODO.md 的实现记录
-export const classificationReviewMcpTools = makeReviewMcpTools("classification", "分类");
+// Manual review loop (P1-1): the queue currently only covers "all-model failure fallback," see docs/TODO.md for implementation notes
+export const classificationReviewMcpTools = makeReviewMcpTools("classification", "classification");

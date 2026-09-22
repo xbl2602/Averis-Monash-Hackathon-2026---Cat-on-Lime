@@ -1,19 +1,19 @@
 /**
- * MCP 握手冒烟测试（本地和线上用同一个脚本，只换 URL）。
+ * MCP handshake smoke test (the same script is used locally and in production, only the URL changes).
  *
- * 用法：
- *   node scripts/mcp-smoke.mjs                                  # 默认测本地 http://localhost:3000/core/mcp-server
+ * Usage:
+ *   node scripts/mcp-smoke.mjs                                  # defaults to testing local http://localhost:3000/core/mcp-server
  *   node scripts/mcp-smoke.mjs http://localhost:3000/core/mcp-server
  *   node scripts/mcp-smoke.mjs https://hackathonaveris.vercel.app/core/mcp-server
  *
- * 做四步，任何一步失败就退出码 1：
- *   1. initialize（协议版本/服务名）
- *   2. notifications/initialized（规范要求的通知，无响应体）
- *   3. tools/list（应列出 11 个 tool）
- *   4. tools/call get_stats（真实调用一个 tool，验证 handler 和数据库链路）
+ * Runs four steps, exiting with code 1 if any step fails:
+ *   1. initialize (protocol version/server name)
+ *   2. notifications/initialized (the notification required by the spec, no response body)
+ *   3. tools/list (should list 11 tools)
+ *   4. tools/call get_stats (a real call to a tool, to verify the handler and the database path)
  *
- * 服务器是无状态 Streamable HTTP + JSON 响应模式（见 app/core/mcp-server/route.ts），
- * 所以每一步都是独立的 POST，不需要带 session id。
+ * The server is a stateless Streamable HTTP + JSON response mode (see app/core/mcp-server/route.ts),
+ * so every step is an independent POST and doesn't need a session id.
  */
 
 const DEFAULT_URL = "http://localhost:3000/core/mcp-server";
@@ -41,7 +41,7 @@ async function post(body) {
   const text = await res.text();
   const contentType = res.headers.get("content-type") || "";
 
-  // JSON 响应模式直接是 JSON；如果以后改成 SSE 模式，这里做个最小兼容
+  // JSON response mode returns plain JSON directly; if this is switched to SSE mode later, this is a minimal compatibility shim
   let json = null;
   if (text) {
     if (contentType.includes("text/event-stream")) {
@@ -54,7 +54,7 @@ async function post(body) {
       try {
         json = JSON.parse(text);
       } catch {
-        throw new Error(`响应不是合法 JSON（HTTP ${res.status}）：${text.slice(0, 200)}`);
+        throw new Error(`Response is not valid JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
       }
     }
   }
@@ -64,10 +64,10 @@ async function post(body) {
 
 function expectResult(response, step) {
   if (!response.json) {
-    throw new Error(`${step} 没有返回内容（HTTP ${response.status}）`);
+    throw new Error(`${step} returned no content (HTTP ${response.status})`);
   }
   if (response.json.error) {
-    throw new Error(`${step} 返回 JSON-RPC 错误：${response.json.error.message}`);
+    throw new Error(`${step} returned a JSON-RPC error: ${response.json.error.message}`);
   }
   if (response.status !== 200) {
     throw new Error(`${step} HTTP ${response.status}`);
@@ -76,7 +76,7 @@ function expectResult(response, step) {
 }
 
 async function main() {
-  console.log(`MCP 冒烟测试目标：${url}\n`);
+  console.log(`MCP smoke test target: ${url}\n`);
 
   // 1. initialize
   const init = expectResult(
@@ -93,15 +93,15 @@ async function main() {
     "initialize"
   );
   console.log(
-    `[1/4] initialize OK（协议 ${init.protocolVersion}，服务 ${init.serverInfo?.name} ${init.serverInfo?.version}）`
+    `[1/4] initialize OK (protocol ${init.protocolVersion}, server ${init.serverInfo?.name} ${init.serverInfo?.version})`
   );
 
-  // 2. initialized 通知（规范要求，服务器返回 202）
+  // 2. initialized notification (required by the spec; the server returns 202)
   const notified = await post({ jsonrpc: "2.0", method: "notifications/initialized" });
   if (notified.status !== 202 && notified.status !== 200) {
-    throw new Error(`notifications/initialized 期望 202/200，收到 HTTP ${notified.status}`);
+    throw new Error(`notifications/initialized expected 202/200, got HTTP ${notified.status}`);
   }
-  console.log(`[2/4] notifications/initialized OK（HTTP ${notified.status}）`);
+  console.log(`[2/4] notifications/initialized OK (HTTP ${notified.status})`);
 
   // 3. tools/list
   const list = expectResult(
@@ -109,9 +109,9 @@ async function main() {
     "tools/list"
   );
   const names = (list.tools || []).map((tool) => tool.name);
-  console.log(`[3/4] tools/list OK（${names.length} 个：${names.join(", ")}）`);
+  console.log(`[3/4] tools/list OK (${names.length} total: ${names.join(", ")})`);
 
-  // 4. 真实调用一个只读 tool，验证 logic/数据库链路
+  // 4. a real call to a read-only tool, to verify the logic/database path
   const call = expectResult(
     await post({
       jsonrpc: "2.0",
@@ -123,21 +123,21 @@ async function main() {
   );
   const text = call.content?.find((item) => item.type === "text")?.text;
   if (call.isError) {
-    throw new Error(`get_stats 执行失败：${String(text).slice(0, 200)}`);
+    throw new Error(`get_stats execution failed: ${String(text).slice(0, 200)}`);
   }
-  let summary = "(无法解析返回文本)";
+  let summary = "(could not parse returned text)";
   try {
     const stats = JSON.parse(text);
     summary = `total_emails=${stats.total_emails} processed=${stats.processed} pending=${stats.pending} failed=${stats.failed}`;
   } catch {
     summary = String(text).slice(0, 120);
   }
-  console.log(`[4/4] tools/call get_stats OK（${summary}）`);
+  console.log(`[4/4] tools/call get_stats OK (${summary})`);
 
-  console.log("\n握手全部通过。");
+  console.log("\nAll handshake steps passed.");
 }
 
 main().catch((err) => {
-  console.error(`\n握手失败：${err instanceof Error ? err.message : String(err)}`);
+  console.error(`\nHandshake failed: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

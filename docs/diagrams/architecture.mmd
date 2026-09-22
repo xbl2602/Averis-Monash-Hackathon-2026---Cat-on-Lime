@@ -1,13 +1,13 @@
-%% 源码：README 架构全景图 + docs/diagrams/architecture.png 都从这里生成。
-%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/architecture.mmd -o docs/diagrams/architecture.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% block 网格写法：columns 锁死 3 列，天然 1:1，不靠 direction 指令（渲染器会忽略它）。
+%% Source: the README architecture overview diagram + docs/diagrams/architecture.png are both generated from this file.
+%% Re-render command (from repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/architecture.mmd -o docs/diagrams/architecture.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Block grid approach: `columns` locks in 3 columns for a natural 1:1 ratio, without relying on the `direction` directive (the renderer ignores it).
 block-beta
   columns 3
   UI["Web UI"] REST["REST API"] MCP["MCP · 28 tools"]
   CLS["classification"] EXT["extraction"] CMP["comparison"]
-  PIPE["pipeline"] RES["results"] REV["复核闭环"]
+  PIPE["pipeline"] RES["results"] REV["review loop"]
   SB["sandbox"] CFG["config·mail·import"] space
-  LIB["lib/ 公共区：LLM 适配 · 指纹缓存 · 有界并发 · 加密写保护"]:3
+  LIB["lib/ shared area: LLM adapters · fingerprint cache · bounded concurrency · encrypted write protection"]:3
   DB[("Supabase")]:3
   UI --> CLS
   REST --> EXT

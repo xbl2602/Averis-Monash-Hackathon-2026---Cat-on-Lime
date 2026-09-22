@@ -1,16 +1,16 @@
 /**
- * supabase_projects 表的读写（PHASE2_SPEC 第 4.2 节）：多 Supabase 项目的增改、列出、切换启用。
+ * Read/write for the supabase_projects table (PHASE2_SPEC section 4.2): adding/editing, listing, and switching the active project among multiple Supabase projects.
  *
- * 约定（见 SPEC 第 1 / 6 节）：
- * - service_key 用 encryptSecret 加密存储，回显一律 maskSecret 掩码，永不回明文
- * - 写入用 upsert（冲突键 id），不做"先查存不存在再写"（并发安全，见 CLAUDE.md）
- * - 切换启用用两次 update（先清其他、再置目标），并发交给数据库唯一索引兜底
+ * Conventions (see SPEC sections 1 / 6):
+ * - service_key is stored encrypted via encryptSecret, and is always echoed back masked via maskSecret, never in plaintext
+ * - Writes use upsert (conflict key id), without "check existence first, then write" (concurrency-safe, see CLAUDE.md)
+ * - Switching the active project uses two updates (clear others first, then set the target), with the database's unique index as the concurrency backstop
  */
 import { decryptSecret, encryptSecret, maskSecret } from "@/lib/shared/crypto";
 import { MailDataError, MailNotFoundError, MailRequestError } from "./errors";
 import { getMailDbClient } from "./store";
 
-/** 给界面回显的项目形态：service_key 是掩码，has_service_key 表示库里到底有没有值 */
+/** The project shape echoed back to the UI: service_key is masked, has_service_key indicates whether the database actually has a value */
 export interface SupabaseProjectView {
   id: string;
   label: string;
@@ -43,19 +43,19 @@ export async function listSupabaseProjects(): Promise<SupabaseProjectView[]> {
     .order("is_active", { ascending: false })
     .order("label", { ascending: true });
   if (error) {
-    throw new MailDataError(`读取 Supabase 项目列表失败：${error.message}（确认 supabase_projects 表已创建，见 PHASE2_SPEC 4.1）`);
+    throw new MailDataError(`Failed to read the Supabase project list: ${error.message} (confirm the supabase_projects table has been created, see PHASE2_SPEC 4.1)`);
   }
   return ((data ?? []) as SupabaseProjectRow[]).map(toProjectView);
 }
 
 export interface SaveSupabaseProjectInput {
-  /** 不传 = 新增；传了 = 更新（upsert，id 不存在时会插入该 id 的新行） */
+  /** Omit = create new; passed = update (upsert; if the id doesn't exist, a new row with that id is inserted) */
   id?: string;
   label: string;
   project_url: string;
-  /** 公开信息，明文存；传空字符串 = 清空 */
+  /** Public info, stored in plaintext; passing an empty string = clear it */
   anon_key?: string;
-  /** 密文存；不传或传空 = 不改动，传回掩码 = 用户没改这个字段 */
+  /** Stored encrypted; omitted or empty = leave unchanged, passing the mask back = the user didn't change this field */
   service_key?: string;
 }
 
@@ -69,7 +69,7 @@ export async function saveSupabaseProject(input: SaveSupabaseProjectInput): Prom
   if (input.id) row.id = input.id;
   if (input.anon_key !== undefined) row.anon_key = input.anon_key === "" ? null : input.anon_key;
 
-  // 掩码原样回传 = 用户没改这个字段：跳过，避免把掩码存成新的"密钥"（同 config-store 约定）
+  // The mask being echoed back unchanged = the user didn't change this field: skip it, to avoid storing the mask itself as the new "secret" (same convention as config-store)
   if (input.service_key && !isMaskedSecret(input.service_key)) {
     row.service_key = encryptSecret(input.service_key);
   }
@@ -79,34 +79,35 @@ export async function saveSupabaseProject(input: SaveSupabaseProjectInput): Prom
     .upsert(row, { onConflict: "id" })
     .select(PROJECT_COLUMNS)
     .single();
-  if (error) throw new MailDataError(`保存 Supabase 项目失败：${error.message}`);
+  if (error) throw new MailDataError(`Failed to save the Supabase project: ${error.message}`);
   return toProjectView(data as SupabaseProjectRow);
 }
 
 export async function activateSupabaseProject(id: string): Promise<SupabaseProjectView> {
   const client = getMailDbClient();
 
-  // 先确认目标存在：本系统没有删除项目的接口，这行不会被并发删掉，
-  // 这样能避免"目标 id 打错时把当前启用项目清空、却什么也没启用"的副作用
+  // Confirm the target exists first: this system has no delete-project endpoint, so this row can't be
+  // deleted concurrently — this avoids the side effect of "a typo'd target id clearing the current
+  // active project while activating nothing"
   const { data: existing, error: existsError } = await client
     .from("supabase_projects")
     .select("id")
     .eq("id", id)
     .maybeSingle();
-  if (existsError) throw new MailDataError(`查询要启用的项目失败：${existsError.message}`);
-  if (!existing) throw new MailRequestError(`要启用的项目不存在：${id}`);
+  if (existsError) throw new MailDataError(`Failed to query the project to activate: ${existsError.message}`);
+  if (!existing) throw new MailRequestError(`The project to activate doesn't exist: ${id}`);
 
   const now = new Date().toISOString();
 
-  // 先把其他启用项全部置 false（不先读当前启用的是谁，直接按条件写）
+  // First set all other active projects to false (without reading who's currently active, write directly by condition)
   const { error: clearError } = await client
     .from("supabase_projects")
     .update({ is_active: false, updated_at: now })
     .eq("is_active", true)
     .neq("id", id);
-  if (clearError) throw new MailDataError(`切换启用项目失败（清理旧启用项）：${clearError.message}`);
+  if (clearError) throw new MailDataError(`Failed to switch the active project (while clearing the old one): ${clearError.message}`);
 
-  // 再把目标置 true；唯一索引保证同一时刻最多一条 true
+  // Then set the target to true; the unique index guarantees at most one true at any given moment
   const { data, error } = await client
     .from("supabase_projects")
     .update({ is_active: true, updated_at: now })
@@ -114,31 +115,32 @@ export async function activateSupabaseProject(id: string): Promise<SupabaseProje
     .select(PROJECT_COLUMNS)
     .maybeSingle();
   if (error) {
-    // 23505 = 唯一索引冲突：另一个激活操作刚好并发插入，如实提示重试，不静默重跑
+    // 23505 = unique index conflict: another activation happened to insert concurrently — report it honestly and ask for a retry, don't silently re-run
     if (error.code === "23505") {
-      throw new MailRequestError("另一个启用操作刚刚发生，请稍后重试");
+      throw new MailRequestError("Another activation just happened, please try again shortly");
     }
-    throw new MailDataError(`切换启用项目失败：${error.message}`);
+    throw new MailDataError(`Failed to switch the active project: ${error.message}`);
   }
-  if (!data) throw new MailRequestError(`要启用的项目不存在：${id}`);
+  if (!data) throw new MailRequestError(`The project to activate doesn't exist: ${id}`);
   return toProjectView(data as SupabaseProjectRow);
 }
 
 export interface DeactivateSupabaseProjectsResult {
-  /** 本次实际从启用变为停用的项目数（本来就没启用时为 0） */
+  /** Number of projects actually switched from active to inactive this time (0 if none were active to begin with) */
   deactivated: number;
-  /** 本次被停用的项目列表（与 GET 列表相同的掩码回显） */
+  /** The list of projects deactivated this time (same masked echo as the GET list) */
   items: SupabaseProjectView[];
 }
 
 /**
- * 停用启用中的 Supabase 项目（可运维性恢复通道）：
- * - 传 id：只停用该项目；该项目不存在 → MailNotFoundError（HTTP 404）
- * - 不传 id：停用当前所有 is_active=true 的项目（"清空启用，回到环境变量"）
+ * Deactivate the currently active Supabase project(s) (an operability recovery channel):
+ * - Passing id: only deactivates that project; if it doesn't exist -> MailNotFoundError (HTTP 404)
+ * - Omitting id: deactivates all currently is_active=true projects ("clear the active one, fall back to environment variables")
  *
- * 并发约定：写操作是条件 update（is_active=true [且 id=...]），不在代码里先读后写；
- * 预先按 id 查询仅为给出可读 404，不作为是否写入的依据（唯一索引只约束"最多一个 true"，
- * 置 false 不会触发冲突）。
+ * Concurrency convention: the write is a conditional update (is_active=true [and id=...]), never
+ * "read then write" in code; the preliminary lookup by id is only there to give a readable 404, not
+ * to decide whether to write (the unique index only constrains "at most one true" — setting to false
+ * never triggers a conflict).
  */
 export async function deactivateSupabaseProjects(id?: string): Promise<DeactivateSupabaseProjectsResult> {
   const client = getMailDbClient();
@@ -149,8 +151,8 @@ export async function deactivateSupabaseProjects(id?: string): Promise<Deactivat
       .select("id")
       .eq("id", id)
       .maybeSingle();
-    if (existsError) throw new MailDataError(`查询要停用的项目失败：${existsError.message}`);
-    if (!existing) throw new MailNotFoundError(`要停用的项目不存在：${id}`);
+    if (existsError) throw new MailDataError(`Failed to query the project to deactivate: ${existsError.message}`);
+    if (!existing) throw new MailNotFoundError(`The project to deactivate doesn't exist: ${id}`);
   }
 
   let query = client
@@ -160,16 +162,16 @@ export async function deactivateSupabaseProjects(id?: string): Promise<Deactivat
   if (id) query = query.eq("id", id);
 
   const { data, error } = await query.select(PROJECT_COLUMNS);
-  if (error) throw new MailDataError(`停用项目失败：${error.message}`);
+  if (error) throw new MailDataError(`Failed to deactivate the project: ${error.message}`);
   const items = ((data ?? []) as SupabaseProjectRow[]).map(toProjectView);
   return { deactivated: items.length, items };
 }
 
-/** 校验并整理新增/更新项目的请求体（api 层只负责解析 JSON，格式规则在这里） */
+/** Validates and normalizes the request body for creating/updating a project (the api layer only parses JSON; format rules live here) */
 export function normalizeSaveProjectInput(body: Record<string, unknown>): SaveSupabaseProjectInput {
   const id = optionalString(body.id, "id");
   if (id && !UUID_PATTERN.test(id)) {
-    throw new MailRequestError("id 必须是合法的 UUID（不传表示新增项目）");
+    throw new MailRequestError("id must be a valid UUID (omit it to create a new project)");
   }
   const label = requiredString(body.label, "label");
   const projectUrl = stripTrailingSlashes(requiredString(body.project_url, "project_url"));
@@ -183,28 +185,29 @@ export function normalizeSaveProjectInput(body: Record<string, unknown>): SaveSu
   };
 }
 
-/** 校验切换启用项目的请求体 */
+/** Validates the request body for switching the active project */
 export function normalizeActivateInput(body: Record<string, unknown>): { id: string } {
   const id = requiredString(body.id, "id");
   if (!UUID_PATTERN.test(id)) {
-    throw new MailRequestError("id 必须是合法的 UUID");
+    throw new MailRequestError("id must be a valid UUID");
   }
   return { id };
 }
 
-/** 校验停用项目的请求体：id 可省略（不传 = 停用所有启用项目），传了必须是合法 UUID */
+/** Validates the request body for deactivating a project: id can be omitted (omit = deactivate all active projects), and if given must be a valid UUID */
 export function normalizeDeactivateInput(body: Record<string, unknown>): { id?: string } {
   const raw = optionalString(body.id, "id");
-  // 空字符串是 GUI"字段存在但没选值"的常见序列化结果；如果静默当成"不传"，
-  // 一个 UI 小失误就会把全部项目停掉——明确报错，让调用方自己决定是省略 id 还是传 UUID
+  // An empty string is a common serialization result of a GUI "field present but no value selected";
+  // if this were silently treated as "omitted", a small UI slip would deactivate every project —
+  // so error explicitly and let the caller decide whether to omit id or pass a UUID
   if (raw !== undefined && raw === "") {
     throw new MailRequestError(
-      "id 不能是空字符串：要停用全部启用项目请省略 id 字段，要停用单个项目请传合法 UUID"
+      "id cannot be an empty string: to deactivate all active projects, omit the id field; to deactivate a single project, pass a valid UUID"
     );
   }
   const id = raw || undefined;
   if (id && !UUID_PATTERN.test(id)) {
-    throw new MailRequestError("id 必须是合法的 UUID（不传表示停用所有启用项目）");
+    throw new MailRequestError("id must be a valid UUID (omit it to deactivate all active projects)");
   }
   return { id };
 }
@@ -222,7 +225,7 @@ function toProjectView(row: SupabaseProjectRow): SupabaseProjectView {
   };
 }
 
-// 库里的 service_key 是密文：解密后打码。解不开（换了主密钥/密文坏了）显示占位，不让整个列表接口失败
+// The service_key in the database is ciphertext: decrypt it, then mask it. If it can't be decrypted (master key rotated / corrupted ciphertext), show a placeholder instead of failing the whole list endpoint
 function maskStoredSecret(cipher: string): string {
   try {
     return maskSecret(decryptSecret(cipher));
@@ -237,14 +240,14 @@ function isMaskedSecret(value: string): boolean {
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new MailRequestError(`${field} 必须是非空字符串`);
+    throw new MailRequestError(`${field} must be a non-empty string`);
   }
   return value.trim();
 }
 
 function optionalString(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") throw new MailRequestError(`${field} 必须是字符串`);
+  if (typeof value !== "string") throw new MailRequestError(`${field} must be a string`);
   return value.trim();
 }
 
@@ -257,9 +260,9 @@ function assertHttpUrl(url: string): void {
   try {
     parsed = new URL(url);
   } catch {
-    throw new MailRequestError("project_url 不是合法的网址（形如 https://xxxx.supabase.co）");
+    throw new MailRequestError("project_url is not a valid URL (should look like https://xxxx.supabase.co)");
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new MailRequestError("project_url 必须以 http:// 或 https:// 开头");
+    throw new MailRequestError("project_url must start with http:// or https://");
   }
 }

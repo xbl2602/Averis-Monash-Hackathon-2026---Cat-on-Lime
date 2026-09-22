@@ -1,8 +1,8 @@
--- phase3：字段级出处落库（2026-09-21，P1-7，见 DECISION_LOG 决策 29）
--- 已应用到 Supabase 项目 rapuvaalzlrsjodjwqtw（migration: add_evidence_columns_to_verification_results）。
--- 作用：verification_results 增加两个 JSONB 列，存规则解析命中的行号+原句（LLM 兜底只标来源）；
---       视图 verification_overview 同步追加这两列（security_invoker 选项保持不变）。
--- 说明：本仓库的 DDL 以控制台/迁移工具为准，本文件用于留档，方便以后重建环境时对齐。
+-- Phase 3: persist field-level evidence/provenance (2026-09-21, P1-7, see DECISION_LOG decision 29)
+-- Already applied to Supabase project rapuvaalzlrsjodjwqtw (migration: add_evidence_columns_to_verification_results).
+-- Purpose: add two JSONB columns to verification_results to store the line numbers + original sentences matched by rule-based parsing (LLM fallback only tags the source);
+--       the verification_overview view is updated in lockstep with these two columns (the security_invoker option is unchanged).
+-- Note: the console/migration tool is the source of truth for this repo's DDL; this file is kept for reference, to make it easier to align when rebuilding the environment later.
 
 alter table public.verification_results
   add column if not exists evidence_si jsonb,

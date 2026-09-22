@@ -1,7 +1,7 @@
 /**
- * 文档池的查询与人工归类（SPEC 第 5.3 / 5.4 节）：
- * - 列表/详情只读，映射成对外的 view（列表只给 500 字符预览，详情给全文）
- * - 人工归类把 UNKNOWN 改成 SI/BL/OTHER，并把 review_status 置 filed
+ * Document pool querying and manual classification (SPEC sections 5.3 / 5.4):
+ * - List/detail are read-only, mapped to the external view (list only gives a 500-character preview, detail gives the full text)
+ * - Manual classification changes UNKNOWN to SI/BL/OTHER and sets review_status to filed
  */
 import {
   getDocumentRowById,
@@ -33,7 +33,7 @@ export async function listUploadedDocuments(
 
 export async function getUploadedDocument(id: string): Promise<DocumentDetail> {
   const row = await getDocumentRowById(id);
-  if (!row) throw new DocumentNotFoundError(`没有找到 id 为 ${id} 的文档`);
+  if (!row) throw new DocumentNotFoundError(`No document found with id ${id}`);
   return toDetail(row);
 }
 
@@ -42,11 +42,11 @@ export async function classifyUploadedDocument(
 ): Promise<DocumentDetail> {
   const result = await updateDocumentClassification(request);
   if (result.status === "not_found") {
-    throw new DocumentNotFoundError(`没有找到 id 为 ${request.id} 的文档`);
+    throw new DocumentNotFoundError(`No document found with id ${request.id}`);
   }
   if (result.status === "conflict") {
     throw new DocumentConflictError(
-      "这条文档在你打开之后已被别人修改（updated_at 变了）。请刷新后重试，避免覆盖别人的归类结果"
+      "This document was modified by someone else after you opened it (updated_at changed). Please refresh and try again to avoid overwriting their classification"
     );
   }
   return toDetail(result.row);

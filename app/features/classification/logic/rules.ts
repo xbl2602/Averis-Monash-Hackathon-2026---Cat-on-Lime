@@ -1,23 +1,26 @@
 /**
- * 邮件分类的"显式处理"规则（关键词/模板签名）：
- * 先用高精度签名命中（这批业务邮件有明显的模板特征），命不中就交给上层（Jev）判断。
- * 2026-09-20 全量强制重跑实测：520 封样例全部直接判对、0 封判错、0 封交给 Jev。
- * 规则顺序有讲究：GENERAL 的内部通知模板要先于"发票/提单"关键词检查，避免被误导词带偏。
+ * "Explicit handling" rules for email classification (keyword / template signatures):
+ * high-precision signature matches are tried first (this batch of business emails has clear
+ * template patterns); anything that doesn't match falls through to the layer above (Jev).
+ * 2026-09-20 full forced re-run: all 520 sample emails were judged directly and correctly,
+ * 0 misjudged, 0 handed off to Jev.
+ * Rule order matters: the GENERAL internal-notice templates must be checked before the
+ * "invoice/bill of lading" keywords, to avoid being misled by those words.
  */
 import type { EmailCategory } from "@/lib/shared/types";
 import { normalizeText } from "@/lib/shared/normalize";
 
 export interface RuleClassification {
   category: EmailCategory;
-  /** 命中的签名或打分依据，方便展示/排查 */
+  /** The signature or scoring basis that matched, for display/debugging */
   evidence: string;
 }
 
 type Signature = { category: EmailCategory; pattern: RegExp };
 
-// 高精度模板签名（按优先级从上到下，第一命中即定）
+// High-precision template signatures (priority top-to-bottom; first match wins)
 const SIGNATURES: Signature[] = [
-  // SPAM：钓鱼/广告模板
+  // SPAM: phishing/advertising templates
   { category: "SPAM", pattern: /selected in our monthly draw/ },
   { category: "SPAM", pattern: /bank officer with an urgent business proposal/ },
   { category: "SPAM", pattern: /unpaid customs fee/ },
@@ -32,7 +35,8 @@ const SIGNATURES: Signature[] = [
   { category: "SPAM", pattern: /avoid suspension/ },
   { category: "SPAM", pattern: /confirm your bank details/ },
   { category: "SPAM", pattern: /click here to claim/ },
-  // GENERAL：内部运营通知（先于 BL/SI/发票关键词，避免"Billing/Submit SI"这类误导词）
+  // GENERAL: internal operations notices (checked before BL/SI/invoice keywords, to avoid
+  // misleading phrases like "Billing/Submit SI")
   { category: "GENERAL", pattern: /outstanding bl \(bdp sg\)/ },
   { category: "GENERAL", pattern: /submit si & aed/ },
   { category: "GENERAL", pattern: /billing process/ },
@@ -47,7 +51,7 @@ const SIGNATURES: Signature[] = [
   { category: "GENERAL", pattern: /no action required/ },
   { category: "GENERAL", pattern: /office resumes normal operations/ },
   { category: "GENERAL", pattern: /kindly action the pending items/ },
-  // BL_COMPARISON：核对/修改提单
+  // BL_COMPARISON: verify/amend a bill of lading
   { category: "BL_COMPARISON", pattern: /draft bl against the si/ },
   { category: "BL_COMPARISON", pattern: /attached are the si and draft bl/ },
   { category: "BL_COMPARISON", pattern: /draft bill of lading/ },
@@ -58,7 +62,7 @@ const SIGNATURES: Signature[] = [
   { category: "BL_COMPARISON", pattern: /bl matches the si/ },
   { category: "BL_COMPARISON", pattern: /check the draft bl/ },
   { category: "BL_COMPARISON", pattern: /confirm the bl/ },
-  // SI_REQUEST：发送/索取装运指示
+  // SI_REQUEST: sending/requesting shipping instructions
   { category: "SI_REQUEST", pattern: /please find shipping instruction/ },
   { category: "SI_REQUEST", pattern: /shipping instruction for/ },
   { category: "SI_REQUEST", pattern: /request si\b/ },
@@ -66,7 +70,7 @@ const SIGNATURES: Signature[] = [
   { category: "SI_REQUEST", pattern: /draft si/ },
   { category: "SI_REQUEST", pattern: /request for si/ },
   { category: "SI_REQUEST", pattern: /si request/ },
-  // INVOICE_QUERY：发票/费用询问
+  // INVOICE_QUERY: invoice/charge inquiries
   { category: "INVOICE_QUERY", pattern: /query on invoice/ },
   { category: "INVOICE_QUERY", pattern: /cancel invoice/ },
   { category: "INVOICE_QUERY", pattern: /d&d/ },
@@ -76,7 +80,8 @@ const SIGNATURES: Signature[] = [
   { category: "INVOICE_QUERY", pattern: /invoice/ },
 ];
 
-// 打分兜底（签名都不命中时用；主题算两遍、权重更高）。分差 >= 2 才敢自动下结论
+// Scoring fallback (used when no signature matches; the subject is counted twice for extra
+// weight). Only auto-concludes when the score gap >= 2
 const SCORE_WORDS: Record<EmailCategory, string[]> = {
   BL_COMPARISON: ["draft bl", "draft b/l", "bl draft", "confirm the details", "check the details"],
   SI_REQUEST: ["shipping instruction", "pol:", "pod:", "shipper:"],
@@ -100,10 +105,12 @@ export function classifyByRules(input: { subject: string; body: string }): RuleC
 }
 
 /**
- * 尽力版（2026-09-21 新增，P0-2 的降级兜底用，见 DECISION_LOG 决策 25）：
- * 把自动下结论的"分差 >= 2"放宽为"有分且不并列"（分差 >= 1）。
- * 只在所有模型都失败的降级路径上使用，结果会被标记 needs_review=true + engine=degraded；
- * 正常路径（classifyByRules）的口径不变，两条路径共用同一份打分逻辑。
+ * Best-effort version (added 2026-09-21, used as the P0-2 degraded fallback; see DECISION_LOG
+ * decision 25): relaxes the auto-conclude threshold from "score gap >= 2" to "has a score and
+ * isn't tied" (score gap >= 1).
+ * Only used on the degraded path once every model has failed; the result is flagged
+ * needs_review=true + engine=degraded. The normal path (classifyByRules) keeps its original
+ * threshold — both paths share the same scoring logic.
  */
 export function classifyByRulesBestEffort(input: {
   subject: string;
@@ -112,7 +119,7 @@ export function classifyByRulesBestEffort(input: {
   return pickByScore(buildScoringText(input), 1, "best-effort");
 }
 
-// 主题算两遍、权重更高（原有口径，不要动）
+// Subject is counted twice for extra weight (original behavior, do not change)
 function buildScoringText(input: { subject: string; body: string }): string {
   return normalizeText(`${input.subject} ${input.subject} ${input.body}`);
 }

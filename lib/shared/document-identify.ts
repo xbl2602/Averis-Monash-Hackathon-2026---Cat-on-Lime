@@ -1,37 +1,51 @@
 /**
- * 按"文档内容"识别单证类型（不依赖文件名）。
+ * Identify document type from "document content" (not filename-dependent).
  *
- * 为什么放在 lib/shared：import 模块（用户上传的文档）和 extraction 模块
- * 都要判断"这份文档到底是什么"，规则只能有一份，避免两边各写一套以后慢慢漂移。
+ * Why this lives in lib/shared: both the import module (user-uploaded documents) and the
+ * extraction module need to answer "what actually is this document" — there must be only one
+ * set of rules, so the two sides don't slowly drift apart with separate implementations.
  *
- * 判断顺序是有意的：先判 OTHER，再判 SI，最后 BL——
- * 1. 样例里的陷阱（如 email_501_BL.txt）其实是商业发票，里面也会出现
- *    "B/L date"、"Seller/Buyer" 这类字样；不先判 OTHER 会把发票误判成提单。
- *    这也和 extraction 现有口径（label-parser 原来就在这里判断）保持一致。
- * 2. 样例里的 SI 标题会写成 "BILL OF LADING INSTRUCTION"，含 "bill of lading"
- *    字样，所以必须先判 SI 再判 BL，否则 SI 会被误判成 BL。
+ * The check order is deliberate: OTHER first, then SI, then BL —
+ * 1. A trap in the sample set (e.g. email_501_BL.txt) is actually a commercial invoice, which
+ *    still contains phrases like "B/L date" and "Seller/Buyer"; if OTHER isn't checked first,
+ *    the invoice gets misread as a bill of lading. This also matches extraction's existing
+ *    behavior (label-parser used to make this check itself).
+ * 2. In the samples, an SI's title is sometimes written "BILL OF LADING INSTRUCTION", which
+ *    contains the phrase "bill of lading" — so SI must be checked before BL, otherwise an SI
+ *    gets misread as a BL.
+ *
+ * NOTE: the Chinese terms embedded in the regexes below (提单 "bill of lading", 提单号
+ * "B/L number", 装运指示/托运指示/提单指示 "shipping instructions") are real signals that
+ * appear in the shipping documents themselves (many are bilingual English/Chinese business
+ * forms) — they are matched against document content, not descriptive text, and must not be
+ * removed or translated.
  */
 import type { DocumentType } from "./types";
 
-// 其他单证特征（样例里 wrong_doc_type 陷阱的三种：商业发票/装箱单/产地证）
+// Signals for other document types (the three wrong_doc_type traps in the samples: commercial
+// invoice / packing list / certificate of origin)
 export function isLikelyOtherDocument(text: string): boolean {
   return /(commercial invoice|packing list|certificate of origin)/i.test(text);
 }
 
-// BL 的强特征：正文直接点名提单
+// Strong BL signal: the body directly names a bill of lading (English "bill of lading"/"bl
+// draft", or its Chinese equivalent 提单)
 const BL_STRONG = /bill of lading|\bbl draft\b|提单/;
-// BL 的弱特征 + 佐证：只写 "B/L" 时，必须同时出现提单号/船名等提单专有要素
+// Weak BL signal + corroboration: when only "B/L" appears, it must be accompanied by a BL-specific
+// element such as the B/L number (English or 提单号) or vessel name
 const BL_WEAK = /\bb\/l\b/;
 const BL_SUPPORT =
   /(b\/l no|bill of lading no|提单号|ocean vessel|vessel|voyage|container count|place of delivery|to the order of)/;
 
-// SI 的强特征：标题写明托运指示。
-// 样例里 SI 的标题有三种写法：SHIPPING INSTRUCTION（txt）、BILL OF LADING INSTRUCTION（pdf）、
-// BL INSTRUCTION（xlsx）——后两种带 "bill of lading"/"BL" 字样但仍然是"给承运人的指示"，
-// 所以 SI_STRONG 要先于 BL 判断（BL 才写作 "BILL OF LADING"/"BL DRAFT"）
+// Strong SI signal: the title explicitly says "shipping instruction".
+// In the samples, SI titles appear three ways: SHIPPING INSTRUCTION (txt), BILL OF LADING
+// INSTRUCTION (pdf), BL INSTRUCTION (xlsx) — the latter two contain "bill of lading"/"BL" but
+// are still "instructions to the carrier", so SI_STRONG must be checked before BL (which is
+// written as "BILL OF LADING"/"BL DRAFT" without "instruction").
 const SI_STRONG =
   /shipping instruction|(?:bill of lading|b\/l|bl)\s+instructions?\b|装运指示|托运指示|提单指示/;
-// SI 的弱特征 + 佐证：只写 "SI" 时，要求出现至少 2 个托运指示才有的字段布局
+// Weak SI signal + corroboration: when only "SI" appears, require at least 2 field labels that
+// are specific to a shipping-instruction layout
 const SI_WEAK = /\bsi\b|\bs\/i\b/;
 const SI_FIELD_LABELS = [
   /shipper/,
@@ -43,7 +57,7 @@ const SI_FIELD_LABELS = [
   /gross\s*(?:wt|weight)/,
 ];
 
-/** 输入一段文档文本，输出 SI / BL / OTHER / UNKNOWN；纯函数、无副作用 */
+/** Given document text, returns SI / BL / OTHER / UNKNOWN; a pure function with no side effects */
 export function identifyDocumentType(text: string): DocumentType {
   const normalized = text.normalize("NFKC").toLowerCase();
 

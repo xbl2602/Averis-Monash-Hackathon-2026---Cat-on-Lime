@@ -1,11 +1,11 @@
 /**
- * POST /features/mail/api/supabase-projects/activate  切换启用项目（写保护）
+ * POST /features/mail/api/supabase-projects/activate  Switch the active project (write-protected)
  * body: { id }
  *
- * 并发约定（SPEC 第 6 节）：不在代码里"先读当前启用项再改"，而是直接
- * ① 把其他项目 is_active 置 false ② 把目标置 true；数据库唯一索引
- * supabase_projects_single_active 保证同一时刻最多一条 true。
- * 响应：{ project: SupabaseProjectView }（service_key 是掩码）。
+ * Concurrency convention (SPEC section 6): never "read the current active project then change it" in
+ * code — instead, directly (1) set other projects' is_active to false, (2) set the target to true;
+ * the database's unique index supabase_projects_single_active guarantees at most one true at any given moment.
+ * Response: { project: SupabaseProjectView } (service_key is masked).
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";

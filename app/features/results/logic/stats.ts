@@ -1,7 +1,9 @@
 /**
- * 统计汇总：总数 / 已处理 / 未处理 / 失败 / 分类分布 / 状态分布 / 差异字段频次。
- * 读 verification_overview 视图（每封原始邮件一行，处理过与否都算）。
- * 当前数据量（几百封）直接全量聚合；以后变大可换成数据库聚合，对外格式不变。
+ * Statistics summary: totals / processed / pending / failed / category distribution / status
+ * distribution / defect field frequency.
+ * Reads from the verification_overview view (one row per raw email, whether processed or not).
+ * At the current data volume (a few hundred), aggregation is done fully in memory; if it grows
+ * larger this can switch to database-side aggregation without changing the external format.
  */
 import { COMPARISON_STATUSES, EMAIL_CATEGORIES } from "@/lib/shared/types";
 import { fetchAllRows, getReadClient } from "./db";

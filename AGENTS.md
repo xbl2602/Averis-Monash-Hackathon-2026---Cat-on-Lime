@@ -1,208 +1,208 @@
-# 项目 AI 协作规范
+# Project AI Collaboration Guidelines
 
-> **[强制] CLAUDE.md ⇄ AGENTS.md 双文件同步规则**
-> 本文件是 `AGENTS.md`（供 Codex / AGENTS 体系读取），与 `CLAUDE.md`（供 Claude Code / Claude 体系读取）互为**内容必须逐字一致**的副本。
-> - 任何 AI 改动本文件时，**必须同时把完全相同的改动写入另一个文件**，并在同一次 commit 里提交；禁止只改一个就结束。
-> - 改动前先读另一个文件，确认当前没有未同步的差异；改完后逐一比对，确保两个文件内容一致（只有顶部这条同步说明本身允许按需措辞微调，正文必须完全相同）。
-> - 两个文件只在同步说明块里各说明"自己是哪一个"，除此之外不得有任何内容差异。
-> - 原因：团队同时使用 Claude 体系和 Codex 体系两套工作流，两份规范一旦漂移，不同 AI 会读到互相矛盾的规则，协调直接失效。
+> **[Mandatory] CLAUDE.md ⇄ AGENTS.md two-file sync rule**
+> This file is `AGENTS.md` (read by the Codex / AGENTS family), and is a copy that must be **word-for-word identical in content** to `CLAUDE.md` (read by the Claude Code / Claude family).
+> - Whenever any AI changes this file, it **must write the exact same change to the other file** in the same commit; it is not allowed to finish after changing only one.
+> - Before changing anything, read the other file first to confirm there's no unsynced drift; after changing, compare them line by line to make sure the two files match (only this top sync note itself may have its wording adjusted as needed — the rest of the body must be completely identical).
+> - The two files may only state "which one am I" inside this sync-note block — nowhere else may their content differ.
+> - Why: the team uses both the Claude workflow and the Codex/AGENTS workflow at the same time; if the two specs ever drift apart, different AIs would read contradictory rules and coordination breaks down completely.
 
-这份文件会被团队3人各自的 Claude Code（或其他遵循 CLAUDE.md 约定的 AI 编程工具）自动读取。它是**约束性执行规范**，不是背景介绍——下面每一条都要在写代码时真正遵守，不是"仅供参考"。人类看的分工/时间线手册在 [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md)，开幕式题目详情在 [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md)，这些规则背后"当时为什么这么定"的记录见 [DECISION_LOG.md](docs/DECISION_LOG.md)，每个判断点的选项/判定标准/模型输入契约见 [DECISION_SPEC.md](docs/DECISION_SPEC.md)，数据该怎么在模块间流动的硬性规则见 [DATA_FLOW.md](docs/DATA_FLOW.md)（在 docs/ 目录下，写代码前也要看）。
+This file is automatically read by each of the team's 3 members' own Claude Code (or any other AI coding tool that follows the CLAUDE.md convention). It is a **binding execution spec**, not background reading — every rule below must actually be followed while writing code, not just "kept in mind". The human-facing division-of-labor/timeline handbook is [TEAM_HANDBOOK.md](docs/TEAM_HANDBOOK.md); the opening-ceremony problem statement details are in [OPENING_CEREMONY_NOTES.md](docs/OPENING_CEREMONY_NOTES.md); the record of "why these rules were set this way at the time" is in [DECISION_LOG.md](docs/DECISION_LOG.md); the options/decision criteria/model-input contract for each judgment point are in [DECISION_SPEC.md](docs/DECISION_SPEC.md); the hard rules for how data should flow between modules are in [DATA_FLOW.md](docs/DATA_FLOW.md) (under docs/ — read it before writing code too).
 
-背景：团队3人都没有编程背景，题目已于 2026-09-18 公布，提交截止 2026-09-22 12:00pm。
+Background: none of the team's 3 members has a programming background. The problem statement was published on 2026-09-18, and submission closes 2026-09-22 12:00pm.
 
-## 项目状态
+## Project Status
 
-- **题目（已确认）**：航运单证核验（Shipping Documents Verification）。系统要做到：① 分类邮件（SI/BL确认/发票询问/垃圾邮件）② 从正文/附件抽取字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI，标出差异 ④ 拿不准时提示需要人工介入。完整背景见 docs/OPENING_CEREMONY_NOTES.md。
-- **技术栈基座（已确认，非默认建议）**：Next.js（App Router）+ Tailwind + **Supabase** + **Vercel 部署**，参考 docs/TEAM_HANDBOOK.md 第4节。这是"业务功能"的基座，不等于下面"产品形态要求"和"多LLM支持"——那两块是团队额外定的硬性要求，见下文。
-- **功能模块划分**：`classification` / `extraction` / `comparison` 三个 feature，各自负责人见文末"各功能模块负责人"。
-- **正式 Vercel 项目是 `hackathonaveris`，不是 `hackathon-demo`**：账号下一度同时存在两个 Vercel 项目——`hackathon-demo`（最早建的，没连 GitHub，不会自动更新，已停用，不用管它）和 `hackathonaveris`（正确连了 GitHub 仓库 `xbl2602/Hackathon` 的 `main` 分支，`git push` 会自动触发重新部署）。**以 `hackathonaveris` 为准**。线上demo地址：`https://hackathonaveris.vercel.app`，SSO保护默认关闭，不登录也能直接打开。
-- **Supabase 真实项目已建好（不用重新注册）**：项目地址和匿名public key（`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`）已经同时写进本地 `.env.local`（不进git）和 `hackathonaveris` 的 Vercel 环境变量里。**线上验收（2026-09-20）**：云端 MCP 握手、结果查询/导出、Jev 分类、Gemini 分类都已实测可用。**2026-09-21 更新**：`DEEPSEEK_API_KEY` 已经填进 Vercel，但填入时间晚于当时线上最新一次部署——Vercel 的环境变量改动只在下一次部署后才对已运行的函数生效，所以还没验证通过（下一次 `git push` 触发部署后需要重新实测一次）。`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 仍未填（云端选这两个 provider 会报缺 key 的可读错误）——这几个是私密key，需要团队自己去申请，然后手动填进 Vercel 后台 Settings → Environment Variables，我不会替你们申请或看到这些私密key；`SUPABASE_SERVICE_ROLE_KEY` 线上批量写结果也要用（已配置并实测 `run_batch` 写库成功，本地导入/评测也用它）。
+- **Problem statement (confirmed)**: Shipping Documents Verification. The system must: ① classify emails (SI/BL confirmation/invoice inquiry/spam) ② extract fields from the body/attachments (shipper, consignee, notify party, port of loading, port of discharge, container count, weight) ③ compare BL against SI and flag discrepancies ④ flag for human review whenever it's uncertain. Full background in docs/OPENING_CEREMONY_NOTES.md.
+- **Tech-stack foundation (confirmed, not just a default suggestion)**: Next.js (App Router) + Tailwind + **Supabase** + **Vercel deployment** — see docs/TEAM_HANDBOOK.md §4. This is the foundation for "business functionality" only; it is not the same as the "product-form requirements" and "multi-LLM support" sections below — those are additional hard requirements the team set, see below.
+- **Feature breakdown**: three features — `classification` / `extraction` / `comparison`. See "feature module owners" at the end of this file for who owns each.
+- **The official Vercel project is `hackathonaveris`, not `hackathon-demo`**: the account briefly had two Vercel projects at once — `hackathon-demo` (created first, never connected to GitHub, doesn't auto-update, now retired — ignore it) and `hackathonaveris` (correctly connected to the `main` branch of the GitHub repo `xbl2602/Hackathon`; `git push` automatically triggers a redeploy). **Treat `hackathonaveris` as authoritative.** Live demo URL: `https://hackathonaveris.vercel.app`; SSO protection is off by default, so it opens directly without logging in.
+- **A real Supabase project already exists (no need to sign up again)**: the project URL and anon public key (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) are already written into both the local `.env.local` (not committed to git) and `hackathonaveris`'s Vercel environment variables. **Live verification (2026-09-20)**: cloud MCP handshake, results query/export, Jev classification, and Gemini classification have all been tested working. **2026-09-21 update**: `DEEPSEEK_API_KEY` has been added to Vercel, but it was added after the most recent live deployment at the time — a Vercel environment-variable change only takes effect for already-running functions after the next deploy, so this hasn't been verified yet (needs to be re-tested after the next `git push` triggers a deploy). `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are still not filled in (selecting either of these providers in the cloud will return a readable "missing key" error) — these are private keys the team needs to apply for themselves, then fill in manually under the Vercel dashboard's Settings → Environment Variables; I won't apply for these private keys on your behalf or see them; `SUPABASE_SERVICE_ROLE_KEY` is also needed for live batch result writes (already configured and tested — `run_batch` successfully writes to the database; it's also used for local import/evaluation).
 
-## 产品形态要求（硬性，初赛截止前必须做到）
+## Product-Form Requirements (hard requirement, must be done before the qualifying-round deadline)
 
-这个系统不能只是一个网页表单。团队明确要求：**同一套核心能力，要能通过三种方式被使用**，而且三个都要在初赛提交前做出来、能被访问/测试，不是留到决赛才补：
+This system can't just be a web form. The team has explicitly required: **the same set of core capabilities must be usable through three different interfaces**, and all three must be built and reachable/testable before the qualifying-round submission — not left to be added later in the finals:
 
-1. **Web UI**——给航运操作团队的人工使用界面，响应式设计，**手机浏览器和电脑浏览器都要能正常用**（用 Tailwind 断点做，不需要做原生App/PWA，成本控制在"网页自适应"这个量级）
-2. **REST API**——把分类/抽取/比对这几个能力包装成 HTTP 接口，供其他程序调用
-3. **MCP Server**——把同样的能力包装成 MCP tool，供 AI agent（比如 Claude Desktop、其他 MCP client）调用
+1. **Web UI** — the human-facing interface for the shipping operations team, responsively designed, **must work properly on both mobile and desktop browsers** (use Tailwind breakpoints; no need to build a native app/PWA — keep the cost at the level of "a responsive website")
+2. **REST API** — wrap classification/extraction/comparison as HTTP endpoints, for other programs to call
+3. **MCP Server** — wrap the same capabilities as MCP tools, for AI agents (e.g. Claude Desktop, other MCP clients) to call
 
-**关键实现原则：不要为了做3个接口就把同一套逻辑写3遍。** 每个 feature 模块内部按下面的分层来写：
+**Key implementation principle: don't write the same logic three times just to expose three interfaces.** Structure each feature module internally with the layers below:
 
 ```
 /app/features/<feature-name>/
-  logic/        <- 纯业务逻辑函数：输入输出明确，不直接依赖 HTTP/Next.js/MCP 这些运行环境细节，方便被下面三层复用，也方便以后写测试
-  api/          <- 很薄的一层：把 HTTP 请求解析成参数，调用 logic 里的函数，把结果包装成 HTTP 响应
-  mcp/          <- 很薄的一层：定义这个模块要暴露成 MCP tool 的样子（工具名、参数schema、描述），调用 logic 里的函数
-  ui/           <- 网页组件（如果这个模块需要界面的话）
+  logic/        <- Pure business-logic functions: inputs/outputs are explicit and don't depend directly on runtime details like HTTP/Next.js/MCP, so they're easy to reuse from the three layers below and easy to test later
+  api/          <- A very thin layer: parses the HTTP request into parameters, calls the functions in logic/, and wraps the result as an HTTP response
+  mcp/          <- A very thin layer: defines what this module exposes as an MCP tool (tool name, parameter schema, description), and calls the functions in logic/
+  ui/           <- Web components (if this module needs a UI)
 ```
 
-`/app/core` 下建一个地方（比如 `/app/core/mcp-server`）汇总各个 feature 的 `mcp/` 导出，统一注册、启动一个 MCP server 进程——这个文件只做"汇总注册"，不应该包含任何一个模块的具体业务逻辑。
+Set up a place under `/app/core` (e.g. `/app/core/mcp-server`) that aggregates every feature's `mcp/` exports, registering and starting a single MCP server process — this file should only do "aggregation and registration"; it should not contain any module's actual business logic.
 
-**MCP Server 传输方式：用 HTTP/SSE（streamable HTTP），不要用 stdio。** MCP 有两种常见连接方式：stdio（本地进程，AI客户端在自己电脑上启动它）和 HTTP/SSE（远程可访问的网络地址）。这个项目要求 MCP 能力和 Web UI、REST API 一样部署在 Vercel 上对外提供服务，所以必须选 HTTP/SSE 这种——这样同一个部署出去的应用，一个地址就能同时服务网页、API 和 MCP，不需要额外单独跑一个本地进程。
+**MCP Server transport: use HTTP/SSE (streamable HTTP), not stdio.** MCP has two common connection modes: stdio (a local process the AI client starts on its own machine) and HTTP/SSE (a remotely reachable network address). This project requires the MCP capability to be served from Vercel just like the Web UI and REST API, so it must use HTTP/SSE — that way, a single deployed app can serve the web page, the API, and MCP from one address, with no need to run a separate local process.
 
-## 部署要求（本地 / 云端 / Docker 三种方式都要能跑）
+## Deployment Requirements (must run in all three of local / cloud / Docker)
 
-**这不是"改用别的托管方式代替 Vercel"，是同一份代码要支持三种启动方式：**
+**This is not "switch to a different host instead of Vercel" — it's that the same codebase must support three ways of starting it up:**
 
-1. **云端（Vercel）**——初赛/决赛对外展示的正式demo地址，git push 自动部署，这个不变，是主线
-2. **本地部署**——任何一台装了 Node.js 的电脑，`npm install` 装依赖、`npm run dev`（开发模式）或 `npm run build && npm start`（生产模式）直接跑起来，不需要额外配置
-3. **Docker 部署**——写一个 `Dockerfile`（配合 `next.config.js` 里的 `output: 'standalone'` 设置，生成一份体积小、依赖打包好的产物），让任何装了 Docker 的机器 `docker build` + `docker run` 就能跑起来，不用单独装 Node.js/配置环境。可以再配一个 `docker-compose.yml` 方便一条命令启动（如果以后加了本地数据库等其他服务会更明显有用）
+1. **Cloud (Vercel)** — the official demo URL shown publicly for the qualifying round/finals; `git push` auto-deploys; this stays the primary path, unchanged
+2. **Local deployment** — on any machine with Node.js installed: `npm install` for dependencies, then `npm run dev` (dev mode) or `npm run build && npm start` (production mode) to run it directly, no extra configuration needed
+3. **Docker deployment** — write a `Dockerfile` (paired with `output: 'standalone'` in `next.config.js`, producing a small build with dependencies already bundled), so any machine with Docker can `docker build` + `docker run` it, without installing Node.js or configuring an environment separately. A `docker-compose.yml` can also be added for one-command startup (this becomes more clearly useful once other services, like a local database, are added later)
 
-**要做到"一份代码、三种跑法"，写代码时要注意：**
+**To achieve "one codebase, three ways to run it", keep this in mind while coding:**
 
-- **所有密钥/配置走环境变量**（Supabase 的 key、各个 LLM 的 API key），统一在 `.env.example` 里列出需要哪些变量、每个变量是干嘛的，不要把任何 key 写死在代码里——这样三种部署方式只是"从哪里读环境变量"不同，代码逻辑完全一样
-- **不要使用 Vercel 专属、离开 Vercel 就跑不了的功能**（比如 Vercel 特有的 Edge Runtime 专属 API、Vercel KV 等），全部用标准 Next.js API + Supabase 官方 SDK，这样代码天然可移植，不需要为了"支持本地/Docker"额外改造一遍
-- **README 必须写清楚三种跑法各自的步骤**，包括环境变量要怎么配、Docker 命令是什么、以及"我们的线上demo在这个地址"
+- **All keys/config go through environment variables** (Supabase keys, each LLM's API key); list every needed variable and what it's for in `.env.example`, and never hardcode a key in the code — this way the three deployment modes only differ in "where the environment variables are read from," while the code logic stays exactly the same
+- **Don't use Vercel-exclusive features that stop working outside Vercel** (e.g. Vercel-specific Edge Runtime-only APIs, Vercel KV, etc.) — use only standard Next.js APIs + the official Supabase SDK, so the code is portable by construction and doesn't need a separate rework just to "support local/Docker"
+- **The README must clearly document the steps for each of the three ways to run it**, including how to configure environment variables, what the Docker commands are, and "our live demo is at this address"
 
-## 多 LLM 支持（硬性，初赛就要跑通）
+## Multi-LLM Support (hard requirement, must work in the qualifying round)
 
-系统要能在多个 LLM 之间切换，**初赛阶段至少要跑通**：Claude（Anthropic）、OpenAI ChatGPT、DeepSeek、Google Gemini、本地 LM Studio。
+The system must be able to switch between multiple LLMs; **at minimum, these must work in the qualifying-round stage**: Claude (Anthropic), OpenAI ChatGPT, DeepSeek, Google Gemini, local LM Studio.
 
-**"本地 LM Studio" 这个选项只在"本地部署模式"下生效，Vercel 上的公开demo用不了它。** 原因：LM Studio/Ollama 说的"本地"，是指运行这个网站服务器的那台机器的 `localhost`。项目部署到 Vercel 后，服务器变成了 Vercel 云端的机器，它没办法访问操作者自己电脑上的 LM Studio（网络不通，Vercel 也没有GPU/本地大模型推理这种服务，它只负责跑轻量的应用代码）。所以：
-- **本地部署 / Docker 部署时**：网站和 LM Studio 在同一台机器上，`localhost` 互通，这个 provider 能正常用
-- **Vercel 上的公开demo**：provider 下拉框里本地LM Studio这个选项**默认不在云端环境生效**（可以判断当前环境自动隐藏，或者选了之后给出"当前部署环境不支持本地模型"的提示，而不是报错崩溃）——公开demo实际用的是 Claude/ChatGPT/DeepSeek/Gemini 这几个云端 provider
-- 这不是需要修的bug，是本来就该这样的架构限制，不要花时间想办法"打通"Vercel到某台笔记本电脑的网络
-- **未来扩展方向（写进文档/路线图即可，现在不用做）**：如果以后想让公开demo也能用开源模型，理论上可行的做法是另外找一台**常年开机、有GPU的云主机**（比如 RunPod、Together.ai、AWS/GCP 的 GPU 实例）在上面跑 Ollama/vLLM 之类的推理服务，再让网站代码指过去调用它——这跟"本地LLM"是同一个原理，只是把"本地"换成"一台更强的常驻服务器"，本质区别只在于 Vercel 这种无服务器平台没有GPU、不能常驻跑大模型。这是一块独立的新基础设施，工作量和费用都不小，适合写进决赛/未来规划的slide里加分，不建议在初赛这4天里真的去搭
+**The "local LM Studio" option only works in "local deployment mode" — the public demo on Vercel can't use it.** Why: what LM Studio/Ollama call "local" means the `localhost` of the machine running this website's server. Once the project is deployed to Vercel, the server becomes a machine in Vercel's cloud, which has no way to reach the LM Studio running on the operator's own computer (the network doesn't connect, and Vercel has no GPU/local-model-inference service anyway — it only runs lightweight application code). So:
+- **When deployed locally / via Docker**: the website and LM Studio are on the same machine, `localhost` connects fine, and this provider works normally
+- **On the public Vercel demo**: the local LM Studio option in the provider dropdown **is disabled by default in the cloud environment** (either auto-hide it by detecting the current environment, or show a message like "local models aren't supported in this deployment environment" if it's selected, instead of crashing with an error) — the public demo actually uses the cloud providers Claude/ChatGPT/DeepSeek/Gemini
+- This isn't a bug to fix — it's an architectural limitation that's supposed to be this way. Don't spend time trying to "bridge" the network between Vercel and someone's laptop.
+- **Future direction (fine to just write into the docs/roadmap — no need to build this now)**: if the public demo should support open-source models later, the theoretically viable approach is to find a separate **always-on, GPU-equipped cloud host** (e.g. a RunPod, Together.ai, or AWS/GCP GPU instance) to run an inference service like Ollama/vLLM on, then point the website code at it — this is the same principle as "local LLM," just swapping "local" for "a beefier always-on server." The real difference is only that a serverless platform like Vercel has no GPU and can't keep a large model resident. This is a separate chunk of new infrastructure with non-trivial effort and cost — good material for a finals/future-roadmap slide for bonus points, but not recommended to actually build during these 4 qualifying-round days
 
-**不要给每个 LLM 各写一套调用代码**——这是最容易把工作量拖爆的做法。技术栈里选定的 Vercel AI SDK 本身就是为"统一多 LLM 接口"设计的，善用它可以把工作量降到主要是"配置"而不是"重新实现"：
+**Don't write a separate set of call code for every LLM** — that's the surest way to blow up the workload. The Vercel AI SDK chosen in the tech stack is itself designed for "a unified multi-LLM interface"; using it well turns most of the work into "configuration" rather than "reimplementation":
 
-- Claude / OpenAI / Gemini 都有官方 provider 包（`@ai-sdk/anthropic`、`@ai-sdk/openai`、`@ai-sdk/google`，具体包名以能装上的版本为准，AI 写代码时自己查一下最新用法），调用方式（`generateText` / `streamText`）几乎一样，换的只是 `model` 参数
-- **DeepSeek 和 LM Studio 的本地服务都兼容 OpenAI 的接口协议**——不需要为它们单独写 provider，直接复用 OpenAI 兼容的调用方式，只是把 `baseURL` 和 `apiKey` 换成指向 DeepSeek 的地址 / 本地 LM Studio 的地址（LM Studio 默认在 `http://localhost:1234/v1` 起一个 OpenAI 兼容的本地服务）
-- 所有 LLM 调用统一走 `/lib/llm/` 这一层适配代码，各 feature 模块的 `logic/` 只调用这一层暴露出来的统一函数（比如 `callLLM(provider, prompt, options)`），不要在 feature 模块内部直接 import 某个具体 LLM 的 SDK
-- 界面/配置上只需要能"选择这次用哪个 provider"（环境变量或一个简单下拉框都行），不需要做智能路由、自动选性价比最优模型这类额外功能
-- **验收标准**：Gemini 这一路必须稳定可用（作为 demo 兜底），其余4个 provider 只要求"能选、能切换、基本能跑通一次调用"，不要求每个都单独调优 prompt
+- Claude / OpenAI / Gemini each have an official provider package (`@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google` — go with whichever version actually installs; look up the latest usage when writing the code), and their calling convention (`generateText` / `streamText`) is nearly identical — only the `model` parameter changes
+- **Both DeepSeek and LM Studio's local service are OpenAI-API-compatible** — there's no need to write a separate provider for them; just reuse the OpenAI-compatible calling convention and swap `baseURL` and `apiKey` to point at DeepSeek's address / the local LM Studio address (LM Studio starts an OpenAI-compatible local service at `http://localhost:1234/v1` by default)
+- All LLM calls go through the adapter layer at `/lib/llm/`; each feature module's `logic/` only calls the unified function this layer exposes (e.g. `callLLM(provider, prompt, options)`) — never import a specific LLM's SDK directly inside a feature module
+- The UI/config side only needs to let you "choose which provider to use this time" (an environment variable or a simple dropdown both work) — no need for smart routing, auto-selecting the best cost/performance model, or other extra features
+- **Acceptance criteria**: the Gemini path must be reliably available (as the demo's fallback); the other 4 providers only need to be "selectable, switchable, and able to complete at least one call" — there's no requirement to tune the prompt separately for each one
 
-## 架构约束："一切皆插件"（模块隔离 + 多语言）
+## Architectural Constraint: "Everything Is a Plugin" (module isolation + multiple languages)
 
-这是团队定的核心开发原则，**所有 AI 在写代码时必须遵守**，目的是让3人各自的 AI session 并行开发时物理上很难互相冲突，并且让决赛"在初赛基础上加功能"这件事变成"加一个新文件夹"而不是"改动已有代码"。
+This is a core development principle the team has set, and **every AI must follow it while writing code**. The goal is to make it physically hard for the three members' AI sessions to conflict while developing in parallel, and to turn "adding features on top of the qualifying-round build" during the finals into "adding a new folder" rather than "modifying existing code."
 
-**原则**：核心（core）只放最少的公共骨架，其余一切功能都是自包含的"插件"模块，活在自己的文件夹里，尽量不碰别人的文件夹。
+**Principle**: core holds only the bare minimum shared skeleton; everything else is a self-contained "plugin" module living in its own folder, touching other folders as little as possible.
 
-**语言约定**：
-- **默认语言是 JavaScript/TypeScript**（Next.js 生态），大多数模块应该用这个
-- **允许例外**：如果某个模块因为专业库的原因明显更适合别的语言（比如用 Python 处理 PDF 解析/OCR，这类库 Python 生态更成熟），可以把这个模块单独做成一个独立的小服务，通过 HTTP API 对外暴露能力，其余代码只通过约定好的接口调用它，不需要读懂它的内部实现语言
-- **不要为了"理论上支持任意语言"去搭一个通用的、语言无关的插件运行时/插件注册中心**——那是不必要的工程量，只要"用到的那几种语言各自有清楚的对外接口"就够了
-- 每个模块的**界面实现方式也自由**（可以用 three.js 做可视化效果，也可以是最朴素的 HTML/CSS），只要自包含在自己的文件夹里，不强制全队统一一套组件库/视觉规范
+**Language convention**:
+- **The default language is JavaScript/TypeScript** (the Next.js ecosystem); most modules should use this
+- **Exceptions are allowed**: if a module is clearly better suited to a different language because of specialized libraries (e.g. using Python for PDF parsing/OCR, where the Python ecosystem is more mature), that module can be built as a separate small service exposing its capability over an HTTP API; the rest of the code only calls it through the agreed interface and never needs to understand its internal implementation language
+- **Don't build a generic, language-agnostic plugin runtime/plugin registry just to "theoretically support any language"** — that's unnecessary engineering effort; it's enough that "whichever languages are actually used each have a clear external interface"
+- Each module is also **free in how it implements its UI** (it can use three.js for a visual effect, or the plainest HTML/CSS) — as long as it's self-contained in its own folder, there's no requirement to unify the whole team on one component library/visual style
 
-约定的目录结构（Next.js 项目，按题目已定的三个模块 + 产品形态要求具体化）：
+The agreed directory structure (a Next.js project, made concrete around the three modules the problem statement already defines, plus the product-form requirements):
 
 ```
 /app
   /core
-    /mcp-server        <- 汇总各 feature 的 MCP tool 定义，统一注册启动。改动前必须先跟操作者确认，因为所有人都依赖它
-    (全局布局、导航、路由骨架、共享配置)
+    /mcp-server        <- Aggregates every feature's MCP tool definitions, registers and starts them centrally. Must be confirmed with the operator before any change, since everyone depends on it
+    (global layout, navigation, routing skeleton, shared config)
   /features
     /classification
-      /logic  /api  /mcp  /ui   <- 邮件分类模块，自包含
+      /logic  /api  /mcp  /ui   <- Email classification module, self-contained
     /extraction
-      /logic  /api  /mcp  /ui   <- 字段抽取模块（可能是Python子服务，见上面"语言约定"）
+      /logic  /api  /mcp  /ui   <- Field extraction module (may be a Python sub-service, see the "language convention" above)
     /comparison
-      /logic  /api  /mcp  /ui   <- 比对+人工确认触发模块
+      /logic  /api  /mcp  /ui   <- Comparison + human-confirmation trigger module
 /lib
-  /shared              <- 真正需要跨模块共享的类型/工具函数，数量要尽量少
-  /llm                 <- 多LLM统一适配层（见上面"多LLM支持"），所有模块通过这里调用LLM
-docs/SHARED_INTERFACES.md    <- 模块之间如果必须通信，接口约定写在这里
+  /shared              <- Types/utility functions that genuinely need to be shared across modules — keep this as small as possible
+  /llm                 <- Unified multi-LLM adapter layer (see "multi-LLM support" above); every module calls LLMs through here
+docs/SHARED_INTERFACES.md    <- If modules must communicate, the interface agreement is written here
 ```
 
-**文件夹按"这是什么功能"命名，不按"归谁改"命名**——谁负责哪个模块记在下面"各功能模块负责人"里，这样以后重新分工也不用改文件夹名字。
+**Folders are named after "what this feature is," not "who changes it"** — who owns which module is recorded below under "feature module owners," so re-assigning ownership later never requires renaming folders.
 
-给 AI 的具体规则：
+Specific rules for AI:
 
-1. **新功能 = 新建一个 `/app/features/<feature-name>/` 文件夹**，不要把新功能的代码散落插进已有的其他 feature 文件夹里
-2. **不要 import 其他 feature 文件夹内部的实现细节**（比如别人模块里的某个内部组件/内部函数）。如果确实需要用到别人模块提供的能力，先看 `docs/SHARED_INTERFACES.md` 里有没有约定好的接口；没有的话，先提议在这个文件里加一条接口约定，而不是直接深入别人代码里拿东西
-3. **`/app/core`、`/lib/shared`、`/lib/llm` 是所有人共用的"公共区"，改动前必须先跟操作者确认**，因为改错了会影响其他两人的模块
-4. 决赛阶段加新功能时，优先考虑"再加一个 feature 文件夹"，而不是大改已有 feature 的内部结构——这样能保住"决赛是初赛的延伸"这条规则要求的连续性
-5. 这是**轻量的文件夹隔离约定**，不是要做一个真正运行时动态加载/卸载的插件系统——不要主动去实现插件注册中心、动态 import、插件生命周期管理这类基础设施，那对4天零经验的场景是不必要的额外复杂度和出错点
+1. **A new feature = create a new `/app/features/<feature-name>/` folder** — don't scatter new-feature code into other, already-existing feature folders
+2. **Don't import another feature folder's internal implementation details** (e.g. some internal component/function inside someone else's module). If you genuinely need a capability another module provides, first check whether `docs/SHARED_INTERFACES.md` already has an agreed interface for it; if not, propose adding an interface agreement to that file first, rather than reaching directly into someone else's code to grab something
+3. **`/app/core`, `/lib/shared`, and `/lib/llm` are the shared "commons" everyone uses — any change must be confirmed with the operator first**, since getting it wrong affects the other two members' modules
+4. When adding new features during the finals, prefer "adding one more feature folder" over heavily restructuring an existing feature's internals — this preserves the continuity the "the finals extend the qualifying-round build" rule requires
+5. This is a **lightweight folder-isolation convention**, not a request to build a real runtime dynamic-load/unload plugin system — don't proactively build infrastructure like a plugin registry, dynamic imports, or plugin lifecycle management; for a 4-day, zero-experience scenario that's unnecessary extra complexity and a source of bugs
 
-## 代码质量红线（不可妥协）
+## Code Quality Red Lines (non-negotiable)
 
-团队明确要求：这个系统不只是要"能跑"，可维护性、健壮性、可扩展性是核心目标，不能为了图快牺牲这些。这跟"业务功能不要预先做复杂设计"不矛盾——**不要为还不存在的假设性需求设计接口，但已经存在的代码，结构必须是干净、模块化的。简单不等于潦草。**
+The team has explicitly required that this system be more than just "working" — maintainability, robustness, and extensibility are core goals that must not be sacrificed for speed. This doesn't contradict "don't over-design business functionality for hypothetical needs" — **don't design interfaces for requirements that don't exist yet, but code that does exist must be structured cleanly and modularly. Simple does not mean sloppy.**
 
-1. **禁止"God文件"**：一个文件不能同时装路由处理、业务逻辑、数据库操作、UI渲染等好几件不相关的事。如果一个文件明显在混着好几件不同的事、或者长度已经很夸张（大致超过300行左右是一个该考虑拆分的信号，不是硬性上限），就要拆成多个文件，按上面 `logic/api/mcp/ui` 的分层拆
-2. **每个函数只做一件事**，函数名要说清楚它是干嘛的，不要用 `handleData`、`process` 这种看不出实际含义的名字
-3. **涉及外部调用的地方要有基本的错误处理**（LLM API 调用、数据库操作、第三方服务、文件解析）——至少要 try/catch，并且给用户一个能看懂的错误提示或触发"举手求助"流程，不能一出错就整个页面/接口崩掉且没有任何反馈
-4. 这些是底线要求，不是"以后再说"的技术债——每次 AI 写完一块代码，应该自己检查一下有没有踩到上面几条
+1. **No "god files"**: a single file must not hold several unrelated things at once — route handling, business logic, database operations, UI rendering. If a file is clearly mixing several different concerns, or has grown absurdly long (roughly 300+ lines is a signal to consider splitting, not a hard cap), split it into multiple files along the `logic/api/mcp/ui` layering above
+2. **Each function does one thing**, and its name should make clear what that is — avoid meaningless names like `handleData` or `process`
+3. **Anywhere that makes an external call needs basic error handling** (LLM API calls, database operations, third-party services, file parsing) — at minimum a try/catch, plus a readable error message for the user or a "flag for help" flow triggered — the whole page/endpoint must never just crash on error with zero feedback
+4. These are baseline requirements, not "deal with it later" technical debt — every time an AI finishes writing a piece of code, it should check itself against the points above
 
-## 高并发与数据同步/冲突处理（硬性要求）
+## High Concurrency and Data Sync/Conflict Handling (hard requirement)
 
-团队明确要求：**架构要考虑高并发场景，以及多个请求/多个人同时操作时的数据同步和冲突问题**，不能只按"一次只有一个人在用"来设计。这里的"高并发"不是要求做成能撑住百万用户的大型分布式系统——4天的黑客松demo，量级是"评委/队友同时点开网站""一次性处理一整批样例邮件"这种规模，**目的是不要写出并发下会出错的代码，不是要过度设计一套复杂的分布式架构**，这跟"业务功能不要为假设性需求预先设计"的原则不矛盾。
+The team has explicitly required that **the architecture account for high-concurrency scenarios, plus data-sync and conflict issues when multiple requests/people act at once** — it must not be designed assuming "only one person uses it at a time." "High concurrency" here doesn't mean building a large distributed system that can handle a million users — this is a 4-day hackathon demo, at the scale of "judges/teammates open the site at the same time" or "process a whole batch of sample emails in one go." **The goal is to avoid writing code that breaks under concurrency, not to over-engineer a complex distributed architecture** — this doesn't contradict the principle of "don't over-design business functionality for hypothetical needs."
 
-具体要求：
+Specific requirements:
 
-1. **禁止在服务器代码里用"模块级可变变量"存状态**（比如在 `api/`、`mcp/`、`logic/` 的文件顶层定义一个会被多次请求共同读写的变量，当成缓存、计数器、临时存储用）。Vercel 这类无服务器平台，同一个项目随时可能有多个实例同时处理不同请求，模块顶层的变量不是"全项目共享一份"，靠它记录状态在并发下会读到脏数据或互相覆盖。**该有状态的地方只有两处**：一是每次请求内部的局部变量（用完即丢，天然安全），二是 Supabase 数据库（多个请求间真正需要共享、需要持久化的状态，必须落库，不能放内存里）。
-2. **批量处理（比如一次性把 `data/sample/` 里所有邮件跑一遍分类→抽取→比对）必须用"有上限的并发"，不能挑两个极端**：一个个排队做（几十封邮件跑下来太慢，demo体验差），或者一次性把所有邮件全部同时发出去调用LLM（容易触发 LLM API 的限流报错，也可能把 Supabase 的连接数打满）。要控制"同时最多处理几封"（比如同时处理3~5封），处理完一封再补一封上来。项目里已经提供了 `lib/shared/concurrency.ts` 的 `mapWithConcurrencyLimit` 工具函数，以后写批量处理的地方（比如 `lib/shared/pipeline.ts`，见 docs/DATA_FLOW.md）应该直接用它，不要自己重新发明一套并发控制。
-3. **批量处理时，单条数据失败不能拖垮整批**：处理一批邮件时，其中一封因为LLM报错/文档解析失败而出错，不应该导致整批处理全部中断、什么结果都拿不到。要单独隔离每一条的失败（每条都有自己的 try/catch，出错记下这条的错误信息，其他条继续跑），最后能看到"这几条成功、这几条失败、失败原因是什么"，这也是"代码质量红线"里错误处理要求的延伸。
-4. **以后往 Supabase 写数据（比如保存比对结果、人工确认/复核记录），要用"upsert"（有就更新、没有就插入），不能用"先查一下这条存不存在、不存在再insert"这种先读后写的模式**——这种模式在两个请求几乎同时发生时（比如同一封邮件被处理了两次，或者两个人同时点了"重新生成结果"），会因为"读的时候还没有、都决定插入"而变成插入两条重复数据，或者互相踩踏。做法：给这类表一个能唯一确定"这是同一条数据"的字段（比如邮件相关的表用 `email_id` 做唯一约束），写入时统一用 Supabase 的 `upsert`，交给数据库保证唯一性，不要在代码这一层自己判断"存不存在"。
-5. **涉及"人工可以修改/复核系统结果"的数据（比如 comparison 模块以后要做的人工确认功能），表里要留一个 `updated_at` 字段**：如果两个人几乎同时打开同一条记录去修改，后保存的人不应该"悄悄地"把前一个人的修改完全覆盖掉而没人发现——现在不需要做一套完整的"冲突检测/合并"机制（对4天的demo来说是过度设计），但至少要留好这个字段，以后简单加一句"保存前比一下 `updated_at` 有没有变过，变过就提示'这条记录被别人改过，要不要覆盖'"就能做基本的冲突提示，不留这个字段以后就没法做。
-6. **API / MCP 路由必须保持无状态**：每个请求应该是完全独立的一次调用，不依赖"上一个请求执行时留下的什么东西"。现在的代码已经是这样（`api/route.ts` 只是解析请求→调用 `logic/`→包装返回），以后加新接口时也要保持这个模式，不要为了图方便加一个"记住上次请求结果"的全局缓存。
+1. **Never store state in a "module-level mutable variable" in server code** (e.g. a variable defined at the top level of a file in `api/`, `mcp/`, or `logic/` that multiple requests read and write, used as a cache/counter/temporary store). On a serverless platform like Vercel, the same project can have multiple instances handling different requests at the same time — a module-level variable is not "one shared copy across the whole project," and relying on it for state will read stale/dirty data or get overwritten under concurrency. **There are only two places state is allowed to live**: local variables inside a single request (discarded once it's done — inherently safe), and the Supabase database (state that genuinely needs to be shared across requests or persisted must be written to the database, never kept in memory).
+2. **Batch processing (e.g. running classification → extraction → comparison over every email in `data/sample/` in one go) must use "capped concurrency" — don't pick either extreme**: doing them one at a time in a queue (too slow across dozens of emails, a bad demo experience), or firing off every email to the LLM simultaneously (easily triggers LLM API rate limits, and can also exhaust Supabase's connection pool). Cap "how many are processed at once" (e.g. 3-5 concurrently), topping up with the next one as each finishes. The project already provides the `mapWithConcurrencyLimit` helper in `lib/shared/concurrency.ts` — anywhere batch processing is written going forward (e.g. `lib/shared/pipeline.ts`, see docs/DATA_FLOW.md) should use it directly rather than reinventing concurrency control.
+3. **During batch processing, one item failing must not take down the whole batch**: if one email in a batch errors out because of an LLM failure or a document-parsing failure, that must not abort the entire batch and lose every result. Isolate each item's failure individually (each one gets its own try/catch, its error message is recorded on failure, and the rest keep running), so the end result shows "which succeeded, which failed, and why" — this is also an extension of the error-handling requirement in the "code quality red lines" section.
+4. **Writing to Supabase going forward (e.g. saving comparison results, human confirmation/review records) must use "upsert" (update if it exists, insert if it doesn't) — never a read-then-write pattern like "check whether this row exists first, insert only if it doesn't"** — when two requests happen almost simultaneously (e.g. the same email gets processed twice, or two people click "regenerate results" at the same time), that pattern causes both requests to see "not there yet" and both decide to insert, producing duplicate rows or stepping on each other. The fix: give this kind of table a field that uniquely identifies "this is the same record" (e.g. an `email_id` unique constraint on email-related tables), and always write with Supabase's `upsert`, letting the database guarantee uniqueness instead of the code trying to determine "does it exist" itself.
+5. **Any data that a human can modify/review (e.g. the human-confirmation feature the comparison module will need later) must have an `updated_at` field in its table**: if two people open the same record to edit it at nearly the same time, whoever saves second should not "silently" overwrite the first person's changes with nobody noticing — there's no need for a full "conflict detection/merge" mechanism right now (over-engineering for a 4-day demo), but the field must be there so that a simple check later — "compare `updated_at` before saving; if it changed, prompt 'this record was changed by someone else, overwrite anyway?'" — is possible. Without this field, that becomes impossible to add later.
+6. **API / MCP routes must stay stateless**: every request should be a completely independent call, never depending on "whatever the previous request left behind." The code is already like this (`api/route.ts` just parses the request → calls `logic/` → wraps the response), and new endpoints going forward must keep this pattern — don't add a global cache that "remembers the last request's result" just for convenience.
 
-## 调试规范（强制：禁止打补丁式debug）
+## Debugging Standard (mandatory: no patch-over-the-symptom debugging)
 
-团队明确要求：**遇到 bug 必须找到并修复根本原因，不允许用"补丁"掩盖症状。** 这和"代码质量红线"是同一个目的——补丁式debug会让代码越来越脆弱，操作者又看不出问题还在，是可维护性的头号杀手。
+The team has explicitly required: **when a bug is found, its root cause must be identified and fixed — patching over the symptom is not allowed.** This serves the same goal as the "code quality red lines": patch-style debugging makes code progressively more fragile while leaving the operator unable to see that the problem is still there — it's public enemy #1 for maintainability.
 
-**什么算"打补丁"（禁止）**：
-- 报错就直接 try/catch 吞掉、不打印/不处理，让报错消失但没搞懂为什么报错
-- 加一个针对性的 `if` 特殊判断去绕开某个具体报错场景，而不是搞清楚为什么会出现这个场景
-- 调用失败就无脑重试/加 `setTimeout` 延迟掩盖时序问题，而不搞清楚真正的时序/依赖关系错在哪
-- 把某个值写死（hardcode）让报错消失或让某次测试通过，而不修正背后错误的逻辑
-- 改了症状所在的那一行代码，但没有去看这个症状是不是上游某个地方传错了数据/调用错了顺序导致的
+**What counts as "patching" (prohibited)**:
+- Wrapping something in try/catch and swallowing the error with no logging/handling, making the error disappear without understanding why it happened
+- Adding a targeted `if` special case to dodge one specific error scenario, instead of understanding why that scenario occurs at all
+- Blindly retrying a failed call or adding a `setTimeout` delay to paper over a timing issue, instead of figuring out where the real timing/dependency problem is
+- Hardcoding a value to make an error disappear or a test pass, instead of fixing the faulty logic behind it
+- Changing the line of code where the symptom shows up, without checking whether the symptom is actually caused by wrong data or a wrong call order somewhere upstream
 
-**遇到 bug 应该怎么做**：
-1. 先搞清楚报错/异常行为的**真正原因**——是哪个函数、哪一步的输入或逻辑不对，而不是只看报错发生的那一行
-2. 修复**产生问题的根源**，如果根源在别的模块或者上游数据结构上，要指出来，需要的话去改 `docs/SHARED_INTERFACES.md` 里的约定，而不是在自己这一层硬吃掉别人传过来的错误数据
-3. 修完之后，**用大白话跟操作者解释：bug 的根本原因是什么、这次是怎么修的**——操作者要能听懂"为什么会坏"而不只是"现在不报错了"
-4. 如果暂时定位不到根本原因，**如实告诉操作者"目前只能先绕过、没有根治"**，不要不声不响地打个补丁然后说"修好了"
+**What to do when you hit a bug**:
+1. First identify the **actual cause** of the error/abnormal behavior — which function, which step's input or logic is wrong — rather than only looking at the line where the error surfaced
+2. Fix **the source of the problem**; if the root cause lives in another module or an upstream data structure, say so explicitly, and update the agreement in `docs/SHARED_INTERFACES.md` if needed — don't just silently absorb the bad data someone else passed in at your own layer
+3. After fixing it, **explain to the operator in plain language what the root cause was and how it was fixed this time** — the operator needs to understand "why it broke," not just "it doesn't error anymore"
+4. If the root cause can't be pinned down yet, **tell the operator honestly that "this is only a workaround for now, not a real fix"** — don't quietly slap on a patch and claim it's "fixed"
 
-## 给 AI 的通用规则
+## General Rules for AI
 
-1. **业务功能优先用最简单、能跑通的方案，不要为"以后可能用到"的假设性需求预先设计接口。** 但代码结构本身要遵守上面"代码质量红线"，操作者没有编程背景，混乱的代码没人能维护或debug。
-2. **改动尽量小、尽量能独立运行**，方便操作者频繁 commit/push。不要一次性生成一大坨还没验证过的代码。
-3. **开始改动前，先用一句话说明打算改哪些文件/目录**，再动手。团队有3个人同时在跑各自的 AI session，改动范围要清楚，减少和其他人分支的冲突。
-4. **涉及会被其他模块依赖的东西（共享的数据结构、API 返回格式、环境变量名、LLM调用接口）**，先在 `docs/SHARED_INTERFACES.md`（如果还没有就创建一个）里写清楚，再改。这样即使操作者自己看不懂细节，其他人的 AI 至少能读到接口约定。
-5. **commit message 用简单直白的话说明做了什么**，不需要遵循 Conventional Commits 之类的规范。
-6. **不确定题目要求或产品方向时，直接问操作者**，不要替对方猜测着做决定。
-7. 每完成一个可运行的小功能，提醒操作者可以 push 了，方便队友的 AI 在集成时读到最新代码。
-8. 操作者是编程新手：解释你做的关键决定时用大白话，避免不解释就甩术语；如果操作者问"这段在干嘛"，要能讲清楚，不要预设对方已经看懂。
+1. **For business functionality, prefer the simplest approach that works — don't pre-design an interface for a hypothetical "might need it later" requirement.** But the code's structure itself must still follow the "code quality red lines" above — the operator has no programming background, and nobody can maintain or debug messy code.
+2. **Keep changes small and independently runnable**, so the operator can commit/push frequently. Don't generate one huge, unverified blob of code all at once.
+3. **Before starting a change, state in one sentence which files/directories you plan to touch**, then start. The team has 3 people running their own AI sessions at the same time — the scope of a change must be clear, to reduce conflicts with other people's branches.
+4. **Anything other modules will depend on (shared data structures, API response shapes, environment-variable names, the LLM calling interface)** must be written clearly into `docs/SHARED_INTERFACES.md` (create it if it doesn't exist yet) before you change it. That way, even if the operator can't follow the details, the other members' AI sessions can still read the interface agreement.
+5. **Write commit messages in plain, simple language describing what was done** — no need to follow a convention like Conventional Commits.
+6. **When unsure about a requirement or product direction, ask the operator directly** — don't guess and decide on their behalf.
+7. Every time a small, working feature is finished, remind the operator that it's ready to push, so teammates' AI sessions can read the latest code when integrating.
+8. The operator is new to programming: explain key decisions in plain language, and avoid dropping jargon without explanation; if the operator asks "what does this part do," be able to explain it clearly — don't assume they already understand.
 
-## Git 约定
+## Git Conventions
 
-- `main` 分支必须随时保持"能跑起来"，不要把明知跑不起来的代码推上去
-- 分支命名：`feature/<人名>-<任务简述>`
-- 小步高频提交，不要攒一整天的改动才提交一次
-- **没有任何AI编程工具（包括你自己）会自动处理3个并行session改同一批文件产生的冲突**，所以只在操作者认领的文件/目录范围内改动，不要因为"顺手"就跨到别人负责的模块
+- The `main` branch must always stay "runnable" — never push code you already know is broken
+- Branch naming: `feature/<person>-<short task description>`
+- Commit in small steps, frequently — don't save up a whole day's changes for one commit
+- **No AI coding tool (including you) will automatically resolve conflicts from 3 parallel sessions editing the same files** — so only make changes within the files/directories the operator owns, and don't stray into a module someone else owns just because it's convenient
 
-## Git 安全规则（重要，避免破坏性事故）
+## Git Safety Rules (important — avoid destructive incidents)
 
-操作者是编程新手，对 git 命令的实际后果没有直觉，容易被自己无意中说的一句模糊话（比如"帮我清理一下""重置一下"）误导成执行破坏性操作。**因此：**
+The operator is new to programming and has no intuition for what git commands actually do — an offhand, vague remark from them (like "clean this up for me" or "reset it") can easily lead to a destructive action being carried out by mistake. **Therefore:**
 
-1. **禁止在没有明确、具体确认的情况下运行任何破坏性/不可逆的 git 命令**，包括但不限于 `git reset --hard`、`git checkout -- .`、`git clean -f`、强制推送。操作者说"清理一下/搞乱了帮我弄好"这类模糊话时，**不要直接执行重置类命令**——先问清楚"你是想撤销还没提交的改动，还是想回退到某次提交？会丢失 xxx 改动，确认吗？"
-2. 开始任何较大改动前，提醒操作者先手动 commit 一次，留一个可以回退的快照
-3. 合并冲突时，把你打算怎么合并的理由讲清楚，不要静默地二选一或者自己拍板丢弃某一方的改动而不说明
+1. **Never run a destructive/irreversible git command without explicit, specific confirmation**, including but not limited to `git reset --hard`, `git checkout -- .`, `git clean -f`, or a force push. When the operator says something vague like "clean this up / it's a mess, fix it," **don't jump straight to a reset-type command** — ask first: "do you want to undo uncommitted changes, or roll back to a specific commit? This will lose changes X — confirm?"
+2. Before starting any large change, remind the operator to commit manually first, leaving a snapshot that can be rolled back to
+3. When resolving a merge conflict, clearly explain the reasoning behind how you plan to merge it — don't silently pick one side or unilaterally discard someone's changes without explanation
 
-## 时间不够时的优先级（如果发现3.5天做不完全部要求，从下往上砍，不要砍上面的）
+## Priority Order If Time Runs Short (if it turns out 3.5 days isn't enough for everything, cut from the bottom up — never cut from the top)
 
-1. **核心三步流水线**（分类→抽取→比对）用 Gemini 跑通——这是"Working Core Prototype"25分的来源，绝对不能砍
-2. Web UI 响应式可用
-3. REST API（哪怕只覆盖三个模块里最关键的那个）
-4. MCP Server（哪怕只暴露一两个 tool）
-5. 其余4个 LLM provider 的切换支持（DeepSeek / ChatGPT / Gemini / LM Studio）——真的时间不够，先把接口/开关做出来，某个provider调不通也比完全没做强，在文档里如实说明
-6. 多语言插件（比如把 extraction 拆成独立 Python 服务）——如果时间紧，先用 JS 实现同样的功能，"独立服务"这一步可以放到决赛阶段再做
+1. **Get the core three-step pipeline** (classify → extract → compare) working end-to-end with Gemini — this is where the 25 points for "Working Core Prototype" come from; absolutely cannot be cut
+2. A responsive, usable Web UI
+3. REST API (even if it only covers the most critical of the three modules)
+4. MCP Server (even if it only exposes one or two tools)
+5. Switching support for the remaining 4 LLM providers (DeepSeek / ChatGPT / Gemini / LM Studio) — if time truly runs out, at least build the interface/toggle; having a provider that doesn't quite work is still better than not building it at all — document the actual state honestly
+6. Multi-language plugins (e.g. splitting extraction out into a separate Python service) — if time is tight, implement the same functionality in JS first; the "separate service" step can be pushed to the finals stage
 
-## 团队分工（已确认，不是按模块分，是按层分）
+## Team Division of Labor (confirmed — split by layer, not by module)
 
-跟前面"架构约束"那节举例的"每人认领一个feature模块"不一样——团队实际分工是**按技术层分**，不是按 `classification`/`extraction`/`comparison` 三个模块分给三个人：
+Unlike the example in the "architectural constraint" section above, where "each person claims one feature module" — the team's actual division of labor is **split by technical layer**, not by handing the three modules `classification`/`extraction`/`comparison` to three different people:
 
-- **操作者（负责人）**：**全部后端功能**——`classification` / `extraction` / `comparison` 三个模块的 `logic/`、`api/`、`mcp/`，加上 `/app/core`、`/lib/shared`、`/lib/llm` 这些公共区，全部由操作者一个人（通过AI编程工具）负责
-- **队友A**：**UI/UX**——三个模块各自的 `ui/` 文件夹，加上全局的布局/导航（`app/layout.tsx`、`app/page.tsx`、`app/core/nav.tsx`、`app/globals.css`）
-- **队友B**：**README、slide、演示材料等**——不碰代码，负责文档和演示相关的产出
+- **The operator (lead)**: **all backend functionality** — the `logic/`, `api/`, and `mcp/` of all three modules (`classification` / `extraction` / `comparison`), plus the shared areas `/app/core`, `/lib/shared`, `/lib/llm` — all owned by the operator alone (via an AI coding tool)
+- **Teammate A**: **UI/UX** — each module's own `ui/` folder, plus the global layout/navigation (`app/layout.tsx`, `app/page.tsx`, `app/core/nav.tsx`, `app/globals.css`)
+- **Teammate B**: **README, slides, demo materials, etc.** — doesn't touch code; responsible for documentation and demo-related deliverables
 
-这个分工方式跟已经定好的 `logic/api/mcp/ui` 分层架构天然契合：操作者只改 `logic/api/mcp`，队友A只改 `ui/`，两人几乎不会碰到同一个文件，冲突概率比"按模块分"更低。**给AI的提醒**：
+This division fits naturally with the already-established `logic/api/mcp/ui` layering: the operator only changes `logic/api/mcp`, teammate A only changes `ui/`, so the two almost never touch the same file — the odds of conflict are lower than "split by module." **Reminders for AI**:
 
-1. `app/features/*/ui/` 调用同模块的 `api/` 时，返回的数据格式要跟 `docs/SHARED_INTERFACES.md` 里写的一致——这是操作者和队友A之间唯一需要对齐的"接口"，操作者这边改了 `api/` 返回格式，要记得同步更新 `docs/SHARED_INTERFACES.md`，队友A的AI才知道要跟着调整
-2. `README.md` 目前由队友B主笔（叙述性内容、演示相关），但涉及"怎么装依赖""环境变量填什么""部署步骤"这类会随后端改动而变的技术细节，操作者这边改了以后应该主动同步更新，不要指望队友B自己猜对最新状态
+1. When `app/features/*/ui/` calls its own module's `api/`, the returned data shape must match what's written in `docs/SHARED_INTERFACES.md` — this is the only "interface" the operator and teammate A need to keep aligned on. Whenever the operator changes an `api/` response shape, remember to update `docs/SHARED_INTERFACES.md` in the same change, so teammate A's AI knows to adjust accordingly
+2. `README.md` is currently mainly written by teammate B (narrative content, demo-related), but for technical details that change as the backend changes — "how to install dependencies," "what to put in environment variables," "deployment steps" — the operator should proactively keep it updated after making changes, rather than expecting teammate B to guess the latest state correctly
 
-## 评审沉淀（/council 2026-09-21）
+## Review Takeaways (/council 2026-09-21)
 
-- ① MCP 新增写 tool 必须显式声明 `readOnlyHint:false`（MCP 入口对未声明注解的 tool 按"需要口令"fail-closed 处理）；② 实现与已批方案有偏差（如分块粒度、默认引擎）必须显式登记并同步验证清单；③ 外部调用的错误文案要可读但不透传上游原文；④ 提交文件完整性（submission 导出）的分母必须来自独立可信来源（官方样例清单），不能用自己的数据当分母
-- ⑤ **官方题目包（含答案）已确认可用（2026-09-21 口径更新）**：`[!] Problem Statement/` 下的 `sdoc-hackathon-docker`（含 `data_v2/ground_truth.json` 答案、出题生成器、官方评分脚本）是主办方**明确声明允许参赛者使用**的材料，正常使用、留在仓库里都不构成违规——**不要再按"泄露/红线"处理，也不要为此清理 git 历史或从仓库删除**。唯一约束：`ground_truth` 只用于本地自测，绝不进最终提交文件（`scope=submission` 的导出里没有它）。
+- ① Any new write tool added to MCP must explicitly declare `readOnlyHint:false` (the MCP entry point fail-closes any tool without an explicit annotation, treating it as "needs a token"); ② Any deviation between the implementation and an already-approved plan (e.g. chunking granularity, default engine) must be explicitly logged and the verification checklist updated to match; ③ Error text from external calls must be readable but must not leak the raw upstream text; ④ The denominator for submission file completeness (the submission export) must come from an independent, trustworthy source (the official sample manifest) — never use your own data as the denominator
+- ⑤ **The official problem-statement package (including the answers) is confirmed usable (2026-09-21 policy update)**: `sdoc-hackathon-docker` under `[!] Problem Statement/` (which includes the `data_v2/ground_truth.json` answers, the question generator, and the official scoring script) is material the organizers **have explicitly stated participants are allowed to use** — using it normally and keeping it in the repo is not a violation. **Stop treating it as a "leak/red line," and don't clean up git history or delete it from the repo over this.** The only constraint: `ground_truth` is for local self-testing only and must never go into the final submission file (it is absent from the `scope=submission` export).

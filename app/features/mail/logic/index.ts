@@ -1,6 +1,6 @@
 /**
- * mail 模块（PHASE2_SPEC 第 4 节）的唯一实现：Gmail 连接状态占位 + 多 Supabase 项目管理。
- * REST（api/）和 MCP（mcp/）都只调用这里的函数，不重复实现逻辑。
+ * The single implementation of the mail module (PHASE2_SPEC section 4): Gmail connection status placeholder + multi-Supabase-project management.
+ * Both REST (api/) and MCP (mcp/) call only the functions here, without reimplementing the logic.
  */
 export {
   buildGmailConnectPlaceholder,

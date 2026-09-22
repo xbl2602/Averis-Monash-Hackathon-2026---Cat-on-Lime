@@ -1,11 +1,11 @@
 /**
- * HTTP 传输层的小工具：query string → 原始值、错误 → HTTP 响应。
- * 参数校验本身在 logic/params.ts（和 MCP 共用），这里只做"传输格式"的转换。
+ * Small HTTP transport-layer utilities: query string -> raw values, errors -> HTTP responses.
+ * Parameter validation itself lives in logic/params.ts (shared with MCP); this only handles the "transport format" conversion.
  */
 import { NextResponse } from "next/server";
 import { DataAccessError, ResultQueryError } from "../logic";
 
-/** 同名参数出现多次时合并成逗号分隔（normalize 里按数组处理） */
+/** When a parameter of the same name appears more than once, merge into a comma-separated value (normalize treats it as an array) */
 export function searchParamsToRecord(searchParams: URLSearchParams): Record<string, string> {
   const raw: Record<string, string> = {};
   for (const [key, value] of searchParams) {
@@ -19,9 +19,9 @@ export function toErrorResponse(err: unknown): NextResponse {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
   if (err instanceof DataAccessError) {
-    // 数据库连不上/没配环境变量：属于"暂时不可用"，不是参数问题
+    // Can't connect to the database / environment variables not configured: this is "temporarily unavailable", not a parameter problem
     return NextResponse.json({ error: err.message }, { status: 503 });
   }
-  console.error("[results/api] 未预期错误", err);
-  return NextResponse.json({ error: "结果服务内部错误，请稍后重试" }, { status: 500 });
+  console.error("[results/api] Unexpected error", err);
+  return NextResponse.json({ error: "Internal error in the results service, please try again later" }, { status: 500 });
 }

@@ -1,26 +1,31 @@
 /**
- * 模型调用级缓存（见 DECISION_LOG / 引擎方案里的"缓存设计"）：
- * - 键 = sha256(用途 + 版本 + provider + 模型 + 实际发送内容)
- *   "实际发送内容"指真正发给模型的完整输入（如果哪天做了截断，截断后的版本才是指纹的一部分，
- *   内容一变指纹就变，不会把旧结果错配给新内容）——避免"缓存截段"类问题
- * - 缓存里存完整响应，不存半截；不同邮件/文档不可能撞键（输入指纹不同）——避免上下文污染
- * - 写入用 upsert，并发安全
- * - 没配 SUPABASE_SERVICE_ROLE_KEY 时自动降级为"直接调用、不缓存"，不影响主流程
+ * Model-call-level caching (see the "cache design" in DECISION_LOG / the engine design docs):
+ * - Key = sha256(purpose + version + provider + model + the actual content sent)
+ *   "The actual content sent" means the complete input actually sent to the model (if
+ *   truncation is ever added, the truncated version becomes part of the fingerprint — any
+ *   change in content changes the fingerprint, so an old result is never mismatched against
+ *   new content) — this avoids "cache truncation" style bugs
+ * - The cache stores the complete response, never a partial one; different
+ *   emails/documents can never collide on the key (their input fingerprints differ) — this
+ *   avoids cross-context contamination
+ * - Writes use upsert, which is concurrency-safe
+ * - When SUPABASE_SERVICE_ROLE_KEY isn't configured, this automatically degrades to "call
+ *   directly, no caching", without affecting the main flow
  */
 import { createHash } from "node:crypto";
 import { getSupabaseServiceClient, isSupabaseServiceAvailable } from "./supabase";
 
-// 引擎逻辑（prompt/规则/阈值/模型）有实质改动时手动 +1，让旧缓存自动失效
+// Bump this by hand whenever the engine logic (prompt/rules/thresholds/model) changes substantively, to auto-invalidate old cache entries
 export const LLM_CACHE_VERSION = "v1";
 
 export interface CallWithCacheOptions<T> {
-  /** 用途标签，例如 "classification" / "extraction_llm" / "field_equivalence" */
+  /** Purpose label, e.g. "classification" / "extraction_llm" / "field_equivalence" */
   purpose: string;
   provider: string;
   model: string;
-  /** 这次实际发送给模型的完整内容（用来做指纹和排查对账） */
+  /** The complete content actually sent to the model this time (used for fingerprinting and reconciliation during debugging) */
   request: unknown;
-  /** 缓存未命中时真正发起调用 */
+  /** Invoked to actually make the call on a cache miss */
   execute: () => Promise<T>;
 }
 
@@ -33,7 +38,7 @@ export async function callWithCache<T>(
   options: CallWithCacheOptions<T>
 ): Promise<CallWithCacheResult<T>> {
   if (!isSupabaseServiceAvailable()) {
-    // 没有 service key：不缓存，直接调用（本地没配 key 时也能跑通主流程）
+    // No service key: don't cache, call directly (so the main flow still works locally without a configured key)
     return { value: await options.execute(), cached: false };
   }
 
@@ -53,12 +58,12 @@ export async function callWithCache<T>(
         .update({ last_used_at: new Date().toISOString() })
         .eq("cache_key", cacheKey)
         .then(({ error: touchError }) => {
-          if (touchError) console.warn("[llm-cache] 更新 last_used_at 失败：", touchError.message);
+          if (touchError) console.warn("[llm-cache] Failed to update last_used_at:", touchError.message);
         });
       return { value: data.response_payload as T, cached: true };
     }
   } catch (err) {
-    console.warn("[llm-cache] 读取缓存失败，降级为直接调用：", err instanceof Error ? err.message : err);
+    console.warn("[llm-cache] Failed to read from cache, falling back to a direct call:", err instanceof Error ? err.message : err);
   }
 
   const value = await options.execute();
@@ -78,7 +83,7 @@ export async function callWithCache<T>(
     );
     if (error) throw new Error(error.message);
   } catch (err) {
-    console.warn("[llm-cache] 写缓存失败（结果不受影响）：", err instanceof Error ? err.message : err);
+    console.warn("[llm-cache] Failed to write to cache (result is unaffected):", err instanceof Error ? err.message : err);
   }
 
   return { value, cached: false };

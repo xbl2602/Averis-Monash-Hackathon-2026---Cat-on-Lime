@@ -1,13 +1,13 @@
 /**
- * Gmail 账户（mail_accounts 表）的读取与断开。
+ * Reading and disconnecting the Gmail account (mail_accounts table).
  *
- * 本阶段只做"连接状态占位"，不实现真实 OAuth。真实路径（PHASE2_SPEC 4.3）：
- *   Google OAuth 授权（scope gmail.readonly）→ /features/mail/api/gmail/callback 回调
- *   → 用授权码换 token、encryptSecret 加密后写 mail_accounts → 定时/手动调用
- *   Gmail API users.messages.list 拉邮件 → 复用 classification/extraction/comparison
- *   流水线 → 结果落 verification_results。
+ * This stage only implements a "connection status placeholder", not real OAuth. The real path (PHASE2_SPEC 4.3):
+ *   Google OAuth authorization (scope gmail.readonly) -> /features/mail/api/gmail/callback callback
+ *   -> exchange the authorization code for a token, encrypt it with encryptSecret and write to mail_accounts -> scheduled/manual call to
+ *   the Gmail API users.messages.list to fetch emails -> reuse the classification/extraction/comparison
+ *   pipeline -> results land in verification_results.
  *
- * token 列只用来算 has_access_token / has_refresh_token，永远不出现在响应里（SPEC 第 1 节）。
+ * The token columns are only used to compute has_access_token / has_refresh_token, and never appear in the response (SPEC section 1).
  */
 import { MailDataError } from "./errors";
 import { getMailDbClient } from "./store";
@@ -27,14 +27,14 @@ export interface GmailConnectionView {
 }
 
 /**
- * 本阶段只有一个 Gmail 账户：用固定 UUID 作为行标识，
- * 查询/断开都直接按 id 读写或 upsert，不需要"先查再插"（并发安全，见 CLAUDE.md）。
+ * This stage only has one Gmail account: a fixed UUID is used as the row identifier,
+ * and querying/disconnecting reads/writes or upserts directly by id, with no need for "check first, then insert" (concurrency-safe, see CLAUDE.md).
  */
 export const GMAIL_ACCOUNT_ID = "00000000-0000-4000-8000-000000000001";
 
 const GMAIL_STATUSES: GmailConnectionStatus[] = ["disconnected", "pending", "connected", "error"];
 
-/** 从未连接时的默认值：读接口据此正常回 status=disconnected，不报错 */
+/** Default value when never connected: the read endpoint returns status=disconnected normally based on this, without erroring */
 export function emptyGmailConnection(): GmailConnectionView {
   return {
     provider: "gmail",
@@ -59,7 +59,7 @@ export async function getGmailConnection(): Promise<GmailConnectionView> {
     .eq("id", GMAIL_ACCOUNT_ID)
     .maybeSingle();
   if (error) {
-    throw new MailDataError(`读取 Gmail 连接状态失败：${error.message}（确认 mail_accounts 表已创建，见 PHASE2_SPEC 4.1）`);
+    throw new MailDataError(`Failed to read Gmail connection status: ${error.message} (confirm the mail_accounts table has been created, see PHASE2_SPEC 4.1)`);
   }
   if (!data) return emptyGmailConnection();
 
@@ -86,7 +86,7 @@ export async function getGmailConnection(): Promise<GmailConnectionView> {
   };
 }
 
-/** 断开：清空 token、status 置 disconnected；upsert 让"从未连接过"也能安全调用 */
+/** Disconnect: clear the tokens and set status to disconnected; using upsert means it's safe to call even when "never connected before" */
 export async function disconnectGmail(): Promise<GmailConnectionView> {
   const client = getMailDbClient();
   const { error } = await client.from("mail_accounts").upsert(
@@ -101,7 +101,7 @@ export async function disconnectGmail(): Promise<GmailConnectionView> {
     },
     { onConflict: "id" }
   );
-  if (error) throw new MailDataError(`断开 Gmail 失败：${error.message}`);
+  if (error) throw new MailDataError(`Failed to disconnect Gmail: ${error.message}`);
   return getGmailConnection();
 }
 
@@ -112,12 +112,12 @@ export interface GmailConnectPlaceholder {
 }
 
 const GMAIL_CONNECT_REQUIREMENTS =
-  "Gmail 真实接入尚未实现，目前只提供连接状态占位。要接上真实邮箱需要：① 在 Google Cloud Console 创建一个 OAuth client（类型选 Web application）；" +
-  "② 启用 Gmail API 并申请只读权限 https://www.googleapis.com/auth/gmail.readonly；" +
-  "③ 把下面这个 redirect_uri 原样填进 OAuth client 的「已获授权的重定向 URI」；" +
-  "④ 服务端用授权码换取 token、加密存入 mail_accounts 后，才能定时拉取邮件并送进现有核验流水线。本阶段授权的浏览器跳转还没有实现。";
+  "Real Gmail integration isn't implemented yet — only a connection status placeholder is provided for now. Wiring up a real mailbox requires: (1) creating an OAuth client in Google Cloud Console (type: Web application); " +
+  "(2) enabling the Gmail API and requesting the read-only scope https://www.googleapis.com/auth/gmail.readonly; " +
+  "(3) entering the redirect_uri below verbatim into the OAuth client's \"Authorized redirect URIs\"; " +
+  "(4) once the server exchanges the authorization code for a token and stores it encrypted in mail_accounts, it can then periodically fetch emails and feed them into the existing verification pipeline. The browser redirect for this stage's authorization isn't implemented yet.";
 
-/** 发起连接的占位响应：说明真实接入需要什么，并把回调地址按当前请求的 origin 拼出来 */
+/** Placeholder response for initiating a connection: explains what real integration requires, and builds the callback address from the current request's origin */
 export function buildGmailConnectPlaceholder(origin: string): GmailConnectPlaceholder {
   return {
     status: "not_implemented",
@@ -126,13 +126,13 @@ export function buildGmailConnectPlaceholder(origin: string): GmailConnectPlaceh
   };
 }
 
-/** MCP sync_gmail 的占位结果（MCP 没有浏览器 origin 概念，只解释未实现的原因和真实路径） */
+/** Placeholder result for MCP sync_gmail (MCP has no concept of a browser origin, so this just explains why it isn't implemented and what the real path is) */
 export function buildGmailSyncPlaceholder(): { status: "not_implemented"; message: string } {
   return {
     status: "not_implemented",
     message:
-      "Gmail 自动同步尚未实现：需要先完成 Gmail OAuth 授权（scope gmail.readonly）并把 token 加密存入 mail_accounts，" +
-      "之后才能调用 Gmail API users.messages.list 拉取邮件、交给现有分类/抽取/比对流水线。本阶段可先用 GET /features/mail/api/gmail 查看连接状态",
+      "Automatic Gmail sync isn't implemented yet: Gmail OAuth authorization (scope gmail.readonly) needs to be completed first, with the token encrypted and stored in mail_accounts, " +
+      "before the Gmail API's users.messages.list can be called to fetch emails and hand them to the existing classification/extraction/comparison pipeline. For now, use GET /features/mail/api/gmail to check connection status",
   };
 }
 

@@ -1,6 +1,6 @@
 /**
- * import 模块 HTTP 传输层的小工具：JSON 解析、query string → 记录、错误 → 响应。
- * 参数校验本身在 logic/params.ts（REST/MCP 共用），这里只做"传输格式"的转换。
+ * Small HTTP transport-layer utilities for the import module: JSON parsing, query string -> record, errors -> responses.
+ * Parameter validation itself lives in logic/params.ts (shared by REST/MCP); this only handles the "transport format" conversion.
  */
 import { NextResponse } from "next/server";
 import {
@@ -11,7 +11,7 @@ import {
   ImportRequestError,
 } from "../logic";
 
-/** 同名参数出现多次时保留最后一个（本模块的参数都是单值） */
+/** When a parameter of the same name appears more than once, keep the last one (all of this module's parameters are single-valued) */
 export function searchParamsToRecord(searchParams: URLSearchParams): Record<string, string> {
   const raw: Record<string, string> = {};
   for (const [key, value] of searchParams) raw[key] = value;
@@ -19,15 +19,15 @@ export function searchParamsToRecord(searchParams: URLSearchParams): Record<stri
 }
 
 export function parseJsonText(text: string): Record<string, unknown> {
-  if (text.trim() === "") throw new ImportRequestError("请求体不能为空");
+  if (text.trim() === "") throw new ImportRequestError("The request body cannot be empty");
   let body: unknown;
   try {
     body = JSON.parse(text);
   } catch {
-    throw new ImportRequestError("请求体不是合法 JSON");
+    throw new ImportRequestError("The request body is not valid JSON");
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new ImportRequestError("请求体必须是 JSON 对象");
+    throw new ImportRequestError("The request body must be a JSON object");
   }
   return body as Record<string, unknown>;
 }
@@ -48,9 +48,9 @@ export function toImportErrorResponse(err: unknown): NextResponse {
   if (err instanceof DocumentStoreError) {
     return NextResponse.json({ error: err.message }, { status: 503 });
   }
-  console.error("[import/api] 未预期错误", err);
+  console.error("[import/api] Unexpected error", err);
   return NextResponse.json(
-    { error: "import 服务内部错误，请稍后重试（详细原因已记录到服务端日志）" },
+    { error: "Internal error in the import service, please try again later (details have been logged server-side)" },
     { status: 500 }
   );
 }

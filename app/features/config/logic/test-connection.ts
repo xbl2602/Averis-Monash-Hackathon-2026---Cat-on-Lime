@@ -1,6 +1,6 @@
 /**
- * 配置测试连接（第二阶段 SPEC 第 3.3 节）。
- * 服务端解密后真实调用一次目标服务，只回 ok/detail，不泄露 key。
+ * Config test connection (Phase 2 SPEC section 3.3).
+ * The server decrypts and makes one real call to the target service, returning only ok/detail — never leaking the key.
  */
 import { resolveConfigValue } from "@/lib/shared/config-store";
 import { getActiveSupabaseConfig } from "@/lib/shared/supabase";
@@ -40,21 +40,21 @@ export async function testConnection(target: TestTarget): Promise<TestResult> {
   }
 }
 
-// fetch 抛出的 "fetch failed" 本身没有可读信息，把底层 cause 的 code/message 一起带上（不含任何密钥）
+// The "fetch failed" thrown by fetch carries no readable info by itself; include the underlying cause's code/message too (contains no secrets)
 function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   const cause = (err as { cause?: { code?: string; message?: string } }).cause;
   const suffix = cause?.code ?? cause?.message;
-  return suffix ? `${err.message}（${suffix}）` : err.message;
+  return suffix ? `${err.message} (${suffix})` : err.message;
 }
 
 async function testLlmKey(target: "claude" | "openai" | "deepseek" | "gemini"): Promise<TestResult> {
   const key = (await resolveConfigValue(KEY_BY_TARGET[target])) as string | null;
   if (!key) {
-    return { ok: false, detail: `未配置 ${target} 的 API key，请先填写再测试` };
+    return { ok: false, detail: `No API key configured for ${target}; please fill it in before testing` };
   }
 
-  // 用"列模型"接口做最小真实调用：不产生 token 费用，且能验证 key 有效性
+  // Use the "list models" endpoint for a minimal real call: no token cost, and it verifies the key is valid
   const endpoints: Record<"claude" | "openai" | "deepseek" | "gemini", { url: string; headers: Record<string, string> }> = {
     claude: {
       url: "https://api.anthropic.com/v1/models?limit=1",
@@ -76,39 +76,41 @@ async function testLlmKey(target: "claude" | "openai" | "deepseek" | "gemini"): 
 
   const { url, headers } = endpoints[target];
   const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-  if (response.ok) return { ok: true, detail: `${target} key 有效，服务可达` };
+  if (response.ok) return { ok: true, detail: `${target} key is valid, service is reachable` };
   if (response.status === 401 || response.status === 403) {
-    return { ok: false, detail: `${target} 拒绝了这个 key（HTTP ${response.status}），请检查是否填错或已过期` };
+    return { ok: false, detail: `${target} rejected this key (HTTP ${response.status}); check whether it was mistyped or has expired` };
   }
-  return { ok: false, detail: `${target} 返回 HTTP ${response.status}，请稍后重试` };
+  return { ok: false, detail: `${target} returned HTTP ${response.status}; please try again later` };
 }
 
 async function testTypesafe(): Promise<TestResult> {
   const key = (await resolveConfigValue("llm.typesafe_api_key")) as string | null;
-  if (!key) return { ok: false, detail: "未配置 TypeSafe Jev 的 API key" };
-  // 用最小 state+question 发一次真实请求，验证 key 与端点
+  if (!key) return { ok: false, detail: "No API key configured for TypeSafe Jev" };
+  // Send one real request with a minimal state+question to verify the key and endpoint
   const response = await fetch("https://api.typesafe.ai/v1/systemone", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       state: { probe: true },
-      questions: { ok: { type: "noul", instructions: "这是一个测试请求，回答是" } },
+      questions: { ok: { type: "noul", instructions: "This is a test request; answer yes." } },
     }),
     signal: AbortSignal.timeout(20000),
   });
-  if (response.ok) return { ok: true, detail: "TypeSafe Jev key 有效，服务可达" };
-  if (response.status === 401) return { ok: false, detail: "TypeSafe 拒绝了这个 key（401），请检查是否填错" };
-  return { ok: false, detail: `TypeSafe 返回 HTTP ${response.status}，请稍后重试` };
+  if (response.ok) return { ok: true, detail: "TypeSafe Jev key is valid, service is reachable" };
+  if (response.status === 401) return { ok: false, detail: "TypeSafe rejected this key (401); check whether it was mistyped" };
+  return { ok: false, detail: `TypeSafe returned HTTP ${response.status}; please try again later` };
 }
 
 async function testSupabase(): Promise<TestResult> {
-  // 用"当前实际生效"的配置（启用项目 > 环境变量），和写库走的 getSupabaseServiceClientAsync 语义一致。
-  // 不走 resolveConfigValue("supabase.service_key")：那个 key 不在 config-store 的环境变量映射里，永远解析不到。
+  // Uses the config that's "currently actually in effect" (enabled project > environment variables),
+  // matching the semantics of getSupabaseServiceClientAsync used for writes.
+  // Does not go through resolveConfigValue("supabase.service_key"): that key isn't in config-store's
+  // environment-variable mapping, so it would never resolve.
   const config = await getActiveSupabaseConfig();
   if (!config || !config.serviceKey) {
     return {
       ok: false,
-      detail: "未配置可用的 Supabase service key：请在 mail 的 supabase-projects 接口启用一个带 service key 的项目，或在环境变量里配置",
+      detail: "No usable Supabase service key configured: enable a project with a service key via the mail module's supabase-projects endpoint, or configure it via environment variables",
     };
   }
   const { url, serviceKey: key } = config;
@@ -117,13 +119,13 @@ async function testSupabase(): Promise<TestResult> {
     signal: AbortSignal.timeout(15000),
   });
   return response.ok
-    ? { ok: true, detail: "Supabase 项目可达，key 有效" }
-    : { ok: false, detail: `Supabase 返回 HTTP ${response.status}，请检查 URL 和 key` };
+    ? { ok: true, detail: "Supabase project is reachable, key is valid" }
+    : { ok: false, detail: `Supabase returned HTTP ${response.status}; check the URL and key` };
 }
 
 function testLmStudio(): TestResult {
   if (!isLocalLLMAvailable()) {
-    return { ok: false, detail: "当前是 Vercel 云端环境，本地 LM Studio 不可用（架构限制，非配置错误）" };
+    return { ok: false, detail: "Currently running in the Vercel cloud environment; local LM Studio is unavailable (architectural constraint, not a configuration error)" };
   }
-  return { ok: true, detail: "本地环境允许使用 LM Studio；请确认 LM Studio 已启动（默认 http://localhost:1234/v1）" };
+  return { ok: true, detail: "The local environment allows using LM Studio; make sure LM Studio is running (default http://localhost:1234/v1)" };
 }

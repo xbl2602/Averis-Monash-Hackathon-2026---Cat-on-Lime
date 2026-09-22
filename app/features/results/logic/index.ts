@@ -1,6 +1,6 @@
 /**
- * results 模块的对外门面：REST（api/）和 MCP（mcp/）都只调用这里，
- * 保证"查询/统计/冲突/导出"四件事只有这一套实现（不重复造轮子）。
+ * External facade for the results module: both REST (api/) and MCP (mcp/) call only into here,
+ * ensuring "query/stats/conflicts/export" each have exactly one implementation (no reinventing the wheel).
  */
 export { listResults, listAllResults } from "./query";
 export { getStats } from "./stats";

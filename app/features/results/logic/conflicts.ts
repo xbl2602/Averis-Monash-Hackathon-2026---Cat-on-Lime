@@ -1,7 +1,8 @@
 /**
- * 冲突文件对：把"SI 与 BL 不一致（MISMATCH）"和"拿不准需要人看（NEEDS_REVIEW）"
- * 的邮件整理成一组组文件对，附上两边抽取到的字段值，供人工复核和导出。
- * 读 verification_overview 视图（只包含处理过的行，字段是扁平列）。
+ * Conflicting file pairs: organizes emails where "SI and BL disagree (MISMATCH)" or where it's
+ * "uncertain and needs a human look (NEEDS_REVIEW)" into file pairs, with the extracted field values
+ * from both sides attached, for manual review and export.
+ * Reads from the verification_overview view (only processed rows, fields are flat columns).
  */
 import type {
   ComparisonStatus,
@@ -57,7 +58,7 @@ interface ConflictRow {
 }
 
 export async function listConflicts(query: ConflictQuery): Promise<ConflictList> {
-  // 带数值口径/按值搜索时要在内存里套用（见 numeric-query.ts），先取全量再分页
+  // When using numeric mode / search-by-value, it must be applied in memory (see numeric-query.ts): fetch everything first, then paginate
   if (usesNumericFeatures(query)) {
     const all = await fetchAllConflictsMatching(query);
     return {
@@ -74,7 +75,7 @@ export async function listConflicts(query: ConflictQuery): Promise<ConflictList>
   const { data, error, count } = await applyConflictOrder(builder, query)
     .range(query.offset, query.offset + query.limit - 1);
 
-  if (error) throw new DataAccessError(`查询冲突文件对失败：${error.message}`);
+  if (error) throw new DataAccessError(`Failed to query conflicting file pairs: ${error.message}`);
 
   return {
     total: count ?? 0,
@@ -86,7 +87,7 @@ export async function listConflicts(query: ConflictQuery): Promise<ConflictList>
   };
 }
 
-/** 导出用：同样筛选条件下取回全部冲突对 */
+/** For export: fetch back all conflict pairs under the same filters */
 export async function listAllConflicts(query: ConflictQuery): Promise<ConflictPair[]> {
   if (usesNumericFeatures(query)) return fetchAllConflictsMatching(query);
 
@@ -97,7 +98,7 @@ export async function listAllConflicts(query: ConflictQuery): Promise<ConflictPa
   return rows.map(toConflictPair);
 }
 
-/** 数值口径/按值搜索：SQL 只做状态+关键词筛选，数字比较在内存里按查询口径套用 */
+/** Numeric mode / search-by-value: SQL only does status + keyword filtering; the numeric comparison is applied in memory according to the query mode */
 async function fetchAllConflictsMatching(query: ConflictQuery): Promise<ConflictPair[]> {
   const rows = await fetchAllRows<ConflictRow>((from, to) => {
     const builder = applyConflictFilters(buildBaseQuery(), query);

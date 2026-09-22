@@ -1,12 +1,12 @@
-%% 源码：README 写保护节加密图 + docs/diagrams/encryption.png。
-%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/encryption.mmd -o docs/diagrams/encryption.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% 口径见 lib/shared/crypto.ts 头注释：主密钥永不进库/进 git/回显；读接口只给掩码；加解密用同一把 key。
-%% block 网格写法（flowchart 里两个无入边节点会被竖叠，排不成一行，只能用 block 锁格子）。
+%% Source: the README write-protection encryption diagram + docs/diagrams/encryption.png.
+%% Re-render command (from repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/encryption.mmd -o docs/diagrams/encryption.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Reference: see the header comment in lib/shared/crypto.ts — the master key never goes into the database, git, or an echoed response; read endpoints only ever return a masked value; encryption and decryption use the same key.
+%% Block grid approach (in a flowchart, two nodes with no incoming edges get stacked vertically instead of laid out in a row, so a block grid is used to lock the layout).
 block-beta
   columns 2
-  IN["敏感值<br/>LLM key 等"] K["主密钥<br/>只在环境变量"]
-  E["服务端加密<br/>AES-256-GCM"] DB["app_config 表<br/>只存密文"]
-  D["用时服务端解密<br/>读接口只给掩码"]:2
+  IN["Sensitive value<br/>e.g. LLM key"] K["Master key<br/>env var only"]
+  E["Server-side encryption<br/>AES-256-GCM"] DB["app_config table<br/>ciphertext only"]
+  D["Decrypted server-side on use<br/>read endpoints return a masked value only"]:2
   IN --> E
   K --> E
   E --> DB

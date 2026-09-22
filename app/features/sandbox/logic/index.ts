@@ -1,9 +1,11 @@
 /**
- * sandbox 的唯一业务逻辑：接一份裁判自己上传的 SI + BL（可选邮件主题/正文），
- * 跑一次分类（可选）+ 抽取 + 比对，返回结果。不写库、不需要 Supabase，REST/MCP 都调这里。
+ * The sandbox module's only business logic: takes an SI + BL uploaded by a judge (with optional email
+ * subject/body), runs classification (optional) + extraction + comparison once, and returns the result.
+ * Writes to no database, needs no Supabase — both REST and MCP call into this.
  *
- * 复用production同一套引擎（classification/extraction/comparison 各自的 logic），
- * 不重新实现判断逻辑——这样"裁判自己测的结果"和"系统正式跑出来的结果"是同一套标准。
+ * Reuses the same engine as production (each of classification/extraction/comparison's own logic)
+ * rather than reimplementing the decision logic — this way "a result the judge tested themselves" and
+ * "a result the system produced in normal operation" are held to the same standard.
  */
 import { classifyEmail } from "@/app/features/classification/logic";
 import { compareDocumentsHybrid } from "@/app/features/comparison/logic";
@@ -30,10 +32,10 @@ import {
 
 export async function runAdhocTest(request: RunAdhocTestRequest): Promise<RunAdhocTestResult> {
   if (request.provider !== undefined && !isLLMProvider(request.provider)) {
-    throw new SandboxRequestError(`不支持的 provider：${request.provider}`);
+    throw new SandboxRequestError(`Unsupported provider: ${request.provider}`);
   }
   const provider = request.provider as LLMProvider | undefined;
-  // 抽取只接受文本 provider（jev 不做文本生成）；传了 jev 就用抽取自己的默认值（gemini），不报错
+  // Extraction only accepts a text provider (jev doesn't do text generation); if jev is passed, fall back to extraction's own default (gemini) instead of erroring
   const textProvider: TextLLMProvider | undefined =
     provider && isTextProvider(provider) ? provider : undefined;
 
@@ -71,25 +73,25 @@ async function parseUploadedDocument(
   label: "si" | "bl"
 ): Promise<{ text: string }> {
   if (!file || typeof file.name !== "string" || typeof file.data_base64 !== "string") {
-    throw new SandboxRequestError(`缺少 ${label} 文件（需要 { name, data_base64 }）`);
+    throw new SandboxRequestError(`Missing ${label} file (requires { name, data_base64 })`);
   }
   const extension = assertAllowedExtension(file.name, SANDBOX_ALLOWED_EXTENSIONS);
   const content = decodeBase64File(file.data_base64);
   if (content.length > MAX_FILE_BYTES) {
     throw new SandboxFileTooLargeError(
-      `${label.toUpperCase()} 文件（${formatBytes(content.length)}）超过单文件上限 ${formatBytes(MAX_FILE_BYTES)}`
+      `${label.toUpperCase()} file (${formatBytes(content.length)}) exceeds the per-file limit of ${formatBytes(MAX_FILE_BYTES)}`
     );
   }
   const magicError = checkMagicBytes(extension, content);
   if (magicError) {
-    throw new SandboxRequestError(`${label.toUpperCase()} 文件校验失败：${magicError}`);
+    throw new SandboxRequestError(`${label.toUpperCase()} file validation failed: ${magicError}`);
   }
 
   const safeName = sanitizeFileName(file.name, MAX_FILE_NAME_LENGTH);
   const parsed = await extractAttachmentText(safeName, content);
   if (parsed.status !== "ok") {
     throw new SandboxRequestError(
-      `${label.toUpperCase()} 文件读不出文字（可能是扫描件或损坏文件）：${parsed.error ?? "内容太短"}`
+      `${label.toUpperCase()} file has no extractable text (may be a scanned image or a corrupted file): ${parsed.error ?? "content too short"}`
     );
   }
   return { text: parsed.text };

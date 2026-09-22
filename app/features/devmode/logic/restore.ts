@@ -9,17 +9,18 @@ export interface DevModeRestoreResult {
 }
 
 /**
- * "恢复到官方样例状态"按钮的完整语义：先清空全部数据表，再从 data/sample/ 重新导入
- * raw_emails / parsed_attachments。恢复后 verification_results 是空的（还没跑过分类/
- * 抽取/比对）——这是有意的：跑一次 `POST /features/pipeline/api` 就能重新填满，
- * 不在恢复接口里顺带跑一遍全量流水线（那要消耗真实 LLM 调用额度，不应该藏在一个
- * "重置数据"的按钮背后）。
+ * The full semantics of the "restore to official sample state" button: first wipe every data table,
+ * then reimport raw_emails / parsed_attachments from data/sample/. After restoring, verification_results
+ * is empty (classification/extraction/comparison haven't run yet) — this is intentional: running
+ * `POST /features/pipeline/api` once will refill it. The restore endpoint deliberately does not also
+ * run the full pipeline (that would consume real LLM call quota, and shouldn't be hidden behind a
+ * "reset data" button).
  */
 export async function restoreToOfficialSample(): Promise<DevModeRestoreResult> {
   const wiped = await wipeAllData();
   const failed = wiped.find((outcome) => !outcome.ok);
   if (failed) {
-    throw new DevModeRequestError(`恢复中止：清空 ${failed.table} 失败（${failed.error}），没有继续重新导入`);
+    throw new DevModeRequestError(`Restore aborted: wiping ${failed.table} failed (${failed.error}); reimport was not attempted`);
   }
 
   const reimport = await reimportSampleData();

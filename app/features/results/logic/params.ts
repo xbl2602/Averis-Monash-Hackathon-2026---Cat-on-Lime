@@ -1,8 +1,9 @@
 /**
- * 查询参数的唯一校验/归一化入口。
+ * The single validation/normalization entry point for query parameters.
  *
- * HTTP 层把 query string 转成原始值（字符串/逗号分隔），MCP 层直接把 typed 参数传进来，
- * 两边都走这里，保证"同一份校验规则"，不在各自传输层重写一遍。
+ * The HTTP layer converts the query string into raw values (strings/comma-separated), and the MCP
+ * layer passes typed parameters straight in; both go through here so there's "one set of validation
+ * rules" instead of each transport layer rewriting its own.
  */
 import { COMPARISON_STATUSES, EMAIL_CATEGORIES } from "@/lib/shared/types";
 import { ResultQueryError } from "./errors";
@@ -32,7 +33,7 @@ import {
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
 
-// 两种传输层共用的原始输入：值可能是字符串、数组、数字、布尔（都不信任）
+// Raw input shared by both transport layers: values may be a string, array, number, or boolean (none of it trusted)
 export interface RawQueryInput {
   category?: unknown;
   status?: unknown;
@@ -93,12 +94,12 @@ export function normalizeConflictQuery(raw: RawConflictQueryInput): ConflictQuer
     "defect_count") as ConflictSortField;
   const statuses = pickAll(toStringList(raw.status), COMPARISON_STATUSES, "status");
 
-  // 数值口径/按值搜索（2026-09-21 P1-6）：两个参数成对校验，避免"给了字段没给值"的含糊请求
+  // Numeric mode / search by value (2026-09-21 P1-6): the two parameters are validated as a pair, to avoid an ambiguous request that "gives a field without a value"
   const numericMode = (pickOne(toStringList(raw.numeric_mode), NUMERIC_MODES, "numeric_mode") ??
     "exact") as NumericMode;
   const tolerance = toTolerance(raw.tolerance);
   if (tolerance !== null && numericMode !== "fuzzy") {
-    throw new ResultQueryError("tolerance 只在 numeric_mode=fuzzy 时可用（exact 口径不允许容差）");
+    throw new ResultQueryError("tolerance is only usable when numeric_mode=fuzzy (exact mode doesn't allow a tolerance)");
   }
   const valueField = (pickOne(
     toStringList(raw.value_field),
@@ -107,11 +108,11 @@ export function normalizeConflictQuery(raw: RawConflictQueryInput): ConflictQuer
   ) ?? null) as NumericSearchField | null;
   const value = toNumericValue(raw.value);
   if ((valueField === null) !== (value === null)) {
-    throw new ResultQueryError("value_field 和 value 必须成对出现（按值搜索时两个都要传）");
+    throw new ResultQueryError("value_field and value must be given as a pair (both are required for search-by-value)");
   }
 
   return {
-    // 缺省看"所有需要人关注的"：MISMATCH + NEEDS_REVIEW
+    // Default to "everything that needs attention": MISMATCH + NEEDS_REVIEW
     statuses: statuses ?? ["MISMATCH", "NEEDS_REVIEW"],
     q: toShortText(raw.q, "q", 100),
     sortBy,
@@ -131,7 +132,7 @@ export function normalizeExportRequest(raw: RawExportInput): ExportRequest {
 
   if (scope === "submission" && format !== "json") {
     throw new ResultQueryError(
-      "scope=submission 导出的是给官方评分用的纯 JSON 文件，只支持 format=json（txt/md/csv 请用 scope=results 或 scope=conflicts）"
+      "scope=submission exports the plain JSON file used for official scoring, which only supports format=json (for txt/md/csv use scope=results or scope=conflicts)"
     );
   }
 
@@ -143,7 +144,7 @@ export function normalizeExportRequest(raw: RawExportInput): ExportRequest {
   };
 }
 
-// —— 下面是小的解析工具：全部对未知输入做防御 ——
+// -- Below are small parsing utilities: all defensive against unknown input --
 
 function toStringList(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return undefined;
@@ -161,7 +162,7 @@ function pickAll<T extends string>(
   const unknown = values.filter((value) => !allowed.includes(value as T));
   if (unknown.length) {
     throw new ResultQueryError(
-      `${label} 不支持：${unknown.join(" / ")}（可选：${allowed.join(" / ")}）`
+      `${label} does not support: ${unknown.join(" / ")} (allowed: ${allowed.join(" / ")})`
     );
   }
   return [...new Set(values)] as T[];
@@ -183,7 +184,7 @@ function toBoolean(value: unknown, label: string): boolean | undefined {
   const text = String(value).toLowerCase();
   if (text === "true" || text === "1") return true;
   if (text === "false" || text === "0") return false;
-  throw new ResultQueryError(`${label} 只能是 true / false，收到：${String(value)}`);
+  throw new ResultQueryError(`${label} must be true / false, got: ${String(value)}`);
 }
 
 function toShortText(value: unknown, label: string, maxLength: number): string | undefined {
@@ -191,27 +192,27 @@ function toShortText(value: unknown, label: string, maxLength: number): string |
   const text = String(value).trim();
   if (text === "") return undefined;
   if (text.length > maxLength) {
-    throw new ResultQueryError(`${label} 太长了（最多 ${maxLength} 个字符）`);
+    throw new ResultQueryError(`${label} is too long (max ${maxLength} characters)`);
   }
   return text;
 }
 
-/** 容差：非负有限数字；不传 = null（numeric-query 里按字段默认值处理） */
+/** Tolerance: a non-negative finite number; omitted = null (numeric-query.ts applies the per-field default) */
 function toTolerance(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new ResultQueryError(`tolerance 必须是不小于 0 的数字，收到：${String(value)}`);
+    throw new ResultQueryError(`tolerance must be a number >= 0, got: ${String(value)}`);
   }
   return parsed;
 }
 
-/** 按值搜索的数值：必须是合法有限数字；原样返回字符串，比较时再转 */
+/** Numeric value for search-by-value: must be a valid finite number; returned as-is as a string, converted again when compared */
 function toNumericValue(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
   const text = String(value).trim();
   if (!Number.isFinite(Number(text))) {
-    throw new ResultQueryError(`value 必须是数字（可带小数点），收到：${text}`);
+    throw new ResultQueryError(`value must be a number (decimals allowed), got: ${text}`);
   }
   return text;
 }
@@ -219,14 +220,14 @@ function toNumericValue(value: unknown): string | null {
 function resolveLimit(value: unknown): number {
   const limit = toInteger(value, DEFAULT_LIMIT, "limit");
   if (limit < 1 || limit > MAX_LIMIT) {
-    throw new ResultQueryError(`limit 必须在 1~${MAX_LIMIT} 之间，收到：${limit}`);
+    throw new ResultQueryError(`limit must be between 1 and ${MAX_LIMIT}, got: ${limit}`);
   }
   return limit;
 }
 
 function resolveOffset(value: unknown): number {
   const offset = toInteger(value, 0, "offset");
-  if (offset < 0) throw new ResultQueryError(`offset 不能小于 0，收到：${offset}`);
+  if (offset < 0) throw new ResultQueryError(`offset cannot be less than 0, got: ${offset}`);
   return offset;
 }
 
@@ -234,12 +235,12 @@ function toInteger(value: unknown, fallback: number, label: string): number {
   if (value === undefined || value === null || value === "") return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) {
-    throw new ResultQueryError(`${label} 必须是整数，收到：${String(value)}`);
+    throw new ResultQueryError(`${label} must be an integer, got: ${String(value)}`);
   }
   return parsed;
 }
 
-// 排序方向缺省值：按 email_id 排是升序更自然；按缺陷数/时间排是降序更自然
+// Default sort direction: ascending reads more naturally by email_id; descending reads more naturally by defect count/time
 function resolveOrder(value: unknown, sortBy: string): SortOrder {
   const order = pickOne(toStringList(value), SORT_ORDERS, "order");
   if (order) return order;

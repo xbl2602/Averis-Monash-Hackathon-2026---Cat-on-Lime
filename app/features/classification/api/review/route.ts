@@ -1,11 +1,12 @@
 import { makeReviewActionPostHandler, makeReviewQueueGetHandler } from "@/lib/shared/review/http";
 
-// 人工复核闭环（P1-1）：classification 的复核队列目前只覆盖"全模型失败降级"这一种情况——
-// Jev 判定的"置信度<0.85"没有持久化到 verification_results，见 docs/TODO.md P1-1 的实现记录。
-// GET 复核队列；POST 应用一个动作（需要 x-admin-token）。契约见 docs/REVIEW_SPEC.md。
+// Manual review loop (P1-1): classification's review queue currently only covers the single case of
+// "all-model failure fallback" — Jev's "confidence < 0.85" determination is not persisted to
+// verification_results, see docs/TODO.md P1-1 for implementation notes.
+// GET the review queue; POST applies an action (requires x-admin-token). See docs/REVIEW_SPEC.md for the contract.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// rerun 动作会跑一次完整流水线（可能调模型），给够时间
+// The rerun action runs the full pipeline once (may call a model), so allow enough time
 export const maxDuration = 30;
 
 export const GET = makeReviewQueueGetHandler("classification");

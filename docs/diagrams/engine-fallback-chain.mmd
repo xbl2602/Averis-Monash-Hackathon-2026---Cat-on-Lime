@@ -1,18 +1,18 @@
-%% 源码：README 引擎图 + docs/diagrams/engine-fallback-chain.png 都从这里生成。
-%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/engine-fallback-chain.mmd -o docs/diagrams/engine-fallback-chain.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% 口径以 docs/DECISION_SPEC.md §2 为准：Jev 低置信直接输出+标复核，不进文本链；
-%% 文本链成功输出不标复核；尽力兜底（degraded）必标复核。链顺序见 README caption。
-%% 分支天然把宽度撑到 4 列，尾巴合并成 1 个节点压住高度，整体约 1:1。
+%% Source: the README engine diagram + docs/diagrams/engine-fallback-chain.png are both generated from this file.
+%% Re-render command (from repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/engine-fallback-chain.mmd -o docs/diagrams/engine-fallback-chain.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Reference: per docs/DECISION_SPEC.md §2 — when Jev has low confidence it outputs directly and flags for review, without entering the text-LLM chain;
+%% a successful text-chain output is not flagged for review; the best-effort fallback (degraded) is always flagged for review. See the README caption for the chain order.
+%% The branches naturally stretch the width to 4 columns; the tail is merged into a single node to keep the height down, giving roughly a 1:1 overall ratio.
 flowchart TB
-    A[邮件输入] --> B{高精度规则<br/>能判定?}
-    B -- 能 --> Z1["engine: rules<br/>直接输出"]
-    B -- 不能 --> C{Jev 可用?}
-    C -- 可用 --> J[Jev 结构化判断]
-    C -- 不可用 / 失败 --> D["文本 LLM 链<br/>只试配了 key 的"]
-    J -- "≥ 0.85 采信" --> Z2["engine: jev<br/>直接输出"]
-    J -- "低于 0.85" --> F2["输出结果<br/>并标 needs_review"]
-    D -- 成功 --> Z3["engine: llm<br/>直接输出"]
-    D -- 全部失败 --> E["engine: degraded<br/>尽力兜底 · 标 needs_review"]
-    F2 --> G["人工复核队列<br/>confirm / correct / defer / undo / bulk"]
+    A[Email input] --> B{High-precision rules<br/>can decide?}
+    B -- Yes --> Z1["engine: rules<br/>direct output"]
+    B -- No --> C{Jev available?}
+    C -- Available --> J[Jev structured decision]
+    C -- Unavailable / failed --> D["Text LLM chain<br/>only tries providers with a configured key"]
+    J -- "≥ 0.85 accepted" --> Z2["engine: jev<br/>direct output"]
+    J -- "Below 0.85" --> F2["Output result<br/>and flag needs_review"]
+    D -- Success --> Z3["engine: llm<br/>direct output"]
+    D -- All failed --> E["engine: degraded<br/>best-effort fallback · flag needs_review"]
+    F2 --> G["Manual review queue<br/>confirm / correct / defer / undo / bulk"]
     E --> G
-    G --> I[("审计日志 review_actions<br/>导出自动叠加人工结论")]
+    G --> I[("Audit log review_actions<br/>export automatically overlays human conclusions")]

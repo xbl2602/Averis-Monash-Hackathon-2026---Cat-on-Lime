@@ -1,8 +1,10 @@
 /**
  * POST /features/import/api/upload
- * 手动上传单证（x-admin-token 写保护）：扩展名白名单 → 魔数 → 大小 → 去重 →
- * 解析 → 按内容识别 → 原文件进 Storage → 元数据 upsert 进 uploaded_documents。
- * 单文件失败不影响同批其他文件；整批合计超过 3MB 返回 413（前端按批切开）。
+ * Manually upload a document (x-admin-token write-protected): extension whitelist -> magic bytes ->
+ * size -> dedup -> parse -> detect from content -> original file into Storage -> metadata upserted
+ * into uploaded_documents.
+ * A single file's failure doesn't affect other files in the same batch; if the batch total exceeds
+ * 3MB, returns 413 (the frontend splits into batches).
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";
@@ -19,7 +21,7 @@ import { parseJsonText, toImportErrorResponse } from "../params";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// 解析 PDF/xlsx 可能偏慢：Vercel Hobby 函数上限 60s（本地/Docker 无影响）
+// Parsing PDF/xlsx can be slow: Vercel Hobby functions cap out at 60s (no impact locally/in Docker)
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
@@ -31,8 +33,8 @@ export async function POST(request: Request) {
     const rawBytes = Buffer.byteLength(rawBody, "utf8");
     if (rawBytes > MAX_RAW_BODY_BYTES) {
       throw new BatchTooLargeError(
-        `请求体约 ${formatBytes(rawBytes)}，超过单请求实际上限 ${formatBytes(MAX_RAW_BODY_BYTES)}` +
-          `（base64 会放大文件体积）；请把文件按每批 ${formatBytes(MAX_BATCH_BYTES)} 左右拆开分多次上传`
+        `The request body is about ${formatBytes(rawBytes)}, exceeding the effective per-request cap of ${formatBytes(MAX_RAW_BODY_BYTES)}` +
+          ` (base64 inflates file size); please split files into batches of roughly ${formatBytes(MAX_BATCH_BYTES)} and upload them separately`
       );
     }
     const body = parseJsonText(rawBody);
@@ -43,21 +45,21 @@ export async function POST(request: Request) {
   }
 }
 
-/** 浏览器直接打开地址时返回接口用法说明（不执行任何处理） */
+/** When a browser opens this address directly, return the endpoint usage description (no processing is performed) */
 export async function GET() {
   return NextResponse.json({
     endpoint: "/features/import/api/upload",
     method: "POST",
     description:
-      "手动上传单证（txt/md/pdf/docx/xlsx）；按内容校验并识别 SI/BL/OTHER/UNKNOWN，原文件存 Supabase Storage，元数据落 uploaded_documents。",
-    headers: { "x-admin-token": "写操作口令（服务端 ADMIN_TOKEN）" },
+      "Manually upload a document (txt/md/pdf/docx/xlsx); validates by content and detects SI/BL/OTHER/UNKNOWN, stores the original file in Supabase Storage, and writes metadata to uploaded_documents.",
+    headers: { "x-admin-token": "Write-operation token (server-side ADMIN_TOKEN)" },
     body: {
-      files: "[{ name, mime?, data_base64 }]，data_base64 是文件内容的 base64",
-      batch_id: "可选，原样回显，便于前端把一批结果对上",
+      files: "[{ name, mime?, data_base64 }], data_base64 is the base64 of the file content",
+      batch_id: "Optional, echoed back as-is, so the frontend can match up a batch of results",
     },
     limits: {
-      "单文件": formatBytes(MAX_FILE_BYTES),
-      "单请求合计": `${formatBytes(MAX_BATCH_BYTES)}（超过返回 413，请分批）`,
+      single_file: formatBytes(MAX_FILE_BYTES),
+      per_request_total: `${formatBytes(MAX_BATCH_BYTES)} (returns 413 if exceeded, please split into batches)`,
     },
     response: {
       batch_id: "string",

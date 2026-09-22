@@ -1,9 +1,10 @@
 /**
- * 上传校验链里的 import 专属部分（SPEC 第 5.2 节第 1~3 步 + Storage 路径）。
- * 通用的文件校验（扩展名/base64/魔数/文件名净化）已经挪到 lib/shared/file-validate.ts
- * （sandbox 模块新增后两边都要用，见该文件头注释）；这里只做 import 自己的适配：
- * 用 import 的 ALLOWED_EXTENSIONS/MAX_FILE_NAME_LENGTH，把 FileValidationError
- * 转成 ImportRequestError，保持这个模块对外的错误类型不变。
+ * The import-specific part of the upload validation chain (SPEC section 5.2, steps 1-3 + Storage path).
+ * The generic file validation (extension/base64/magic bytes/filename sanitization) has been moved to
+ * lib/shared/file-validate.ts (needed by both sides once the sandbox module was added, see that file's
+ * header comment); this file only handles import's own adaptation: using import's
+ * ALLOWED_EXTENSIONS/MAX_FILE_NAME_LENGTH, and converting FileValidationError into
+ * ImportRequestError so this module's external error type stays unchanged.
  */
 import {
   assertAllowedExtension as assertAllowedExtensionGeneric,
@@ -32,7 +33,7 @@ const CONTENT_TYPES: Record<AllowedExtension, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
-/** 把通用校验的 FileValidationError 转成本模块对外一直在用的 ImportRequestError */
+/** Convert the generic validator's FileValidationError into the ImportRequestError this module has always used externally */
 function asImportError<T>(fn: () => T): T {
   try {
     return fn();
@@ -58,12 +59,12 @@ export function sanitizeFileName(name: string): string {
   return sanitizeFileNameGeneric(name, MAX_FILE_NAME_LENGTH);
 }
 
-/** Storage 路径：documents/<sha256前2位>/<sha256>/<净化后的文件名>（SPEC 5.1） */
+/** Storage path: documents/<first 2 chars of sha256>/<sha256>/<sanitized filename> (SPEC 5.1) */
 export function storagePathFor(fileHash: string, safeName: string): string {
   return `documents/${fileHash.slice(0, 2)}/${fileHash}/${safeName}`;
 }
 
-/** Storage 的 content type 以扩展名/魔数推出，不采用客户端声明的 mime */
+/** Storage's content type is inferred from the extension/magic bytes, not from the client-declared mime */
 export function detectContentType(extension: AllowedExtension): string {
   return CONTENT_TYPES[extension];
 }

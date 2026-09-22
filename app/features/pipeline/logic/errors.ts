@@ -1,6 +1,6 @@
-/** 批量入口的两类可预期错误（对应 HTTP 400 / 503）。
- * 显式设置 name：MCP/请求错误映射按稳定 name 匹配（见 lib/shared/request-errors.ts），
- * 不 import feature 错误类也能识别它们。 */
+/** The two expected error types for the batch entry point (mapping to HTTP 400 / 503).
+ * name is set explicitly: MCP/request error mapping matches on the stable name (see lib/shared/request-errors.ts),
+ * so these can be recognized without importing the feature's error classes. */
 
 export class BatchRequestError extends Error {
   constructor(message: string) {

@@ -1,8 +1,12 @@
 /**
- * 比对前的"规范化"：把两侧的值统一成可比较的规范形式，减少纯格式差异造成的误报。
- * - 文字字段：忽略大小写/空白/全角半角，去掉公司名尾部的标点，只取 "|" 前的主体名
- * - 数字字段：重量取纯数字（千分位/单位差异不影响）；箱数去掉空格和引号
- * 注意：这只用于"比较"判断，不改动存库/展示用的原文（原文在 parsed_text / extracted_* 里）。
+ * "Canonicalization" before comparison: put both sides into a comparable canonical form,
+ * reducing false mismatches caused by pure formatting differences.
+ * - Text fields: ignore case/whitespace/full-vs-half-width, strip trailing punctuation from
+ *   company names, keep only the primary name before "|"
+ * - Numeric fields: weight is reduced to plain digits (thousands separators/unit differences
+ *   don't matter); container count has spaces and quotes stripped
+ * Note: this is only used for the "comparison" decision — it never modifies the original text
+ * that's stored/displayed (that lives in parsed_text / extracted_*).
  */
 import { normalizeText } from "@/lib/shared/normalize";
 import type { ComparedField } from "@/lib/shared/types";
@@ -29,9 +33,10 @@ export function canonicalFieldValue(field: ComparedField, value: string): string
   }
 }
 
-// docx 版式会把"公司名+地址"连成一串（如 "KTP CO., LTDKTP BLDG., 36..."），
-// 用"公司名以法律后缀结尾"的常识把后面的地址截掉，避免纯格式差异被送去 Jev 甚至误判。
-// 实测：email_107 的 notify_party（连串 vs 干净）因此不再需要模型判断。
+// docx layouts sometimes run "company name + address" together (e.g. "KTP CO., LTDKTP BLDG., 36...").
+// Use the heuristic that a company name ends in a legal suffix to cut off the trailing address,
+// so a pure formatting difference doesn't get sent to Jev or even misjudged.
+// Verified in practice: email_107's notify_party (concatenated vs. clean) no longer needs a model call because of this.
 const NAME_SUFFIX =
   /(pte\.?\s*ltd\.?|sdn\.?\s*bhd\.?|co\.?,?\s*ltd\.?|limited|ltd\.?|llc|gmbh|fze|inc\.?|company)/i;
 
@@ -41,7 +46,7 @@ function truncateAtNameSuffix(value: string): string {
   return value.slice(0, match.index + match[0].length);
 }
 
-// 数字类字段（规范化后不同就是不同，不进 Jev——Jev 不擅长数字比较）
+// Numeric fields (once canonicalized, a difference is a real difference — these never go to Jev, which isn't good at numeric comparison)
 export const NUMERIC_FIELDS: ReadonlySet<ComparedField> = new Set([
   "container_count",
   "gross_weight_kg",

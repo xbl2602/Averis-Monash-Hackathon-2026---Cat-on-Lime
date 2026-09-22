@@ -9,30 +9,31 @@ import { importMcpTools } from "@/app/features/import/mcp";
 import { sandboxMcpTool } from "@/app/features/sandbox/mcp";
 
 /**
- * 汇总各个 feature 模块暴露的 MCP tool 定义。
- * 这个文件只做"汇总"，不包含任何一个模块的具体业务逻辑（见 CLAUDE.md）。
- * 新增 feature 时，在这个数组里加一行就够了，不用改其他任何地方。
+ * Aggregates the MCP tool definitions exposed by each feature module.
+ * This file only does the "aggregating" — it contains no module's actual business logic (see CLAUDE.md).
+ * Adding a new feature only requires adding one line to this array; nothing else needs to change.
  *
- * 约定：一个 feature 的 mcp/index.ts 可以导出单个 tool 对象，也可以导出 tool 数组
- * （results 模块就导出 4 个）。工具的真实注册在 ./route.ts，这里只存定义。
+ * Convention: a feature's mcp/index.ts can export either a single tool object or an array of tools
+ * (the results module exports 4). The actual tool registration happens in ./route.ts; this file only holds the definitions.
  */
 
-/** 汇总层传给 handler 的第二参数（目前只有"这次是不是匿名调用"） */
+/** The second argument the aggregation layer passes to the handler (currently only "whether this call is anonymous") */
 export interface McpToolContext {
-  /** true = 未带 x-admin-token 的调用（目前只会出现在 dry_run 预览这类匿名例外里） */
+  /** true = a call made without x-admin-token (currently only occurs in anonymous exceptions like a dry_run preview) */
   anonymous: boolean;
 }
 
 export interface McpToolDefinition {
   name: string;
   description: string;
-  /** zod raw shape：每个字段一个 zod schema，由 MCP SDK 转成 JSON Schema */
+  /** zod raw shape: one zod schema per field, converted to JSON Schema by the MCP SDK */
   inputSchema: Record<string, z.ZodType>;
   /**
-   * MCP 工具注解硬约定（写保护 gate 按 fail-closed 判定，见 ./route.ts）：
-   * - **只读 tool 必须显式声明 `readOnlyHint: true`**
-   * - **会写库的 tool 必须显式声明 `readOnlyHint: false`**
-   * - 未声明的一律按"需要口令"处理（忘注解的写 tool 会被拦住，不会漏）
+   * Hard rule for MCP tool annotations (the write-protection gate judges fail-closed, see ./route.ts):
+   * - **A read-only tool must explicitly declare `readOnlyHint: true`**
+   * - **A tool that writes to the database must explicitly declare `readOnlyHint: false`**
+   * - Anything undeclared is treated as "requires a token" across the board (a write tool that forgot
+   *   its annotation gets blocked, never slips through)
    */
   annotations?: {
     readOnlyHint?: boolean;
@@ -41,13 +42,14 @@ export interface McpToolDefinition {
     openWorldHint?: boolean;
   };
   /**
-   * 写 tool 的"匿名例外"判定（如 run_batch 的 dry_run=true 预览）：返回 true 时，
-   * 未带口令的调用也会以 `context.anonymous = true` 执行。写 tool 不设置 = 一律需要口令。
+   * Determines the "anonymous exception" for a write tool (e.g. run_batch's dry_run=true preview):
+   * when this returns true, a call without a token still executes, with `context.anonymous = true`.
+   * If a write tool doesn't set this, a token is always required.
    */
   anonymousWriteWhen?: (args: unknown) => boolean;
   /**
-   * 参数由 MCP SDK 用 inputSchema 校验后传进来；这里用 any 是唯一的"动态边界"，
-   * 各 feature 自己的 handler 参数仍然是具体类型。
+   * Arguments are validated against inputSchema by the MCP SDK before being passed in; using `any`
+   * here is the only "dynamic boundary" — each feature's own handler arguments are still concretely typed.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (args: any, context: McpToolContext) => Promise<unknown>;

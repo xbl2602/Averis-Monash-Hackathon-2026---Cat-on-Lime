@@ -1,113 +1,117 @@
-# 数据流规划
+# Data Flow Plan
 
-> 数据该怎么流动，是提前设计好的，不是"哪里方便就从哪里接一根线"。
-> 这份文件定义"数据从哪来、经过谁、到哪去"，是硬性规则，跟 [CLAUDE.md](../CLAUDE.md) 同级——
-> 写代码前先看这份文件，确认自己的改动没有破坏这条流水线。
+> How data flows is designed up front — it's not "run a wire wherever's convenient."
+> This document defines "where data comes from, what it passes through, and where it ends up" as a hard rule, on the same level as [CLAUDE.md](../CLAUDE.md) —
+> read this file before writing code, to confirm your change doesn't break the pipeline.
 
-## 核心原则
+## Core Principle
 
-**数据流必须是一条单向、可追踪的"管道"，不能是网状的、谁跟谁都能互相调用的结构。**
+**Data flow must be a one-directional, traceable "pipe" — not a mesh structure where anything can call anything else.**
 
-打个比方：这应该像自来水管——水从水源经过一道道处理，最后流到水龙头，每一段接口在哪清清楚楚，出问题了顺着管子就能查到是哪一段坏的。不能是"哪里方便就从旁边接根水管过去"，那样水管越接越乱，一处漏水全网跟着遭殃，也没人说得清水到底是怎么流过来的。
+Think of it like a water pipe: water passes through a series of treatment stages from the source and ends up at the tap, with every junction clearly located, so if something breaks you can trace along the pipe to find which segment failed. It must never be "tap a new pipe in wherever's convenient" — that way lies an ever-messier tangle of pipes where one leak takes down the whole network and nobody can say how the water actually got there.
 
-## 整体数据流（从一封邮件到最终提交结果）
-
-```
-官方样例数据 (data/sample/，以后可能换成官方API)
-        │
-        ▼
-[classification 模块] 判断邮件类型 → category
-        │
-        │  只有 category === "BL_COMPARISON" 才继续往下走
-        │  （其他类型到这里就结束了，不需要抽取/比对）
-        ▼
-[extraction 模块] 分别对 SI 附件、BL 附件各抽一次字段
-        │  （两次调用，一次给SI文本，一次给BL文本，互不干扰）
-        ▼
-[comparison 模块] 对比两组字段 → status / defect_fields / has_defect / review_reason
-        │
-        ▼
-组装成一条 EmailVerificationResult（一封邮件对应一条结果）
-        │
-        ▼
-汇总成 { email_id: EmailVerificationResult, ... } 这个大文件
-        │
-        ▼
-交给官方评分系统（docker /submit 或 score_cli.py）
-```
-
-这条流水线的**方向是固定的**：分类 → 抽取 → 比对 → 组装。没有反向箭头，没有"比对模块回头去改分类结果"这种事。
-
-## 数据流规则（禁止事项——防止变成"网状乱流通"）
-
-1. **模块之间不能互相直接调用对方的 `logic`**。`classification` 的代码不能 import `extraction` 内部的函数，反过来也不行。三个模块只通过"数据"打交道，不通过"直接调代码"打交道——上一个模块的输出，是下一个模块的输入，中间由"编排层"（见下面）负责传递，不是模块自己伸手去找别人要数据。
-2. **UI 不能抄近道**。网页上的组件（`ui/`）只能调用同一个模块自己的 `api/`，不能在网页代码里直接 import LLM 的 SDK、直接查数据库、或者直接调别的模块的东西。
-3. **跨模块传递的数据，格式只能用 `lib/shared/types.ts` 里定义好的类型**，不能自己在某个模块里临时发明一个新字段名，然后口头告诉队友"记得用这个格式"——口头约定就是典型的"就近乱接线"，必须是代码里真的 import 那个类型，不是各自抄一遍。
-4. **同一件事的"标准答案"只能在一个地方定义**。比如"要比对哪7个字段"这件事，只在 `lib/shared/types.ts` 的 `COMPARED_FIELDS` 里出现一次，其他地方都是引用它，不能每个模块自己再写一份字段名列表——写两份，以后改一个忘了改另一个，两边就会对不上，出现很难查的bug。
-
-## 编排层（pipeline）：已就位
-
-`lib/shared/pipeline.ts` 是**唯一**知道"先分类、再抽取、最后比对"这个顺序的地方：
-
-- `runEmailPipeline`：跑一封邮件 → 组装成 `EmailVerificationResult`，并负责 4 种"拿不准"的判定（缺附件 / 类型不对 / 读不了 / 字段缺失）
-- `runBatchPipeline`：批量处理，用 `mapWithConcurrencyLimit` 限量并发；单封失败单独记录，不拖垮整批
-- `computeInputHash` + `PIPELINE_LOGIC_VERSION`：结果层增量跳过的依据（内容没变、引擎版本没变就不重算）
-
-网页、REST API、MCP 要"跑一封/一整箱"都应该调用这里，不要在别处重新拼顺序逻辑。
-引擎是混合模式（规则优先，拿不准/有矛盾才调模型），所有模型调用走 `lib/shared/llm-cache.ts` 的内容指纹缓存；本地全量评测用 `npm run evaluate`（对照 ground_truth 自测，官方已澄清允许）。
-模型环节失败按"逐级降级"处理（2026-09-21，决策 25）：分类 = 规则 → Jev → 文本 provider 链 → 尽力规则（`degraded`）；比对 = 规范化精确比 + Jev 复核，Jev 失败转保守口径（`rules-degraded`）；`retry_failed` 可一键重算这些邮件。
-字段级出处（规则命中的行号 + 原句）随抽取结果一起流到结果层（`evidence_si` / `evidence_bl`，决策 29）；LLM 兜底的字段只标来源、没有行号。
-
-## 结果查询（results 模块）：只读分支
-
-`app/features/results/` 是这条管道的**只读出口**，不参与生产：按分类/状态/处理情况查结果、
-排序分组、统计、列冲突文件对、导出（json/md/txt/官方提交格式）。它和网页、REST、MCP 的关系：
+## Overall Data Flow (from a single email to the final submission result)
 
 ```
-verification_results（结果层）
-        │  只读（通过 verification_overview 视图）
+Official sample data (data/sample/, may later be replaced by an official API)
+        │
         ▼
-[results 模块 logic] ── 同一套实现 ──┬── REST /features/results/api/*
-                                     └── MCP tools（list_results / get_stats / list_conflicts / export_results）
+[classification module] determines the email type -> category
+        │
+        │  Only continues downstream if category === "BL_COMPARISON"
+        │  (other types end here; no extraction/comparison needed)
+        ▼
+[extraction module] extracts fields separately for the SI attachment and the BL attachment
+        │  (two calls, one for the SI text and one for the BL text, independent of each other)
+        ▼
+[comparison module] compares the two field sets -> status / defect_fields / has_defect / review_reason
+        │
+        ▼
+Assembled into one EmailVerificationResult (one result per email)
+        │
+        ▼
+Aggregated into the big { email_id: EmailVerificationResult, ... } file
+        │
+        ▼
+Handed to the official scoring system (docker /submit or score_cli.py)
 ```
 
-规则：results 模块**只读**，不写任何表；别的模块也不要自己去查 `verification_overview`
-或拼相同的查询——要数据就走 results 的 logic（接口格式见 SHARED_INTERFACES.md）。
+This pipeline's **direction is fixed**: classify -> extract -> compare -> assemble. There are no reverse arrows, and no such thing as "the comparison module reaching back to change the classification result."
 
-**例外（P1-1 人工复核闭环，2026-09-21）**：`scope=submission` 导出会额外读 `review_overrides`
-（通过 `lib/shared/review/merge.ts` 的 `applyOverridesToSubmission`，不是 results 模块自己拼查询，
-是调公共区 `lib/shared/review/` 提供的函数），把人工复核结论叠加到系统结果之上再输出。这是唯一
-一处"结果查询之外还读别的表"的地方，因为它就是导出链路本身的一部分，不算破坏"results 只读查询"
-的边界——`review_overrides`/`review_actions` 两张表的写入完全由 `lib/shared/review/` 负责，
-四个 feature 模块（classification/extraction/comparison/pipeline）各自的 `api/review/*` 只是薄层转发。
+## Data Flow Rules (prohibited actions — preventing a "mesh-like tangle")
 
-## 评委自带文档测试（sandbox 模块）：完全不进这条管道
+1. **Modules must not directly call each other's `logic`.** `classification`'s code cannot import functions internal to `extraction`, and vice versa. The three modules only interact through "data," never through "calling each other's code directly" — one module's output is the next module's input, and the "orchestration layer" (see below) is responsible for passing it along; a module never reaches out to grab data from another module itself.
+2. **The UI must not take shortcuts.** Components on the web page (`ui/`) may only call their own module's `api/` — the web page code must never directly import an LLM SDK, query the database directly, or call into another module directly.
+3. **Data passed between modules must use only the types defined in `lib/shared/types.ts`** — you can't invent a new field name on the fly inside some module and then just tell a teammate verbally "remember to use this format." A verbal agreement is exactly the kind of "wire it up wherever's convenient" this document warns against — the code must actually import that type, not have each module copy its own version.
+4. **The "canonical answer" for any given thing is defined in exactly one place.** For example, "which 7 fields to compare" appears exactly once, in `COMPARED_FIELDS` in `lib/shared/types.ts`; everywhere else just references it — no module should write its own copy of the field-name list. Write it twice, and eventually someone updates one copy and forgets the other, the two drift apart, and you get a bug that's a nightmare to track down.
 
-`app/features/sandbox/` 是唯一一个**不碰 Supabase 任何一张表**的模块——它接收上传的 SI/BL 文件内容，
-直接调用 classification/extraction/comparison 各自的 `logic/`（和 `pipeline.ts` 一样是编排层，只是
-输入来自请求体而不是 `data/sample/`），结果算完直接返回，不落 `verification_results`、不进
-`raw_emails`/`parsed_attachments`。这是有意设计：这个模块的目的是"临时测一次、不留痕迹"，
-不应该污染正式的结果表或参与统计/导出。
+## Orchestration Layer (pipeline): already in place
 
-## ⚠️ 开发者模式（devmode）：唯一一个允许绕过下面所有"谁能写"规则的地方
+`lib/shared/pipeline.ts` is the **only** place that knows the order "classify first, then extract, then compare":
 
-`app/features/devmode/` 不是这条管道的一部分，是给团队/评委在验证阶段用的运维工具——它能直接
-清空/重建下表列出的**全部**数据表，绕开"只有导入脚本/评测脚本/review store 能写"这些平时的
-边界。这是有意的例外，不是设计漏洞：详见 [`DECISION_LOG.md`](DECISION_LOG.md) 决策34、
-[`SHARED_INTERFACES.md`](SHARED_INTERFACES.md)「开发者模式」一节。约束：不注册 MCP tool、
-写操作需要 `x-admin-token` + 请求体里逐字匹配的确认短语两道门槛、不碰 `app_config`/
-`mail_accounts`/`supabase_projects` 这三张连接配置表。
+- `runEmailPipeline`: runs a single email -> assembles an `EmailVerificationResult`, and handles the 4 kinds of "uncertain" verdicts (missing attachment / wrong type / unreadable / missing field)
+- `runBatchPipeline`: batch processing, using `mapWithConcurrencyLimit` to bound concurrency; a single email's failure is recorded individually and doesn't take down the whole batch
+- `computeInputHash` + `PIPELINE_LOGIC_VERSION`: the basis for incremental skipping at the results layer (skip recomputation if the content and engine version are both unchanged)
 
-## 数据的"读/写"边界
+The web page, REST API, and MCP should all call into this layer whenever they need to "run one email / a whole batch" — don't re-assemble the ordering logic elsewhere.
+The engine runs in a hybrid mode (rules first, only calling a model when uncertain/conflicting); every model call goes through the content-fingerprint cache in `lib/shared/llm-cache.ts`. A full local evaluation run uses `npm run evaluate` (self-testing against ground_truth, which the organizers have clarified is allowed).
+A failure at the model stage is handled by "graceful step-down degradation" (2026-09-21, decision 25): classification = rules -> Jev -> text-provider chain -> best-effort rules (`degraded`); comparison = normalized exact match + Jev review, falling back to a conservative verdict if Jev fails (`rules-degraded`); `retry_failed` can recompute these emails with one click.
+Field-level provenance (the line number + original sentence a rule matched) flows to the results layer alongside the extraction result (`evidence_si` / `evidence_bl`, decision 29); fields produced by the LLM fallback are tagged with only their source, with no line number.
 
-| 数据 | 谁能读 | 谁能写 |
+## Result Queries (results module): a read-only branch
+
+`app/features/results/` is this pipeline's **read-only exit**, and takes no part in production: it queries results by
+category/status/processing state, sorts and groups, computes stats, lists conflicting file pairs, and exports
+(json/md/txt/official submission format). Its relationship to the web page, REST, and MCP:
+
+```
+verification_results (results layer)
+        │  read-only (via the verification_overview view)
+        ▼
+[results module logic] ── same implementation ──┬── REST /features/results/api/*
+                                                  └── MCP tools (list_results / get_stats / list_conflicts / export_results)
+```
+
+Rule: the results module is **read-only** and writes to no table; other modules should not query `verification_overview`
+themselves either, or reassemble the same query — go through results' logic to get data (see SHARED_INTERFACES.md for the interface format).
+
+**Exception (P1-1 manual review loop, 2026-09-21)**: a `scope=submission` export additionally reads `review_overrides`
+(via `applyOverridesToSubmission` in `lib/shared/review/merge.ts` — not the results module composing its own query,
+but a call into a function provided by the shared `lib/shared/review/` area), layering the human review conclusions
+on top of the system's results before output. This is the one and only place that "reads another table beyond the
+result query," because it's part of the export path itself and doesn't count as breaking the "results is read-only"
+boundary — writes to the `review_overrides`/`review_actions` tables are entirely owned by `lib/shared/review/`,
+and each of the four feature modules' (classification/extraction/comparison/pipeline) own `api/review/*` is just a thin forwarding layer.
+
+## Judge-Supplied Document Testing (sandbox module): entirely outside this pipeline
+
+`app/features/sandbox/` is the only module that **touches no Supabase table at all** — it takes uploaded SI/BL file
+content, calls straight into classification/extraction/comparison's own `logic/` (an orchestration layer just like
+`pipeline.ts`, except the input comes from the request body instead of `data/sample/`), and returns the computed
+result directly without writing to `verification_results` or `raw_emails`/`parsed_attachments`. This is intentional:
+the point of this module is "test it once, leave no trace" — it should never pollute the official results table or
+be counted in stats/exports.
+
+## ⚠️ Developer Mode (devmode): the only place allowed to bypass every "who can write" rule below
+
+`app/features/devmode/` is not part of this pipeline; it's an operational tool for the team/judges to use during
+verification — it can directly wipe/rebuild **every** table listed below, bypassing the usual boundaries of "only
+the import script/evaluation script/review store can write." This is a deliberate exception, not a design flaw: see
+decision 34 in [`DECISION_LOG.md`](DECISION_LOG.md) and the "Developer Mode" section of
+[`SHARED_INTERFACES.md`](SHARED_INTERFACES.md). Constraints: it registers no MCP tool; write operations require two
+gates — an `x-admin-token` plus a confirmation phrase in the request body that must match verbatim; and it never
+touches the three connection-config tables `app_config`/`mail_accounts`/`supabase_projects`.
+
+## Data "Read/Write" Boundaries
+
+| Data | Who can read | Who can write |
 |---|---|---|
-| `data/sample/`（官方样例邮件） | 所有模块 | 任何代码都不应该修改它——这是官方给的原始数据，改了就对不上了 |
-| `lib/shared/types.ts`（字段/格式定义） | 所有模块 | 改动前必须先跟操作者确认，这是"公共区"，改错了三个模块都受影响 |
-| Supabase（`raw_emails` 原始层 / `parsed_attachments` 文字层 / `verification_results` 结果层 / 只读视图 `verification_overview`，另有内部缓存 `llm_call_cache`） | 前三张表和视图对所有模块、UI、预览开放读（RLS 公开只读）；结果查询统一走 `verification_overview` 视图（results 模块实现），不要各自拼两张表；`llm_call_cache` 只有服务端能读写 | `raw_emails`、`parsed_attachments` 只由本地导入脚本 `npm run import:data` 增量写（按指纹跳过没变的内容；upsert 冲突键 `email_id` / `email_id,file_path`）；`verification_results` 由本地评测 `npm run evaluate` 按 `email_id` upsert 写（单封失败标 `processing_status='failed'`）。不要在别的代码里零散写这些表；表结构和指纹规则见 SHARED_INTERFACES.md「数据库存储层」。**唯一例外：`app/features/devmode/` 可以整表删除/重新导入（见上一节）** |
-| Supabase（`review_overrides` 人工覆盖 / `review_actions` 审计日志，P1-1） | 对所有模块、UI 开放读（RLS 公开只读） | 只由 `lib/shared/review/store.ts` 写（四模块的 `api/review/*` 都调这一份，不各自拼 SQL）；`review_overrides` 按 `(target_kind,email_id)` upsert，`review_actions` 只 insert（append-only）；DDL 见 `scripts/review-schema.sql`。**唯一例外：`app/features/devmode/` 可以整表清空（见上一节）** |
-| 环境变量 | 只用来配置"怎么连外部服务"（LLM key、Supabase地址） | 不要把业务数据（邮件内容、比对结果）塞进环境变量里，那是配置，不是数据 |
+| `data/sample/` (official sample emails) | All modules | No code should ever modify it — this is the raw data provided by the organizers; changing it breaks the match against ground truth |
+| `lib/shared/types.ts` (field/format definitions) | All modules | Must be confirmed with the operator before any change — this is "shared territory," and a mistake here affects all three modules |
+| Supabase (`raw_emails` raw layer / `parsed_attachments` text layer / `verification_results` results layer / the read-only `verification_overview` view, plus the internal `llm_call_cache`) | The first three tables and the view are open for reads to all modules, the UI, and previews (RLS public read-only); result queries all go through the `verification_overview` view (implemented by the results module) — don't each compose your own two-table query; `llm_call_cache` is readable/writable only by the server | `raw_emails` and `parsed_attachments` are written incrementally only by the local import script `npm run import:data` (skips unchanged content by fingerprint; upsert conflict keys `email_id` / `email_id,file_path`); `verification_results` is written by the local evaluation run `npm run evaluate`, upserted by `email_id` (a single email's failure is marked `processing_status='failed'`). Don't scatter writes to these tables elsewhere in the code; see SHARED_INTERFACES.md "Database storage layer" for the table structure and fingerprint rules. **Sole exception: `app/features/devmode/` can delete/reimport whole tables (see the previous section)** |
+| Supabase (`review_overrides` human overrides / `review_actions` audit log, P1-1) | Open for reads to all modules and the UI (RLS public read-only) | Written only by `lib/shared/review/store.ts` (all four modules' `api/review/*` call this single implementation rather than each composing their own SQL); `review_overrides` is upserted by `(target_kind,email_id)`, `review_actions` is insert-only (append-only); see `scripts/review-schema.sql` for the DDL. **Sole exception: `app/features/devmode/` can clear whole tables (see the previous section)** |
+| Environment variables | Used only to configure "how to connect to external services" (LLM keys, Supabase address) | Never stuff business data (email content, comparison results) into environment variables — that's config, not data |
 
-## 为什么要这么严格
+## Why Be This Strict
 
-团队3人同时用各自的AI并行开发，如果数据"哪里方便就从哪流"，很快会出现：改了 classification 的输出格式，结果 extraction 那边毫无察觉地跟着坏掉，但因为两边代码是"直接互相调用/口头约定"而不是"通过统一类型定义"，排查起来根本不知道问题出在哪一环——这正是本文件开头说的"一张网"式混乱的真实后果。管道式设计的好处是：出问题时，顺着"分类→抽取→比对"这条固定路径查，永远知道该去哪一环找错。
+With 3 team members developing in parallel, each with their own AI, if data flowed "wherever's convenient," it wouldn't take long before: someone changes classification's output format, and extraction quietly breaks without anyone noticing — but because the two sides are "calling each other directly / relying on a verbal agreement" instead of "going through a shared type definition," there's no way to tell which link in the chain is actually broken when you go looking. This is exactly the real-world consequence of the "mesh" chaos described at the top of this document. The benefit of a pipeline design is that when something breaks, you follow the fixed path "classify -> extract -> compare" and always know exactly which stage to check.

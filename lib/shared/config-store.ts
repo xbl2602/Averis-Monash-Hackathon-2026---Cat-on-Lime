@@ -1,8 +1,9 @@
 /**
- * app_config 表的读写（第二阶段 SPEC 第 3 节）。
+ * Read/write access to the app_config table (phase-2 SPEC section 3).
  *
- * 分层：api/ 只解析请求，逻辑在这里；LLM 调用层未来通过这里的 resolveConfigValue 取值。
- * 并发约定：写入用 upsert（key 唯一），带 update 时间戳；不做"先查再写"。
+ * Layering: api/ only parses the request, the logic lives here; the LLM call layer will read
+ * values through this file's resolveConfigValue in the future.
+ * Concurrency convention: writes use upsert (key is unique), with an update timestamp; there's no "read then write".
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServiceClientAsync, isSupabaseServiceAvailable } from "./supabase";
@@ -13,12 +14,12 @@ export type ConfigCategory = "llm" | "pipeline" | "storage" | "mail" | "general"
 export interface ConfigItemRow {
   key: string;
   category: ConfigCategory;
-  value: unknown; // 库里存 jsonb（敏感项这里是密文字符串）
+  value: unknown; // Stored as jsonb in the database (for secret items, this is the ciphertext string)
   is_secret: boolean;
   updated_at: string | null;
 }
 
-/** 给界面回显的形态：敏感值只给掩码 + has_value，永不回明文 */
+/** The shape returned for display in the UI: secret values only get a mask + has_value, plaintext is never returned */
 export interface ConfigItemView {
   key: string;
   category: ConfigCategory;
@@ -30,9 +31,11 @@ export interface ConfigItemView {
 }
 
 /**
- * 环境变量兜底映射：key → 环境变量名。
- * 只列"允许被数据库覆盖"的项；数据库没值时界面显示 env 现值。
- * 敏感项和明文项分成两张表：is_secret 只对敏感映射成立（SPEC 3.2 明确 lmstudio_base_url 是明文）。
+ * The environment-variable fallback mapping: key -> environment variable name.
+ * Only lists items that are "allowed to be overridden by the database"; when the database has
+ * no value, the UI shows the current env value.
+ * Secret and plaintext items are split into two tables: is_secret only applies to the secret
+ * mapping (SPEC 3.2 explicitly states that lmstudio_base_url is plaintext).
  */
 const SENSITIVE_ENV_FALLBACK: Record<string, string> = {
   "llm.anthropic_api_key": "ANTHROPIC_API_KEY",
@@ -50,17 +53,17 @@ function envNameOf(key: string): string | undefined {
   return SENSITIVE_ENV_FALLBACK[key] ?? PLAINTEXT_ENV_FALLBACK[key];
 }
 
-/** 敏感项：值必须加密存储、回显只给掩码 */
+/** Secret items: the value must be stored encrypted, and only a mask is ever displayed */
 function isSensitiveKey(key: string): boolean {
   return Boolean(SENSITIVE_ENV_FALLBACK[key]);
 }
 
-/** 明文项：即使数据库行曾被误标 is_secret，也按明文回显（SPEC 3.2） */
+/** Plaintext items: even if the database row was mistakenly marked is_secret, still display it as plaintext (SPEC 3.2) */
 function isPlaintextKey(key: string): boolean {
   return Boolean(PLAINTEXT_ENV_FALLBACK[key]);
 }
 
-/** 代码默认值：数据库/env 都没有时界面显示"未配置"或默认 */
+/** Code-level defaults: shown in the UI as "not configured" or the default when neither the database nor env has a value */
 export const CONFIG_DEFAULTS: Record<string, unknown> = {
   "llm.provider_priority": ["rules", "jev", "gemini"],
   "llm.jev.confidence_threshold": 0.85,
@@ -79,12 +82,13 @@ export function isConfigStoreAvailable(): boolean {
 
 export async function listConfigViews(category?: ConfigCategory): Promise<ConfigItemView[]> {
   const client = await getSupabaseServiceClientAsync();
-  // 这里不按 category 过滤数据库查询：env/默认兜底项不在库里，
-  // 必须先把两类数据合并、算出"有效 category"之后才能过滤（否则 ?category=llm 会静默丢掉兜底项）。
+  // We don't filter the database query by category here: env/default fallback items aren't in
+  // the database, so we have to merge both kinds of data and compute the "effective category"
+  // first, before filtering (otherwise ?category=llm would silently drop the fallback items).
   const { data, error } = await client.from("app_config").select("key, category, value, is_secret, updated_at");
   if (error) {
     throw new Error(
-      `读取配置失败：${error.message}。若刚切换过启用项目，请检查项目地址是否可达，或在 mail 的 supabase-projects 接口停用它后重试`
+      `Failed to read configuration: ${error.message}. If you just switched the active project, check whether the project address is reachable, or deactivate it via mail's supabase-projects endpoint and retry`
     );
   }
   const rows = (data ?? []) as ConfigItemRow[];
@@ -101,12 +105,12 @@ export async function listConfigViews(category?: ConfigCategory): Promise<Config
   return keys
     .map((key) => {
       const row = byKey.get(key);
-      // 有效 category：数据库行以行上的为准，兜底项按 key 前缀推导
+      // Effective category: for a database row, use the row's own category; for a fallback item, derive it from the key prefix
       const effectiveCategory = row?.category ?? categoryOf(key);
       const envName = envNameOf(key);
       const envValue = envName ? process.env[envName] : undefined;
       const fallback = envValue || CONFIG_DEFAULTS[key];
-      // 敏感判定只认敏感映射；明文项即使库里标了 is_secret 也按明文处理
+      // Secret status is only determined by the secret mapping; a plaintext item is treated as plaintext even if the database row has is_secret set
       const isSecret = isSensitiveKey(key) || (!isPlaintextKey(key) && Boolean(row?.is_secret));
 
       if (row) {
@@ -144,7 +148,7 @@ export async function listConfigViews(category?: ConfigCategory): Promise<Config
     .filter((item) => !category || item.category === category);
 }
 
-// db 里敏感项回显：先解密再打码（解密失败不抛给界面，显示占位并在 has_value 隐含异常）
+// Displaying a secret item from the db: decrypt first, then mask (a decryption failure isn't thrown to the UI — a placeholder is shown, with the anomaly implied by has_value)
 function maskDecrypted(cipher: string): string {
   try {
     return maskSecret(decryptSecret(cipher));
@@ -156,27 +160,31 @@ function maskDecrypted(cipher: string): string {
 export interface ConfigUpdate {
   key: string;
   value: string | number | boolean | string[] | null;
-  /** 可选乐观锁：调用方读取时的 updated_at（ISO 字符串），与当前行不一致则整批拒绝 */
+  /** Optional optimistic lock: the updated_at (ISO string) the caller had when it read the value; if it doesn't match the current row, the whole batch is rejected */
   expected_updated_at?: string;
 }
 
-/** 乐观锁冲突：整批拒绝，调用方（HTTP 层）转成 409 */
+/** Optimistic-lock conflict: the whole batch is rejected, and the caller (the HTTP layer) turns this into a 409 */
 export class ConfigConflictError extends Error {
   readonly keys: string[];
 
   constructor(keys: string[]) {
-    super(`保存被拒绝：以下配置在你读取之后已被修改：${keys.join("、")}。请重新读取最新配置再保存`);
+    super(`Save rejected: the following configuration items were modified after you read them: ${keys.join(", ")}. Please reload the latest configuration and save again`);
     this.name = "ConfigConflictError";
     this.keys = keys;
   }
 }
 
 /**
- * 校验 expected_updated_at：只对带该字段的 key 查当前行，逐个比对 updated_at。
- * 当前行不存在 → 视为无冲突；不一致 → 抛 ConfigConflictError（在调用方进行任何写入之前）。
+ * Validates expected_updated_at: only queries the current row for keys that carry this field,
+ * comparing updated_at one by one.
+ * If the current row doesn't exist -> treated as no conflict; a mismatch -> throws
+ * ConfigConflictError (before the caller performs any write).
  *
- * 取舍说明：查询和后续写入之间存在一个小窗口（两个请求可能同时通过检查、再先后写入），
- * CLAUDE.md 明确本阶段只需要"基本冲突提示"，不为此上数据库事务/RPC。
+ * Trade-off note: there is a small window between the query and the subsequent write (two
+ * requests could both pass the check and then write one after another); CLAUDE.md explicitly
+ * states that this phase only needs "basic conflict warning" — we're not adding a database
+ * transaction/RPC for this.
  */
 async function assertNoConflicts(client: SupabaseClient, updates: ConfigUpdate[]): Promise<void> {
   const withExpected = updates.filter((update) => update.expected_updated_at !== undefined);
@@ -191,7 +199,7 @@ async function assertNoConflicts(client: SupabaseClient, updates: ConfigUpdate[]
     );
   if (error) {
     throw new Error(
-      `读取配置失败：${error.message}。若刚切换过启用项目，请检查项目地址是否可达，或在 mail 的 supabase-projects 接口停用它后重试`
+      `Failed to read configuration: ${error.message}. If you just switched the active project, check whether the project address is reachable, or deactivate it via mail's supabase-projects endpoint and retry`
     );
   }
   const currentByKey = new Map(
@@ -201,10 +209,10 @@ async function assertNoConflicts(client: SupabaseClient, updates: ConfigUpdate[]
   const conflicts: string[] = [];
   for (const update of withExpected) {
     const current = currentByKey.get(update.key);
-    if (current === undefined) continue; // 当前行不存在 → 无冲突，正常写入
+    if (current === undefined) continue; // The current row doesn't exist -> no conflict, write normally
     const expectedTime = new Date(update.expected_updated_at as string).getTime();
     if (Number.isNaN(expectedTime)) {
-      throw new Error(`配置 ${update.key} 的 expected_updated_at 不是合法的时间字符串`);
+      throw new Error(`The expected_updated_at for configuration ${update.key} is not a valid time string`);
     }
     const currentTime = current ? new Date(current).getTime() : 0;
     if (expectedTime !== currentTime) conflicts.push(update.key);
@@ -213,16 +221,18 @@ async function assertNoConflicts(client: SupabaseClient, updates: ConfigUpdate[]
 }
 
 /**
- * 批量写入。约定：
- * - 带 expected_updated_at 的项先做乐观锁校验，有冲突整批拒绝（不产生任何部分写入）
- * - 敏感项（key 属于敏感映射）→ 加密后写；明文项（如 lmstudio_base_url）→ 原样写
- * - value 为 null → 删除该行（回到 env/默认值）
- * - upsert，并发安全
+ * Batch write. Conventions:
+ * - Items carrying expected_updated_at are optimistic-lock-checked first; a conflict rejects
+ *   the whole batch (no partial writes occur)
+ * - Secret items (whose key is in the secret mapping) -> encrypted before writing; plaintext
+ *   items (e.g. lmstudio_base_url) -> written as-is
+ * - value of null -> deletes that row (reverting to the env/default value)
+ * - upsert, concurrency-safe
  */
 export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: number; skipped: string[] }> {
   const client = await getSupabaseServiceClientAsync();
 
-  // 乐观锁检查必须发生在任何写入/删除之前，保证"整批拒绝"不留下部分写入
+  // The optimistic-lock check must happen before any write/delete, to guarantee that "reject the whole batch" never leaves behind a partial write
   await assertNoConflicts(client, updates);
 
   const rows: ConfigItemRow[] = [];
@@ -233,7 +243,7 @@ export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: 
     const isSecret = isSensitiveKey(update.key);
     if (update.value === null) {
       const { error } = await client.from("app_config").delete().eq("key", update.key);
-      if (error) throw new Error(`删除配置 ${update.key} 失败：${error.message}`);
+      if (error) throw new Error(`Failed to delete configuration ${update.key}: ${error.message}`);
       continue;
     }
     if (isSecret) {
@@ -241,7 +251,7 @@ export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: 
         skipped.push(update.key);
         continue;
       }
-      // 掩码原样回传（用户没改这个字段）→ 跳过，避免把掩码存成新的"密钥"
+      // The mask was passed back unchanged (the user didn't modify this field) -> skip it, to avoid storing the mask itself as the new "secret"
       if (update.value.includes("…") || update.value === "•••") {
         skipped.push(update.key);
         continue;
@@ -266,14 +276,14 @@ export async function upsertConfig(updates: ConfigUpdate[]): Promise<{ written: 
 
   if (rows.length > 0) {
     const { error } = await client.from("app_config").upsert(rows, { onConflict: "key" });
-    if (error) throw new Error(`保存配置失败：${error.message}`);
+    if (error) throw new Error(`Failed to save configuration: ${error.message}`);
   }
   return { written: rows.length, skipped };
 }
 
 /**
- * 给代码用的取值入口（数据库 > env > 默认）。
- * 将来 lib/llm 改造时调用它拿 key / 阈值等。
+ * The value-lookup entry point for code to use (database > env > default).
+ * Will be called by the lib/llm refactor in the future to fetch keys / thresholds / etc.
  */
 export async function resolveConfigValue(key: string): Promise<unknown> {
   const envName = envNameOf(key);
@@ -285,10 +295,11 @@ export async function resolveConfigValue(key: string): Promise<unknown> {
       return row.is_secret && typeof row.value === "string" ? decryptSecret(row.value) : row.value;
     }
   } catch (err) {
-    // 数据库不可用时静默落到 env/默认（读配置失败不应该让主流程崩）；
-    // 但要留下日志，方便排查"为什么配置没生效"（见调试规范：不静默吞掉）
+    // If the database is unavailable, silently fall through to env/default (a failed config
+    // read shouldn't crash the main flow); but still leave a log so it's possible to debug
+    // "why didn't the config take effect" (per the debugging convention: never swallow errors silently)
     console.warn(
-      "[config-store] 读取数据库配置失败，回退 env/默认：",
+      "[config-store] Failed to read configuration from the database, falling back to env/default:",
       err instanceof Error ? err.message : err
     );
   }

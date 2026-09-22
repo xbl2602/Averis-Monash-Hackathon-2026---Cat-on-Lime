@@ -1,7 +1,8 @@
 /**
- * 人工复核动作的业务逻辑（confirm/correct/disposition/defer/undefer/note/rerun + undo + bulk）。
- * REST（各模块 api/review/*）与 MCP（各模块 mcp/index.ts）都只调用这里，不重复实现语义
- * （见 docs/REVIEW_SPEC.md §4）。
+ * Business logic for human-review actions
+ * (confirm/correct/disposition/defer/undefer/note/rerun + undo + bulk).
+ * Both REST (each module's api/review/*) and MCP (each module's mcp/index.ts) only call into
+ * here, without re-implementing the semantics (see docs/REVIEW_SPEC.md §4).
  */
 import { isLLMProvider } from "@/lib/llm";
 import type { ComparedField, EmailCategory } from "@/lib/shared/types";
@@ -42,7 +43,7 @@ function checkOptimisticLock(existing: ReviewOverride | null, expected?: string)
   if (expected === undefined) return;
   const current = existing?.updated_at ?? null;
   if (current !== expected) {
-    throw new ReviewConflictError("这条记录已被别人修改过（updated_at 不匹配），请刷新后再试");
+    throw new ReviewConflictError("This record has already been modified by someone else (updated_at doesn't match) — please refresh and try again");
   }
 }
 
@@ -73,7 +74,7 @@ export async function applyReviewAction(
 ): Promise<ApplyReviewActionResult> {
   const queueItem = await getQueueItem(targetKind, request.email_id);
   if (!queueItem) {
-    throw new ReviewNotFoundError(`样例数据里没有邮件 ${request.email_id}`);
+    throw new ReviewNotFoundError(`Email ${request.email_id} isn't in the sample data`);
   }
   const existing = queueItem.override;
   checkOptimisticLock(existing, request.expected_updated_at);
@@ -122,7 +123,7 @@ async function finish(
     batch_id: batchId,
   });
   const item = await getQueueItem(targetKind, request.email_id);
-  if (!item) throw new ReviewNotFoundError(`样例数据里没有邮件 ${request.email_id}`);
+  if (!item) throw new ReviewNotFoundError(`Email ${request.email_id} isn't in the sample data`);
   return { item, action };
 }
 
@@ -138,7 +139,7 @@ async function finishRerun(
     email_id: request.email_id,
     action_type: "rerun",
     before_state: existing,
-    after_state: existing, // rerun 不改 override，只重算系统结果
+    after_state: existing, // rerun doesn't change the override, it only recomputes the system result
     undo_of: null,
     reason: request.reason ?? null,
     note: outcome.summary,
@@ -146,7 +147,7 @@ async function finishRerun(
     batch_id: batchId,
   });
   const item = await getQueueItem(targetKind, request.email_id);
-  if (!item) throw new ReviewNotFoundError(`样例数据里没有邮件 ${request.email_id}`);
+  if (!item) throw new ReviewNotFoundError(`Email ${request.email_id} isn't in the sample data`);
   return { item, action };
 }
 
@@ -206,7 +207,7 @@ async function doDisposition(
   const disposition = request.payload?.disposition;
   if (!disposition || !isReviewDisposition(disposition)) {
     throw new ReviewRequestError(
-      `disposition 动作需要合法的 payload.disposition（accepted/corrected/routed/returned/awaiting_input/unprocessable）`
+      `The disposition action requires a valid payload.disposition (accepted/corrected/routed/returned/awaiting_input/unprocessable)`
     );
   }
   const category = request.payload?.category ?? existing?.category ?? null;
@@ -246,14 +247,14 @@ async function doDefer(
   });
 }
 
-/** 还原成对应 defer 动作之前的快照；没有快照就删掉这一行（见 §4.2） */
+/** Restores the snapshot from before the corresponding defer action; if there's no snapshot, just deletes this row (see §4.2) */
 async function doUndefer(
   targetKind: ReviewTargetKind,
   request: ApplyReviewActionRequest
 ): Promise<ReviewOverride | null> {
   const lastDefer = await getLatestActionOfType(targetKind, request.email_id, "defer");
   if (!lastDefer) {
-    throw new ReviewRequestError(`邮件 ${request.email_id} 没有可恢复的搁置记录`);
+    throw new ReviewRequestError(`Email ${request.email_id} has no deferral record to restore`);
   }
   const restored = lastDefer.before_state;
   if (!restored) {
@@ -271,15 +272,15 @@ export async function undoReviewAction(
     ? await getActionById(targetKind, request.email_id, request.action_id)
     : await getLatestEffectiveAction(targetKind, request.email_id);
   if (!target) {
-    throw new ReviewNotFoundError(`邮件 ${request.email_id} 没有可撤销的动作`);
+    throw new ReviewNotFoundError(`Email ${request.email_id} has no action to undo`);
   }
   if (target.action_type === "undo") {
-    throw new ReviewRequestError("不能撤销一次“撤销”操作");
+    throw new ReviewRequestError("Cannot undo an “undo” action");
   }
 
   const latest = await getLatestEffectiveAction(targetKind, request.email_id);
   if (!latest || latest.id !== target.id) {
-    throw new ReviewConflictError("这不是最新的动作——之后可能已经有别的操作发生，无法撤销");
+    throw new ReviewConflictError("This isn't the latest action — another operation may have happened since, so it can't be undone");
   }
 
   const current = await getOverride(targetKind, request.email_id);
@@ -307,11 +308,11 @@ export async function undoReviewAction(
   });
 
   const item = await getQueueItem(targetKind, request.email_id);
-  if (!item) throw new ReviewNotFoundError(`样例数据里没有邮件 ${request.email_id}`);
+  if (!item) throw new ReviewNotFoundError(`Email ${request.email_id} isn't in the sample data`);
   return { item, action };
 }
 
-/** 批量：逐条独立、失败隔离，共享一个 batch_id（见 §4.7） */
+/** Bulk: each item is independent, failures are isolated, sharing one batch_id (see §4.7) */
 export async function bulkReviewAction(
   targetKind: ReviewTargetKind,
   request: BulkReviewActionRequest
@@ -336,9 +337,9 @@ export async function bulkReviewAction(
   return { batch_id: batchId, succeeded, failed };
 }
 
-// provider 校验复用 lib/llm 的唯一清单，避免这里另起一份判断
+// provider validation reuses lib/llm's single source of truth, so as not to have another copy of this check here
 export function assertValidProviderOrUndefined(provider: unknown): void {
   if (provider !== undefined && !isLLMProvider(provider)) {
-    throw new ReviewRequestError(`不支持的 provider：${String(provider)}`);
+    throw new ReviewRequestError(`Unsupported provider: ${String(provider)}`);
   }
 }

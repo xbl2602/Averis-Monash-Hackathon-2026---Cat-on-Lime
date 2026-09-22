@@ -1,18 +1,18 @@
 /**
- * MCP tool 注解自检（可反复执行）。
+ * MCP tool annotation self-check (safe to run repeatedly).
  *
- * 用法：npm run test:mcp-annotations
+ * Usage: npm run test:mcp-annotations
  *
- * 约定（见 app/core/mcp-server/tools.ts 的硬约定）：
- * - 每个 tool 必须显式声明 readOnlyHint（true=只读 / false=会写库），未声明的一律 fail
- * - 只读 tool 至少 8 个、写 tool 至少 3 个
- * - 写 tool 的名字集合必须与既定清单完全一致（增删写 tool 时必须同步改这里，防止悄悄多出写入口）
+ * Conventions (see the hard rules in app/core/mcp-server/tools.ts):
+ * - Every tool must explicitly declare readOnlyHint (true = read-only / false = writes to the database); undeclared always fails
+ * - At least 8 read-only tools and at least 3 write tools
+ * - The set of write-tool names must exactly match the fixed list below (update this file in lockstep whenever a write tool is added or removed, to prevent a new write entry point from sneaking in unnoticed)
  *
- * 说明：断言不把 total === 11 当唯一判据（以后合法新增只读 tool 不应误报阻断）。
+ * Note: the assertions don't treat total === 11 as the sole criterion (a legitimate new read-only tool added later shouldn't be falsely blocked).
  */
 import { mcpTools } from "../app/core/mcp-server/tools";
 
-// P1-1 人工复核闭环新增 8 个写 tool（apply/undo × classification/extraction/comparison/pipeline）
+// P1-1 manual review loop added 8 write tools (apply/undo x classification/extraction/comparison/pipeline)
 const EXPECTED_WRITE_TOOLS = [
   "run_batch",
   "sync_gmail",
@@ -43,23 +43,23 @@ console.log(
 
 const problems: string[] = [];
 if (unknown.length > 0) {
-  problems.push(`有 ${unknown.length} 个 tool 没显式声明 readOnlyHint：${unknown.join(", ")}`);
+  problems.push(`${unknown.length} tool(s) did not explicitly declare readOnlyHint: ${unknown.join(", ")}`);
 }
 if (readOnlyCount < 8) {
-  problems.push(`只读 tool 数量不足（期望至少 8，实际 ${readOnlyCount}）`);
+  problems.push(`Not enough read-only tools (expected at least 8, got ${readOnlyCount})`);
 }
 if (writeTools.length < 3) {
-  problems.push(`写 tool 数量不足（期望至少 3，实际 ${writeTools.length}）`);
+  problems.push(`Not enough write tools (expected at least 3, got ${writeTools.length})`);
 }
 if (JSON.stringify(writeTools) !== JSON.stringify(EXPECTED_WRITE_TOOLS)) {
   problems.push(
-    `写 tool 名字集合与既定清单不一致：实际 [${writeTools.join(", ")}]，期望 [${EXPECTED_WRITE_TOOLS.join(", ")}]`
+    `Write-tool name set doesn't match the fixed list: actual [${writeTools.join(", ")}], expected [${EXPECTED_WRITE_TOOLS.join(", ")}]`
   );
 }
 
 if (problems.length > 0) {
-  console.error("\n注解自检失败：");
+  console.error("\nAnnotation self-check failed:");
   for (const problem of problems) console.error(`  - ${problem}`);
   process.exit(1);
 }
-console.log("\nMCP tool 注解自检通过。");
+console.log("\nMCP tool annotation self-check passed.");

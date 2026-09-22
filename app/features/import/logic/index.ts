@@ -1,6 +1,6 @@
 /**
- * import feature 的 logic 出口：REST（api/）和 MCP（mcp/）都只从这里取能力，
- * 业务实现分散在 upload / documents / params / document-store，本文件只做汇总转发。
+ * The logic exit point for the import feature: both REST (api/) and MCP (mcp/) pull capabilities from here only;
+ * the business implementation is spread across upload / documents / params / document-store, and this file only aggregates and re-exports them.
  */
 export { uploadDocuments } from "./upload";
 export {

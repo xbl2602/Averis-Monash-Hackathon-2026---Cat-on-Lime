@@ -1,8 +1,10 @@
 /**
- * 引擎逻辑版本号（叶子模块：只放常量，不 import 任何东西）。
+ * Engine logic version number (leaf module: holds only a constant, imports nothing).
  *
- * 为什么单独一个文件：结果层（pipeline/verification-store）和导出层都要用它，
- * 但导出函数不应该为了一个字符串把整个 pipeline（连带附件解析重依赖）拖进函数包。
- * 改规则的实质改动时在这里手动 +1（原位置：lib/shared/pipeline.ts 的注释）。
+ * Why this is its own file: both the results layer (pipeline/verification-store) and the
+ * export layer need it, but the export function shouldn't have to drag the entire pipeline
+ * (along with its heavy attachment-parsing dependencies) into its bundle just for one string.
+ * Bump this by hand whenever a rule change is substantive (originally noted in a comment in
+ * lib/shared/pipeline.ts).
  */
 export const PIPELINE_LOGIC_VERSION = "v5-2026-09-21";

@@ -1,19 +1,20 @@
 /**
- * 扰动集正确性验证（P1-10 第二轮）
+ * Perturbation-set correctness verification (P1-10, round 2)
  *
- * 与 perturb:run 的区别：run 验证"不变性"（扰动前后输出一致），本脚本验证"正确性"
- * （对着 ground truth 用官方评分器打分），回答"分类到底对不对"。
+ * Difference from perturb:run: run verifies "invariance" (output is unchanged before/after perturbation), while this
+ * script verifies "correctness" (scored against ground truth using the official scorer), answering "is the
+ * classification actually right".
  *
- * 做法：
- *   1. 从 Supabase 读全部 ptN_ 扰动结果；
- *   2. 对语义不变类变体（pt1~pt5、pt7~pt11、pt13、pt14）构造派生 GT：
- *      ptN_email_xxx 的期望 = 官方 GT 里 email_xxx 的标签（扰动不改语义 ⇒ 期望相同）；
- *   3. pt6（扫描件）用显式期望 GT（NEEDS_REVIEW/unreadable）；
- *   4. pt12（注入冲突值）不参与 GT 打分，由 run 报告的"不允许静默 OK"断言负责；
- *   5. 用官方 score_cli.py（scoring.py 同一实现）分别对整体和每个变体打分，
- *      并列出所有分类错判（category ≠ 派生 GT）的邮件。
+ * Approach:
+ *   1. Read all ptN_ perturbation results from Supabase;
+ *   2. For semantics-preserving variants (pt1-pt5, pt7-pt11, pt13, pt14), construct a derived GT:
+ *      the expectation for ptN_email_xxx = the label for email_xxx in the official GT (perturbation doesn't change semantics, so the expectation stays the same);
+ *   3. pt6 (scanned documents) uses an explicit expected GT (NEEDS_REVIEW/unreadable);
+ *   4. pt12 (injected conflicting values) doesn't participate in GT scoring — it's covered by the "must not silently return OK" assertion in the run report;
+ *   5. Score both overall and per-variant using the official score_cli.py (same implementation as scoring.py),
+ *      and list every email with a category misclassification (category != derived GT).
  *
- * 用法：npm run perturb:score
+ * Usage: npm run perturb:score
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -66,12 +67,12 @@ interface VariantScore {
   statusErrors: { id: string; origin: string; predicted: string; truth: string }[];
 }
 
-/** pt12 是"注入冲突值"场景，期望是"不允许静默 OK"，不适合 GT 打分 */
+/** pt12 is the "injected conflicting values" scenario; the expectation is "must not silently return OK", so it isn't suited to GT scoring */
 const EXCLUDED_FROM_GT_SCORING = new Set(["pt12"]);
 
 async function main() {
   await loadEnvLocal();
-  if (!isSupabaseServiceAvailable()) throw new Error("缺少 SUPABASE_SERVICE_ROLE_KEY，无法读取扰动结果");
+  if (!isSupabaseServiceAvailable()) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY, cannot read perturbation results");
 
   const gt = JSON.parse(await readFile(GT_PATH, "utf-8")) as Record<string, GtEntry>;
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, "utf-8")) as {
@@ -95,7 +96,7 @@ async function main() {
       .select("email_id,category,comparison_status,review_reason,defect_fields,has_defect,processing_status")
       .like("email_id", "pt%")
       .range(from, from + 999);
-    if (error) throw new Error(`读取扰动结果失败：${error.message}`);
+    if (error) throw new Error(`Failed to read perturbation results: ${error.message}`);
     allRows.push(...((data ?? []) as StoredRow[]));
     if (!data || data.length < 1000) break;
   }
@@ -206,19 +207,19 @@ function runOfficialScorer(submissionPath: string, gtPath: string) {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (result.status !== 0) {
-    throw new Error(`官方评分器执行失败：${result.stderr || result.stdout}`);
+    throw new Error(`Official scorer execution failed: ${result.stderr || result.stdout}`);
   }
   return JSON.parse(result.stdout);
 }
 
 function buildSummary(results: VariantScore[], overall: Record<string, any>): string {
   const lines = [
-    `# 扰动集正确性验证（官方评分器，派生 GT）— ${new Date().toISOString()}`,
+    `# Perturbation-set correctness verification (official scorer, derived GT) — ${new Date().toISOString()}`,
     "",
-    "判定口径：语义不变变体（pt1~pt5、pt7~pt11、pt13、pt14）的派生 GT = 官方 GT 原标签；",
-    "pt6 用显式期望（NEEDS_REVIEW/unreadable）；pt12 为冲突注入场景，不参与 GT 打分。",
+    "Judging criteria: for semantics-preserving variants (pt1-pt5, pt7-pt11, pt13, pt14), derived GT = the original label from the official GT;",
+    "pt6 uses an explicit expectation (NEEDS_REVIEW/unreadable); pt12 is the conflict-injection scenario and doesn't participate in GT scoring.",
     "",
-    "| 变体 | 计分条数 | 分类 accuracy | 分类 macro-F1 | 缺陷 F1 | 端到端 | 升级 recall | 分类错判 | status 错判 |",
+    "| Variant | Scored count | Category accuracy | Category macro-F1 | Defect F1 | End-to-end | Escalation recall | Category errors | Status errors |",
     "|---|---|---|---|---|---|---|---|---|",
   ];
   for (const item of results) {
@@ -227,40 +228,40 @@ function buildSummary(results: VariantScore[], overall: Record<string, any>): st
       `| ${item.variant} | ${item.scored} | ${item.accuracy.toFixed(3)} | ${macro} | ${item.defectF1.toFixed(3)} | ${item.e2eSuccess}/${item.e2eTotal} | ${item.reliabilityRecall.toFixed(3)} | ${item.categoryErrors.length} | ${item.statusErrors.length} |`
     );
   }
-  lines.push("", "## 汇总（全部参与打分的扰动邮件）", "");
+  lines.push("", "## Summary (all perturbation emails included in scoring)", "");
   lines.push(
-    `- 分类 accuracy=${overall.stage1.accuracy.toFixed(3)}，macro-F1=${overall.stage1.macro_f1.toFixed(3)}`,
-    `- 缺陷 F1=${overall.stage3.defect_f1.toFixed(3)}`,
-    `- 端到端=${overall.end_to_end.success}/${overall.end_to_end.total}（${overall.end_to_end.rate.toFixed(3)}）`,
-    `- 升级 recall=${overall.reliability.escalation_recall.toFixed(3)}，precision=${overall.reliability.escalation_precision.toFixed(3)}`,
-    `- 官方加权分（同一公式）=${overall.final_score.toFixed(4)}`
+    `- Category accuracy=${overall.stage1.accuracy.toFixed(3)}, macro-F1=${overall.stage1.macro_f1.toFixed(3)}`,
+    `- Defect F1=${overall.stage3.defect_f1.toFixed(3)}`,
+    `- End-to-end=${overall.end_to_end.success}/${overall.end_to_end.total} (${overall.end_to_end.rate.toFixed(3)})`,
+    `- Escalation recall=${overall.reliability.escalation_recall.toFixed(3)}, precision=${overall.reliability.escalation_precision.toFixed(3)}`,
+    `- Official weighted score (same formula)=${overall.final_score.toFixed(4)}`
   );
   const categoryErrorLines: string[] = [];
   for (const item of results) {
     for (const err of item.categoryErrors) {
-      categoryErrorLines.push(`- ${err.id}（原 ${err.origin}）：GT=${err.truth}，实际=${err.predicted}`);
+      categoryErrorLines.push(`- ${err.id} (origin ${err.origin}): GT=${err.truth}, actual=${err.predicted}`);
     }
   }
-  lines.push("", `## 分类错判明细（共 ${categoryErrorLines.length} 条）`, "");
-  lines.push(...(categoryErrorLines.length ? categoryErrorLines : ["（无）"]));
+  lines.push("", `## Category misclassification details (${categoryErrorLines.length} total)`, "");
+  lines.push(...(categoryErrorLines.length ? categoryErrorLines : ["(none)"]));
   return lines.join("\n");
 }
 
 function printSummary(results: VariantScore[], overall: Record<string, any>, outDir: string) {
-  console.log("\n============ 扰动集正确性验证（官方评分器 + 派生 GT）============");
-  console.log("变体    计分   accuracy  macroF1  defectF1   e2e        statusErr  分类Err");
+  console.log("\n============ Perturbation-set correctness verification (official scorer + derived GT) ============");
+  console.log("Variant  Scored  accuracy  macroF1  defectF1   e2e        statusErr  categoryErr");
   for (const item of results) {
     const macro = item.macroF1Suppressed ? "n/a" : item.macroF1.toFixed(3);
     console.log(
       `${item.variant.padEnd(7)}${String(item.scored).padStart(5)}   ${item.accuracy.toFixed(3).padStart(7)}  ${macro.padStart(7)}  ${item.defectF1.toFixed(3).padStart(7)}   ${(item.e2eSuccess + "/" + item.e2eTotal).padStart(8)}  ${String(item.statusErrors.length).padStart(9)}  ${String(item.categoryErrors.length).padStart(7)}`
     );
   }
-  console.log("（macroF1 标 n/a = 该子集缺少部分类别，5 类 macro 在子集上没有意义；看汇总行）");
+  console.log("(macroF1 marked n/a = this subset is missing some categories, so a 5-category macro doesn't make sense on the subset; see the summary row)");
   console.log("");
-  console.log(`总计（${overall.n_emails} 封）：accuracy=${overall.stage1.accuracy.toFixed(3)} macroF1=${overall.stage1.macro_f1.toFixed(3)} defectF1=${overall.stage3.defect_f1.toFixed(3)} e2e=${overall.end_to_end.success}/${overall.end_to_end.total} 官方加权分=${overall.final_score.toFixed(4)}`);
+  console.log(`Total (${overall.n_emails} emails): accuracy=${overall.stage1.accuracy.toFixed(3)} macroF1=${overall.stage1.macro_f1.toFixed(3)} defectF1=${overall.stage3.defect_f1.toFixed(3)} e2e=${overall.end_to_end.success}/${overall.end_to_end.total} official weighted score=${overall.final_score.toFixed(4)}`);
   const totalCategoryErrors = results.reduce((sum, item) => sum + item.categoryErrors.length, 0);
-  console.log(`分类错判合计：${totalCategoryErrors} 条（明细见 summary.md）`);
-  console.log(`产物目录：${path.relative(ROOT, outDir)}（scores.json / summary.md / 各变体 submission+derived-gt）`);
+  console.log(`Total category misclassifications: ${totalCategoryErrors} (see summary.md for details)`);
+  console.log(`Output directory: ${path.relative(ROOT, outDir)} (scores.json / summary.md / per-variant submission+derived-gt)`);
 }
 
 async function loadEnvLocal() {
@@ -282,6 +283,6 @@ async function loadEnvLocal() {
 }
 
 main().catch((err) => {
-  console.error("\n正确性验证失败：", err);
+  console.error("\nCorrectness verification failed:", err);
   process.exit(1);
 });

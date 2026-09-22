@@ -1,218 +1,218 @@
-# 团队执行手册 — Averis x Monash Hackathon 2026
+# Team Execution Handbook — Averis x Monash Hackathon 2026
 
-给团队3人看的分工/协作手册。技术细节遵循 [CLAUDE.md](../CLAUDE.md)（3人的 Claude Code 都会自动读取那份文件），核心决策的来龙去脉见 [DECISION_LOG.md](DECISION_LOG.md)。
+A role-division/collaboration handbook for the 3 team members. Technical details follow [CLAUDE.md](../CLAUDE.md) (all 3 people's Claude Code sessions read that file automatically); see [DECISION_LOG.md](DECISION_LOG.md) for the background behind core decisions.
 
-## 0. 现状快照
+## 0. Current Snapshot
 
-- 团队：3人，都没有编程背景，都用过 AI 编程工具，都没有比赛经验
-- 协作模式：**3人各自开自己的 AI coding session 并行开发**，靠 Git 仓库整合
-- 题目：**9月18日**公布才知道，现在还不知道要做什么
-- 提交截止：**2026-09-22 12:00pm**
+- Team: 3 people, none with a programming background, all have used AI coding tools, none with hackathon experience
+- Collaboration model: **each of the 3 runs their own AI coding session in parallel**, integrated via a Git repository
+- Problem statement: won't be known until it's announced on **September 18**; we don't know what we're building yet
+- Submission deadline: **2026-09-22 12:00pm**
 
-✅ 报名、GitHub 仓库、Discord 频道、每人环境搭建与最小验证均已完成（原第4节对应项已移除）。
+✅ Registration, the GitHub repo, the Discord channel, and everyone's environment setup + minimal verification are all done (the corresponding items from the original section 4 have been removed).
 
-题目公布前，这份手册只能先定"通用的准备和流程"，具体项目内容等题目出来当天立刻补第8节。
+Before the problem statement is announced, this handbook can only establish "general preparation and process"; section 8 will be filled in with the actual project content the moment the problem statement drops.
 
-## 1. 关键时间线（2026-09-18 开幕式后更新，详见 [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md)）
+## 1. Key Timeline (updated after the 2026-09-18 opening ceremony; see [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md) for details)
 
-| 时间 | 事项 |
+| Time | Event |
 |---|---|
-| ~~9/17 18:00 前~~ | ~~报名截止~~ ✅已完成 |
-| **9/18（今天）** | **题目正式公布**：航运单证核验（Shipping Documents Verification），见第8节 |
-| 9/18 – 9/22 中午 | 开发冲刺 |
-| 9/20 | **Workshop 1**（讲者：Sharik、Darren）——排计划时留出时间参加 |
-| 9/21 | **Workshop 2**（讲者：Averis）+ 建议当天开始功能冻结、整合、debug、准备演示素材 |
-| 9/22 上午 | 录视频、写slide、最终检查 |
-| **9/22 12:00pm** | **初赛提交截止（Google Form）**——已用倒计时核对过，时间没有出入 |
-| 9/24 | 初赛选出前10名队伍名单公布 |
-| 9/26（⚠️见下方说明） | 决赛：现场10分钟路演 + 5分钟Q&A，地点 **Monash University Malaysia，Bandar Sunway, Subang Jaya**，**全员必须physically到场** |
+| ~~Before 9/17 18:00~~ | ~~Registration deadline~~ Done |
+| **9/18 (today)** | **Official problem statement announcement**: Shipping Documents Verification, see section 8 |
+| 9/18 - 9/22 noon | Development sprint |
+| 9/20 | **Workshop 1** (speakers: Sharik, Darren) — leave time in the schedule to attend |
+| 9/21 | **Workshop 2** (speaker: Averis) + recommended to start feature freeze, integration, debugging, and demo-material prep from this day on |
+| 9/22 morning | Record the video, write the slides, final checks |
+| **9/22 12:00pm** | **Preliminary submission deadline (Google Form)** — double-checked against a countdown, the time is accurate |
+| 9/24 | The preliminary round's top-10 team list is announced |
+| 9/26 (see the warning below) | Finals: an in-person 10-minute pitch + 5-minute Q&A, location **Monash University Malaysia, Bandar Sunway, Subang Jaya**, **the entire team must be physically present** |
 
-⚠️ 决赛日期在开幕式转录里出现过一次"26号"一次"20号"，按逻辑（10强名单9/24才公布，决赛不可能在这之前）26号更可信，但建议去 Discord 核实官方公告后再定，不要直接按这里排后续行程。
+⚠️ The finals date appeared once as "the 26th" and once as "the 20th" in the opening-ceremony transcript. Logically (the top-10 list isn't announced until 9/24, so the finals can't be before that) the 26th is more credible, but it's recommended to confirm via an official Discord announcement before finalizing — don't schedule the rest of your plans directly off this note.
 
-## 2. 赛事背景与合作方定位（调研结果，非官方文档原文）
+## 2. Event Background and Partner Positioning (research findings, not official documentation)
 
-这部分不在官方 Rules and Regulations 里，是调研补充的背景，帮助判断题目可能的方向。**带"未证实/推测"标注的地方请勿当作确定信息使用，题目公布后以官方为准。**
+This section isn't part of the official Rules and Regulations — it's supplementary background from research, meant to help guess at the likely direction of the problem statement. **Anything marked "unverified/speculative" should not be treated as confirmed fact; once the problem statement is announced, the official version takes precedence.**
 
-### 2.1 主办方是谁
-- **Averis Sdn Bhd**：马来西亚的全球商业服务（GBS）公司，2006年成立，总部在吉隆坡 Bangsar South，主要为 **RGE Group**（Royal Golden Eagle，Sukanto Tanoto 旗下的造纸/棕榈油/粘胶纤维/能源集团）提供服务。核心业务：IT外包、HR、财务与会计、航运单证（Shipping Documentation）、数字化/RPO/变革管理。
-  - 之前调研中"Averis 可能和 Sunway 集团有关"的猜测**已被证伪**，两者没有关联。
-  - **没有证据显示 Averis 是某个云厂商（AWS/Azure/GCP）的代理商或有绑定关系**，选云平台不用刻意迎合他们。
-  - 由此推测（**未证实**）：题目大概率偏向**企业后台/供应链场景**——比如 HR 流程自动化、财务对账、航运/物流单证处理、企业内部数字化工具，而不是面向大众消费者的社交/电商类应用。找到一条另一场 Averis 参与过的黑客松（与 Ace Resource Advisory 合办）主题是**供应链/IoT**，进一步支持这个方向的猜测，但**不能确认是同一系列**。
-  - ✅ **这个推测已被9/18公布的官方题目证实**：题目就是航运单证核验（Shipping Documents Verification），细节见第8节和 [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md)。
-- **Monash University Malaysia**：确认是 Monash 马来西亚校区（Bandar Sunway），由 School of IT 主办，不是 Monash 澳洲总部。该校有活跃的 GDG on Campus（Google Developer Group）学生社团，且校方是 **Microsoft Azure Dev Tools for Teaching** 项目成员——没找到 AWS Academy 或 Huawei Cloud 的合作证据。**没有证据显示比赛强制或偏好某个云平台**。
+### 2.1 Who the Organizer Is
+- **Averis Sdn Bhd**: a Malaysian global business services (GBS) company, founded in 2006, headquartered in Bangsar South, Kuala Lumpur, primarily serving **RGE Group** (Royal Golden Eagle, Sukanto Tanoto's conglomerate spanning paper/palm oil/viscose fiber/energy). Core business: IT outsourcing, HR, finance and accounting, shipping documentation, digitalization/RPO/change management.
+  - The earlier research guess that "Averis might be connected to the Sunway Group" **has been disproven** — the two are unrelated.
+  - **There's no evidence Averis is an agent of, or has a binding relationship with, any particular cloud vendor (AWS/Azure/GCP)** — there's no need to specifically cater to them when picking a cloud platform.
+  - Based on this, a **(unverified)** guess: the problem statement is likely to lean toward an **enterprise back-office/supply-chain scenario** — e.g. HR process automation, financial reconciliation, shipping/logistics document processing, or internal enterprise digitalization tools — rather than a consumer-facing social/e-commerce app. One other hackathon Averis has participated in (co-hosted with Ace Resource Advisory) had a **supply chain/IoT** theme, which further supports this guess, though **it cannot be confirmed to be part of the same series**.
+  - **This guess has been confirmed by the official problem statement announced on 9/18**: it is indeed Shipping Documents Verification — see section 8 and [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md) for details.
+- **Monash University Malaysia**: confirmed to be Monash's Malaysia campus (Bandar Sunway), hosted by the School of IT — not Monash's Australian headquarters. The campus has an active GDG on Campus (Google Developer Group) student society, and the school is a member of the **Microsoft Azure Dev Tools for Teaching** program — no evidence was found of a partnership with AWS Academy or Huawei Cloud. **There's no evidence the competition mandates or favors any particular cloud platform.**
 
-### 2.2 是否有往届记录
-- 搜索不到"Averis x Monash Hackathon"这个具体名字的往届（2024/2025）——**这大概率是第一届**，没有历史赛题/获奖名单可参考。
-- 论坛/社媒（Lowyat.NET、Reddit、Facebook、X、TikTok）上**没有找到关于这场比赛的实质讨论**，组队帖、吐槽、攻略基本没有——信息只能靠官网和 Discord。
+### 2.2 Whether There Are Past Editions
+- No past editions (2024/2025) under the specific name "Averis x Monash Hackathon" could be found — **this is very likely the first edition**, with no historical problem statements or winner lists to reference.
+- **No substantive discussion of this competition** was found on forums/social media (Lowyat.NET, Reddit, Facebook, X, TikTok) — essentially no team-finding posts, complaints, or strategy write-ups exist, so information has to come solely from the official site and Discord.
 
-### 2.3 赛制细节（补充官方文档没写清楚的部分）
-- 奖金池 **RM 9,000**：冠军 RM5,000 / 亚军 RM3,000 / 季军 RM1,000
-- 只有**一个统一密封题目**，不是多赛道选题——不用纠结"选哪个track"
-- 初赛后**前10名队伍**进决赛，现场做 **10分钟路演 + 5分钟Q&A**
-- 面向所有大学生（不限 Monash 学生）
-- 两份详细评分细则 Google Docs（[初赛](https://docs.google.com/document/u/0/d/1EiI_mqJYeMN0D-dtZ_npCavVGXVcePFmcZ7O4d4ygQI/edit)、[决赛](https://docs.google.com/document/u/0/d/1S-bLf45JOabMl1QUDgl4F6NTwuwD7UKbhPKh74sqaRo/edit)）需要登录 Google 账号才能看到完整内容，调研工具打不开，**建议尽快用自己的 Google 账号手动打开看一遍完整评分细则**，可能比图表里的大类项更详细。
-- 没找到其他赞助商/导师名单，目前看只有 Averis 一家主办企业。
+### 2.3 Format Details (filling in what the official docs didn't spell out)
+- Prize pool **RM 9,000**: champion RM5,000 / runner-up RM3,000 / third place RM1,000
+- There's only **one single sealed problem statement**, not multiple tracks to choose from — no need to agonize over "which track to pick"
+- The **top 10 teams** from the preliminary round advance to the finals, doing a **10-minute pitch + 5-minute Q&A** in person
+- Open to all university students (not limited to Monash students)
+- The two detailed scoring rubric Google Docs ([preliminary](https://docs.google.com/document/u/0/d/1EiI_mqJYeMN0D-dtZ_npCavVGXVcePFmcZ7O4d4ygQI/edit), [finals](https://docs.google.com/document/u/0/d/1S-bLf45JOabMl1QUDgl4F6NTwuwD7UKbhPKh74sqaRo/edit)) require a Google login to see the full content, and research tools couldn't open them — **it's recommended to open the full rubrics manually with your own Google account as soon as possible**, since they may be more detailed than the top-level categories shown in the chart.
+- No other sponsor/mentor list was found; as far as we can tell, Averis is the only hosting company.
 
-## 3. 评分对齐（把力气花在刀刃上）
+## 3. Aligning with Scoring (spend effort where it counts)
 
-来自 [Rules and Regulations.md](official/Rules%20and%20Regulations.md) 里的评分图表，两轮里权重最高的都是"能不能跑起来"：
+From the scoring chart in [Rules and Regulations.md](official/Rules%20and%20Regulations.md), the highest-weighted item in both rounds is "does it actually run":
 
-**初赛（100分）**：Working Core Prototype 25 分（最高）、System Design & Architecture 15、Technology Integration 15、Technical Feasibility & Validation 15、Problem Statement Understanding 10、Innovation & Solution Approach 10、Practical Value & Potential 10
+**Preliminary round (100 points)**: Working Core Prototype 25 (highest), System Design & Architecture 15, Technology Integration 15, Technical Feasibility & Validation 15, Problem Statement Understanding 10, Innovation & Solution Approach 10, Practical Value & Potential 10
 
-**决赛（100分）**：End to End Functionality 25 分（最高）、Architecture & Scalability 15、Technology Integration 15、Engineering Quality & Robustness 15、Solution Effectiveness & User Value 10、User Experience & Differentiation 10、Impact & Future Potential 10
+**Finals (100 points)**: End to End Functionality 25 (highest), Architecture & Scalability 15, Technology Integration 15, Engineering Quality & Robustness 15, Solution Effectiveness & User Value 10, User Experience & Differentiation 10, Impact & Future Potential 10
 
-**结论**：
-- 优先保证**一条完整能跑的核心流程**，而不是做很多半成品功能，或者纠结花哨的 UI。
-- "Technology Integration" 两轮都占 15 分，指的很可能是 AI + 云基础设施是否**真正整合进核心功能**（而不是摆设），规则原文也强调"未能有意义整合云基础设施可能被大幅扣分"——AI 和云部署不是加分项，是硬性及格线。
-- 团队零编程经验的情况下，`Engineering Quality & Robustness`（决赛15分）容易失分，第5节的协作规则就是为了尽量保住这块分。
-- 调研东南亚同类AI黑客松的获奖项目（如 APU 拿下 Great Malaysia AI Hackathon 2025 冠军的"InsureScan"保险单据AI识别、"FundSight AI"中小企业拨款匹配）发现一个共性：**赢的项目都很"窄"**——一个具体垂直问题 + 一个评委30秒内就能看懂的核心AI功能，而不是大而全的平台。常见翻车点是功能贪多、或者demo依赖一个可能在台上挂掉的实时API（建议准备缓存/预设的演示数据做保底）。
+**Conclusions**:
+- Prioritize **one complete, working core flow** above building lots of half-finished features or fussing over a fancy UI.
+- "Technology Integration" is worth 15 points in both rounds, and most likely refers to whether AI + cloud infrastructure are **genuinely integrated into the core functionality** (rather than just window dressing) — the rules text itself stresses that "failing to meaningfully integrate cloud infrastructure may result in a significant score reduction." AI and cloud deployment aren't bonus points; they're a hard pass bar.
+- With zero programming experience on the team, `Engineering Quality & Robustness` (15 points in the finals) is an easy place to lose points — the collaboration rules in section 5 exist specifically to protect this score as much as possible.
+- Researching winning projects from similar AI hackathons in Southeast Asia (e.g. "InsureScan," an AI insurance-document recognition tool, and "FundSight AI," an SME grant-matching tool, both from APU, which won the Great Malaysia AI Hackathon 2025) revealed a common pattern: **winning projects are all quite "narrow"** — one specific vertical problem plus one core AI feature a judge can understand within 30 seconds, rather than a big all-in-one platform. Common failure points are feature bloat, or a demo depending on a live API that might go down on stage (recommend preparing cached/pre-set demo data as a fallback).
 
-## 4. 赛前准备清单（现在 – 9/18 之前完成）
+## 4. Pre-Competition Prep Checklist (complete now, before 9/18)
 
-- [ ] 提前定好"默认技术栈"（见下），减少题目公布当天的决策瘫痪
-- [ ] 提前申请云/AI额度，别等到比赛当天现申请：
-  - [ ] [AWS Educate](https://aws.amazon.com/education/awseducate/)（免信用卡）
-  - [ ] Azure for Students（约 $100 额度）
-  - [ ] Google Cloud 免费层/教育额度
-  - [ ] **直接去 Anthropic 官网申请 Claude API 额度**（注意：从2026年3月起 GitHub Student Pack 已经不再直接给 Claude Opus/Sonnet 模型权限，只有 Haiku，不要依赖学生包拿 Claude 用量）
-- [ ] 手动登录 Google 账号打开两份评分细则 Google Docs（见第2.3节链接），看看有没有官方图表里没写的细节
-- [ ] 把这份手册和 `CLAUDE.md` 提交到仓库根目录
-- [ ] 每人想清楚自己的"天然强项"（沟通表达 / 审美设计 / 写作文档 / 逻辑测试），供 9/18 拆功能模块时参考——不是技术分工，是"谁适合盯哪块"
+- [ ] Decide on a "default tech stack" ahead of time (see below), to reduce decision paralysis on the day the problem statement drops
+- [ ] Apply for cloud/AI credits in advance — don't wait until competition day to apply:
+  - [ ] [AWS Educate](https://aws.amazon.com/education/awseducate/) (no credit card needed)
+  - [ ] Azure for Students (about $100 in credits)
+  - [ ] Google Cloud free tier/education credits
+  - [ ] **Apply for Claude API credits directly on Anthropic's site** (note: as of March 2026, the GitHub Student Pack no longer grants direct access to the Claude Opus/Sonnet models, only Haiku — don't rely on the student pack for Claude usage)
+- [ ] Manually log into a Google account and open both scoring rubric Google Docs (links in section 2.3), to check for details not shown in the official chart
+- [ ] Commit this handbook and `CLAUDE.md` to the repo root
+- [ ] Each person should think through their own "natural strength" (communication/presentation, design sense, writing documentation, logical testing), to inform how features get split up on 9/18 — this isn't a technical role split, it's about "who's best suited to keep an eye on what"
 
-### 技术栈（已确认，不是临时默认）
+### Tech Stack (confirmed, not a temporary default)
 
-团队正式确定用**最省运维、AI最容易生成对的代码**的组合，而不是最"专业"的组合。这个组合也在调研中被验证为2026年AI编程工具圈公认的"低幻觉率"标准搭配（因为文档/训练数据里这个组合最常见，AI写起来出错最少）：
+The team has formally settled on the combination that requires **the least ops overhead and is easiest for AI to generate correct code for**, rather than the most "professional" combination. Research also confirmed this combination as the widely recognized "low-hallucination-rate" standard stack in the 2026 AI-coding-tool community (because it's the most common combination in documentation/training data, so AI makes the fewest mistakes writing it):
 
-- 前端 + 部署：**Next.js**，部署到 **Vercel**（已确认——免费、git push 即部署、不用碰云控制台、AI 生成的 Next.js 代码质量普遍最高）
-- 后端/数据：**Supabase**（已确认——托管 Postgres 数据库 + 鉴权 + 存储，不用自己搭服务器，清楚地满足"云基础设施"要求）
-- AI 能力：**多 LLM**（Claude / ChatGPT / DeepSeek / Gemini / 本地 LM Studio，都通过 Vercel AI SDK 统一调用），作为产品核心功能的一部分——具体要求见 [CLAUDE.md](../CLAUDE.md)"多LLM支持"节
+- Frontend + deployment: **Next.js**, deployed to **Vercel** (confirmed — free, deploys on every git push, no need to touch a cloud console, and AI-generated Next.js code is generally the highest quality)
+- Backend/data: **Supabase** (confirmed — a managed Postgres database + auth + storage, no need to run your own server, and it clearly satisfies the "cloud infrastructure" requirement)
+- AI capability: **multiple LLMs** (Claude / ChatGPT / DeepSeek / Gemini / local LM Studio, all called through a unified interface via the Vercel AI SDK), as part of the product's core functionality — see the "Multi-LLM support" section of [CLAUDE.md](../CLAUDE.md) for specific requirements
 
-技术栈已经定案，不用再等题目细节变化去调整。
+The tech stack is locked in and doesn't need to be revisited as problem-statement details come in.
 
-## 5. 协作流程（通用，不依赖具体题目）
+## 5. Collaboration Process (general, independent of the specific problem statement)
 
-### 5.1 Git 分支模型
+### 5.1 Git Branching Model
 
-调研明确指出：**目前没有任何AI编程工具会自动处理多人同时改同一批文件产生的合并冲突**（Claude Code、Bolt.new 都不例外），3人真的同时改同一个文件是冲突高发区，必须靠流程规避，而不是指望工具兜底：
+Research clearly points out that **no AI coding tool currently automatically handles merge conflicts from multiple people editing the same files at the same time** (Claude Code and Bolt.new are no exception) — three people genuinely editing the same file simultaneously is a conflict hotspot, and it has to be avoided through process, not by relying on the tools to bail you out:
 
-- `main` 分支任何时候都要保持"能跑"，只能通过 Pull Request 合并进去，不要直接往 main 推跑不起来的代码
-- 每人在自己的分支上工作：`姓名/任务简述`（比如 `alex/login-page`），**只改自己认领范围内的文件夹**（对应第5.2节"一切皆插件"的文件夹划分）
-- **小步高频提交**：写出一小块能跑的东西就 commit + push，不要攒一整天的改动才提交——大改动堆在一起会很难合并
-- 每天开始工作前先拉一下 main 的最新代码，避免越改越偏
-- **每天安排一位"当值集成员"**（3人轮流），负责当天把大家的 Pull Request 合并进 main
-- 避免"三个人同时对着同一个文件各自发指令给AI"——这是文档里反复强调的头号翻车原因
+- The `main` branch must "run" at all times; changes only get merged in via Pull Request — never push code that doesn't run directly to main
+- Everyone works on their own branch: `name/task-summary` (e.g. `alex/login-page`), **only touching folders within their own claimed scope** (matching the folder split described in section 5.2, "everything is a plugin")
+- **Commit small and often**: as soon as you've got a small working piece, commit + push — don't save up a whole day's changes before committing, since large changes piled together are hard to merge
+- Pull the latest code from main before starting work each day, to avoid drifting further and further apart
+- **Assign one "integration owner" per day** (rotating among the 3), responsible for merging everyone's Pull Requests into main that day
+- Avoid "three people simultaneously issuing instructions to AI against the same file" — this is repeatedly flagged in the research as the number-one cause of things going wrong
 
-### 5.1.1 具体怎么操作（新手向：全程用 GitHub Desktop，不用打命令行）
+### 5.1.1 How To Actually Do This (beginner-friendly: use GitHub Desktop throughout, no command line needed)
 
-三人都没用过 Git，**强烈建议用 [GitHub Desktop](https://desktop.github.com/) 这个图形界面工具**，全程点按钮完成，不需要背命令。Claude Code 虽然也能直接帮你跑 git 命令，但**不要完全交给它无监督操作**（原因见下面的安全提醒）——用 GitHub Desktop 做分支/提交/推送/合并的"最终把关"，Claude Code 用来写代码和解释冲突。
+None of the three of us have used Git before, so **it's strongly recommended to use the graphical tool [GitHub Desktop](https://desktop.github.com/)** — click buttons the whole way through, no need to memorize commands. Claude Code can also run git commands directly for you, but **don't let it operate completely unsupervised** (see the safety reminder below for why) — use GitHub Desktop as the "final check" for branching/committing/pushing/merging, and use Claude Code for writing code and explaining conflicts.
 
-**每天的固定流程：**
+**The daily routine:**
 
-1. **开始工作前**：打开 GitHub Desktop，点 **Fetch origin** 再点 **Pull**，把 main 上其他人的最新代码拉下来
-2. **建自己的分支**：顶部 **Current Branch → New Branch**，取名 `你的名字/今天做的功能`
-3. **写代码**：正常用 Claude Code 干活
-4. **随时小步提交**：做出一小块能跑的东西，就在 GitHub Desktop 左下角写一句话描述改了什么，点 **Commit**
-5. **推送**：点 **Push origin** 按钮，把提交传到云端（每次告一段落、至少每2小时一次）
-6. **功能做完一小块，开一个 Pull Request**：顶部 **Branch → Create Pull Request**，会自动打开浏览器里的 GitHub 网页，填个标题就能提交
-7. **当值集成员**在 GitHub 网页上检查一下这个 PR，没问题就点 **Merge pull request**
-8. **其他人**再重复第1步（Fetch → Pull），把合并进 main 的最新代码拿回自己电脑
+1. **Before starting work**: open GitHub Desktop, click **Fetch origin** then **Pull**, to pull down everyone else's latest code from main
+2. **Create your own branch**: at the top, **Current Branch -> New Branch**, name it `your-name/todays-feature`
+3. **Write code**: use Claude Code as normal
+4. **Commit in small steps as you go**: once you've got a small working piece, write a one-line description of what changed in the bottom-left of GitHub Desktop and click **Commit**
+5. **Push**: click the **Push origin** button to send your commits to the cloud (do this whenever you reach a stopping point, at least every 2 hours)
+6. **Once a small piece of a feature is done, open a Pull Request**: at the top, **Branch -> Create Pull Request**, which auto-opens the GitHub page in your browser — fill in a title and submit
+7. **The integration owner for the day** checks the PR on the GitHub website, and clicks **Merge pull request** if it looks fine
+8. **Everyone else** repeats step 1 (Fetch -> Pull) to bring the newly merged code from main back to their own machine
 
-**遇到合并冲突时（文件里会出现这样的标记）：**
+**When a merge conflict happens (a file will show markers like this):**
 
 ```
 <<<<<<< HEAD
-你的版本
+your version
 =======
-队友的版本
->>>>>>> 对方分支名
+your teammate's version
+>>>>>>> the other branch's name
 ```
 
-1. GitHub Desktop 或 VS Code 会提示这个文件"冲突"了，打开它
-2. 如果用 VS Code 打开，代码上方会有 **Accept Current Change / Accept Incoming Change / Accept Both / Compare Changes** 几个按钮，点你想保留的那个
-3. 确认文件里没有残留的 `<<<<<<<` `=======` `>>>>>>>` 符号（有的话手动删掉）
-4. 也可以**把整段冲突内容复制给自己的 Claude Code**，问"这两段代码冲突了，帮我合并，尽量保留双方的改动，并解释你是怎么合的"——**读一遍它的解释再接受，不要看都不看就点 Accept Both**
-5. 保存文件，回到 GitHub Desktop，勾选这个文件表示"已解决"，正常 Commit + Push
+1. GitHub Desktop or VS Code will flag this file as "conflicted" — open it
+2. If opened in VS Code, buttons like **Accept Current Change / Accept Incoming Change / Accept Both / Compare Changes** appear above the code — click whichever you want to keep
+3. Confirm there are no leftover `<<<<<<<` `=======` `>>>>>>>` markers in the file (manually delete them if there are)
+4. You can also **paste the whole conflicting section into your own Claude Code** and ask "these two code sections conflict, help me merge them, try to keep both sides' changes, and explain how you merged them" — **read its explanation before accepting, don't click Accept Both without looking**
+5. Save the file, go back to GitHub Desktop, check the box marking this file as "resolved," and Commit + Push as usual
 
-**⚠️ 用 AI 编程工具操作 Git 时的安全提醒（真实发生过的翻车案例）：**
+**⚠️ Safety reminders for using AI coding tools with Git (based on real incidents that actually happened):**
 
-- **每次让 AI 开始一个新任务之前，先手动 Commit 一次**，留一个"改动前"的干净快照——这样万一 AI 改坏了，还能退回去
-- **不要两个人的 AI 同时改同一个分支**
-- AI 给出的冲突合并结果，**先看一眼改了什么再接受**，不要无脑确认
-- 如果 AI 把东西改坏了，**用 GitHub Desktop 里图形化的"Discard changes"按钮撤销**，不要跟 AI 说"帮我清理一下/reset一下"——已经有真实案例是这种模糊的说法让 AI 跑出了 `git reset --hard` 这类会**永久清空未提交改动**的破坏性命令
+- **Commit manually before letting AI start any new task**, leaving a clean "before" snapshot — so if AI breaks something, there's a way back
+- **Never have two people's AI editing the same branch at the same time**
+- **Glance at what a conflict-merge result from AI actually changed before accepting it** — don't approve it blindly
+- If AI breaks something, **undo it using GitHub Desktop's graphical "Discard changes" button** — don't tell the AI "clean this up for me / reset it for me." There's already a real case where this kind of vague phrasing led an AI to run a destructive command like `git reset --hard`, which **permanently wipes out uncommitted changes**
 
-### 5.2 拆模块：一切皆插件（题目公布当天第一件事，30-60分钟内完成）
+### 5.2 Splitting Modules: Everything Is a Plugin (the first thing to do on announcement day, within 30-60 minutes)
 
-团队定的核心架构原则是**"一切皆插件"**——项目分成一个很薄的"核心骨架"（导航、布局、共享配置）加上若干个**自包含的功能模块**，每个模块自己一个文件夹，尽量不碰别人的文件夹。这个约定已经写进 [CLAUDE.md](../CLAUDE.md)，3人的 AI 都会自动遵守，具体目录结构见那份文件。
+The team's core architectural principle is **"everything is a plugin"** — the project is split into a very thin "core skeleton" (navigation, layout, shared config) plus a number of **self-contained feature modules**, each in its own folder, avoiding other people's folders as much as possible. This convention is already written into [CLAUDE.md](../CLAUDE.md), and all 3 people's AI follow it automatically; see that file for the exact directory structure.
 
-选这个架构不是为了"看起来专业"，是直接对着你们的两个真实痛点来的：
+This architecture wasn't chosen to "look professional" — it directly addresses two real pain points:
 
-- **3人同时用AI并行开发怎么不冲突** → 每人的功能活在自己的文件夹里，物理上很难和别人冲突，冲突只会发生在少数"公共区"文件，改公共区之前群里说一声就行
-- **决赛必须是初赛的延伸，不能推倒重做** → 决赛加新功能＝再建一个功能文件夹，不用大改已有代码，"延伸"这件事变得很自然
+- **How can 3 people using AI in parallel avoid conflicts?** -> everyone's feature lives in their own folder, making it physically hard to conflict with anyone else; conflicts only happen in a small number of "shared area" files, and those just need a heads-up in the group chat before editing
+- **The finals must be an extension of the preliminary submission, not a rebuild from scratch** -> adding a feature for finals = creating another feature folder, without needing major changes to existing code, making "extending" the natural path
 
-**实际分工（已确认，按层分，不是按模块分）**：跟本节最初设想的"每人认领一个feature模块"不一样，团队实际是按技术层分工——
+**Actual division of labor (confirmed; split by layer, not by module)**: unlike this section's original idea of "each person claims one feature module," the team actually split work by technical layer:
 
-- **操作者**：全部后端功能——`classification`/`extraction`/`comparison` 三个模块的 `logic/`、`api/`、`mcp/`，加上 `/app/core`、`/lib` 公共区
-- **队友A**：UI/UX——三个模块的 `ui/` 文件夹 + 全局布局导航
-- **队友B**：README、slide、演示材料——不碰代码
+- **The operator**: all backend functionality — the `logic/`, `api/`, `mcp/` folders of the three modules `classification`/`extraction`/`comparison`, plus the `/app/core` and `/lib` shared areas
+- **Teammate A**: UI/UX — the `ui/` folder of all three modules + the global layout and navigation
+- **Teammate B**: README, slides, demo materials — doesn't touch code
 
-这个分法跟 `logic/api/mcp/ui` 分层架构天然契合，操作者和队友A几乎不会改到同一个文件。两人之间唯一要对齐的是 `SHARED_INTERFACES.md` 里写的接口格式——操作者改了 `api/` 的返回格式，要同步更新这份文件，队友A的AI才知道要跟着调整界面。
+This split fits naturally with the `logic/api/mcp/ui` layered architecture — the operator and teammate A will almost never edit the same file. The only thing the two need to keep aligned is the interface format documented in `SHARED_INTERFACES.md` — when the operator changes an `api/` response format, this file must be updated in the same change, so teammate A's AI knows to adjust the UI accordingly.
 
-（下面是原本按模块分工时的流程参考，现在按层分工后不完全适用，仅供以后如果分工方式再变时参考）：
+(What follows is the original process reference for splitting work by module, which no longer fully applies now that work is split by layer — kept only for reference in case the division of labor changes again in the future):
 
-1. 3人一起（可以各自先让自己的 AI 帮忙分析题目）讨论产品方案
-2. 把项目拆成**尽量独立、各自一个文件夹**的功能模块——具体怎么拆取决于题目，但拆分标准是"这块东西能不能基本独立运行、不太需要频繁调用别的模块内部细节"
-3. 如果某个功能必须用到别人负责范围内的东西，先在 `SHARED_INTERFACES.md` 里写清楚"我需要什么格式的数据/接口"，而不是让自己的 AI 直接跑去改/读别人负责范围内的实现细节
+1. All 3 discuss the product approach together (each can first have their own AI help analyze the problem statement)
+2. Split the project into feature modules that are **as independent as possible, each in its own folder** — exactly how to split depends on the problem statement, but the criterion is "can this piece run more or less independently, without needing to frequently reach into another module's internal details"
+3. If a feature absolutely needs something within someone else's area of responsibility, first write clearly in `SHARED_INTERFACES.md` "what data format/interface I need," rather than having your own AI go directly modify/read implementation details in someone else's area
 
-### 5.3 AI 使用规范
+### 5.3 AI Usage Guidelines
 
-- 3人的 Claude Code（或其他工具）都读取仓库根目录的 [CLAUDE.md](../CLAUDE.md)，保证代码风格、目录结构一致
-- 开始一项任务前，在 `#开发` 频道说一句"我要做xxx"，避免两人重复做同一件事
-- 完成一个可运行的小功能就 push，让队友的 AI 在集成时能读到最新代码
-- **AI 生成的代码如果你自己看不懂，直接追问 AI"这段在干嘛"**，尤其是会影响别人模块的部分（共享的数据结构、接口格式），不要盲目接受
-- 涉及"别人模块会用到"的接口变动，先写清楚（可以用一个 `SHARED_INTERFACES.md`）再改，别人的 AI 才知道要跟着调整
+- All 3 people's Claude Code (or other tools) read [CLAUDE.md](../CLAUDE.md) at the repo root, keeping code style and directory structure consistent
+- Before starting a task, post "I'm about to do XYZ" in the `#dev` channel, to avoid two people duplicating the same work
+- Push as soon as a small runnable feature is done, so a teammate's AI can read the latest code when integrating
+- **If you don't understand AI-generated code yourself, just ask the AI "what does this do"** — especially for parts that affect other people's modules (shared data structures, interface formats) — don't accept it blindly
+- For any interface change that "another module will use," write it down clearly first (a `SHARED_INTERFACES.md` works well) before making the change, so the other person's AI knows to adjust accordingly
 
-### 5.4 同步机制
+### 5.4 Sync Mechanism
 
-- 建议每天至少2次15分钟语音同步（例如中午+晚上），过一遍：昨天做完了什么 / 今天要做什么 / 卡在哪需要帮忙
-- 用 Discord 置顶消息或共享文档实时记录"谁在负责哪个模块"
+- Recommend at least two 15-minute voice syncs a day (e.g. noon + evening), covering: what got done yesterday / what's planned for today / where you're stuck and need help
+- Use a pinned Discord message or a shared document to track "who owns which module" in real time
 
-## 6. 冲刺阶段模板（占位，9/18 拿到题目后细化）
+## 6. Sprint-Phase Template (placeholder, to be refined once the problem statement lands on 9/18)
 
-- **Day 1 (9/18)**：头脑风暴 + 定方案 + 拆模块 + 每人先跑出一个最基本的骨架（哪怕只是空页面能部署上线）
-- **Day 2-3 (9/19-9/20)**：主力开发冲刺，每天至少集成一次
-- **Day 4 (9/21)**：**功能冻结**（不再加新功能），开始整合、debug、准备演示素材、准备API失败时的备用数据
-- **Day 5 上午 (9/22)**：录视频、写 slide、最终检查提交清单，中午12点前提交
+- **Day 1 (9/18)**: brainstorm + settle on an approach + split modules + everyone gets a basic skeleton running (even if it's just an empty page deployed live)
+- **Day 2-3 (9/19-9/20)**: main development sprint, integrating at least once a day
+- **Day 4 (9/21)**: **feature freeze** (no more new features), start integrating, debugging, preparing demo materials, and preparing backup data in case an API fails
+- **Day 5 morning (9/22)**: record the video, write the slides, do a final check of the submission checklist, submit before noon
 
-## 7. 提交前检查清单（依据 [Rules and Regulations.md](official/Rules%20and%20Regulations.md)）
+## 7. Pre-Submission Checklist (per [Rules and Regulations.md](official/Rules%20and%20Regulations.md))
 
-- [ ] Project Description（项目名称、目的、要解决的问题）
-- [ ] Demo Video（**≤5分钟**，每超30秒扣1分；YouTube unlisted/public 均可，不能 private；Google Drive 需设为 "Anyone with the link → Viewer"）
-  - [ ] 视频内容覆盖：团队&项目名 / 问题是什么&影响谁 / 技术栈 / 现场演示 / 影响力(数据或用户反馈)
-- [ ] GitHub 仓库链接，README 含清楚的安装说明
-- [ ] Live Prototype 可公开访问链接，**judging 期间必须保持在线**
-- [ ] Slide Deck / 文档链接，包含：技术架构、实现细节、遇到的挑战、未来规划
-- [ ] Google Form 所有字段填完整（团队名、代表联系方式等）
+- [ ] Project Description (project name, purpose, the problem being solved)
+- [ ] Demo Video (**<=5 minutes**, 1 point deducted per 30 seconds over; YouTube unlisted/public both fine, not private; Google Drive must be set to "Anyone with the link -> Viewer")
+  - [ ] Video content covers: team & project name / what the problem is & who it affects / tech stack / live demo / impact (data or user feedback)
+- [ ] GitHub repository link, with a README containing clear setup instructions
+- [ ] Live Prototype publicly accessible link, **must stay online throughout judging**
+- [ ] Slide Deck / document link, covering: technical architecture, implementation details, challenges encountered, future plans
+- [ ] Every field in the Google Form filled in completely (team name, representative contact info, etc.)
 
-## 8. 项目内容（2026-09-18 题目公布后更新）
+## 8. Project Content (updated after the 2026-09-18 problem statement announcement)
 
-- **问题陈述**：Averis 航运操作团队每天在同一邮箱收到约2000封邮件（托运指示SI、提单BL确认、发票询问、垃圾邮件混杂），需要把 BL 草稿和对应的 SI 逐项核对到完全一致才能定稿，人工核对重复且容易出错。系统需要做到：① 分类邮件类型 ② 从正文/附件抽取关键字段（shipper、consignee、notify party、port of loading、port of discharge、container count、weight）③ 比对 BL 与 SI 字段、标出差异 ④ 拿不准时主动提示需要人工介入。完整细节、样例数据说明、评分标准见 [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md)。
-- [ ] 项目名称（还没定，建议今天讨论定下来）
-- **最终技术栈**：官方确认无限制，沿用第4节确定的组合（Next.js + Supabase + Vercel + 多LLM，具体见 [CLAUDE.md](../CLAUDE.md)），已够用
-- **功能模块拆分**：按官方给的三个步骤拆成三个 feature（已写进 [CLAUDE.md](../CLAUDE.md)），代码结构按模块分成 `classification`/`extraction`/`comparison`，但**人力分工是按层分，不是按模块分**（见第5.2节）：
-  - [x] 后端（三个模块的 `logic`/`api`/`mcp` 全部 + `/app/core`、`/lib` 公共区）—— 认领人：操作者
-  - [x] UI/UX（三个模块的 `ui/` + 全局布局导航）—— 认领人：队友A
-  - [x] README / slide / 演示材料 —— 认领人：队友B
-- [ ] 详细 Day-by-day 任务清单（认领模块后，各自在自己的 AI session 里细化）
-- **写slide deck"未来规划"部分时可以用的素材**：公开demo目前用云端LLM（Vercel没有GPU、跑不了本地大模型推理），未来如果要支持自己部署的开源模型，可以另外接一台GPU云主机（RunPod/Together.ai等）跑推理服务，网站代码指过去调用即可——这条不用真的实现，写进slide展示"想清楚了怎么扩展"就有加分（对应决赛评分里的 Architecture & Scalability / Impact & Future Potential）
+- **Problem statement**: Averis's shipping operations team receives roughly 2000 emails a day in one shared mailbox (a mix of Shipping Instructions/SI, Bill of Lading/BL confirmations, invoice inquiries, and spam), and needs to check a BL draft against its corresponding SI field by field until they fully agree before it can be finalized; manual checking is repetitive and error-prone. The system needs to: (1) classify email type, (2) extract key fields from the body/attachments (shipper, consignee, notify party, port of loading, port of discharge, container count, weight), (3) compare BL and SI fields and flag discrepancies, (4) proactively flag when human intervention is needed in uncertain cases. See [OPENING_CEREMONY_NOTES.md](OPENING_CEREMONY_NOTES.md) for full details, sample data notes, and scoring criteria.
+- [ ] Project name (not decided yet — recommend settling on one today)
+- **Final tech stack**: the organizers confirmed there's no restriction, so we're sticking with the combination settled on in section 4 (Next.js + Supabase + Vercel + multiple LLMs; see [CLAUDE.md](../CLAUDE.md) for specifics), which is already sufficient
+- **Feature module split**: split into three features following the three steps given officially (already written into [CLAUDE.md](../CLAUDE.md)); the code structure is split by module into `classification`/`extraction`/`comparison`, but **the human division of labor is by layer, not by module** (see section 5.2):
+  - [x] Backend (all `logic`/`api`/`mcp` for the three modules + the `/app/core` and `/lib` shared areas) — owner: the operator
+  - [x] UI/UX (the `ui/` folders for the three modules + global layout/navigation) — owner: teammate A
+  - [x] README / slides / demo materials — owner: teammate B
+- [ ] Detailed day-by-day task list (once modules are claimed, each person refines this in their own AI session)
+- **Material usable for the "future plans" section of the slide deck**: the public demo currently uses cloud LLMs (Vercel has no GPU and can't run local large-model inference); in the future, to support a self-hosted open-source model, a separate GPU cloud instance (RunPod/Together.ai, etc.) could run the inference service, with the website code just pointing at it — this doesn't need to actually be implemented; putting it in the slides to show "we've thought through how this scales" is worth points (maps to Architecture & Scalability / Impact & Future Potential in the finals rubric)
 
-## 附：调研中明确没找到/未证实的信息
+## Appendix: Information Explicitly Not Found / Unverified During Research
 
-避免团队把下面这些当成事实使用：
+Avoid treating the following as established fact:
 
-- Averis 与 Sunway Group 的关联 —— **未证实，大概率是错的**（Averis 实际隶属 RGE Group）
-- 这场比赛的往届记录（2024/2025）—— 未找到，推测是第一届
-- Monash Malaysia 是否有 AWS Academy / Huawei Cloud 合作 —— 未找到证据
-- Averis x Monash 是否有专属赞助商云额度/福利 —— 未找到，建议直接问 Discord/主办方
-- ~~决赛现场路演具体日期、地点（校区）——官方未公布~~ ✅**地点已确认**：Monash University Malaysia, Bandar Sunway, Subang Jaya。**日期存疑**：开幕式转录里一次说26号一次说20号，需去 Discord 核实
-- 参赛队伍总数 —— 未找到
-- 除 Averis 外的其他赞助商/导师名单 —— 未找到
+- A connection between Averis and Sunway Group — **unverified, most likely wrong** (Averis actually belongs to RGE Group)
+- Past editions of this competition (2024/2025) — not found; presumed to be the first edition
+- Whether Monash Malaysia has an AWS Academy / Huawei Cloud partnership — no evidence found
+- Whether Averis x Monash has dedicated sponsor cloud credits/perks — not found; recommend asking Discord/the organizers directly
+- ~~The exact date and location (campus) of the in-person finals pitch — not officially announced~~ **Location confirmed**: Monash University Malaysia, Bandar Sunway, Subang Jaya. **Date still uncertain**: the opening-ceremony transcript said "the 26th" once and "the 20th" once — needs verifying on Discord
+- Total number of competing teams — not found
+- Any sponsors/mentors besides Averis — not found

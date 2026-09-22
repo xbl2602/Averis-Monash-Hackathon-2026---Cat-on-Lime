@@ -10,26 +10,26 @@ import {
 } from "../logic";
 
 /**
- * import 模块暴露的 MCP tool，被 /app/core/mcp-server 汇总注册。
- * handler 只做"schema → logic"的转发，和 REST 共用同一套校验与实现。
- * 注意：上传本身不走 MCP（base64 大文件不适合工具调用），MCP 只提供查询和人工归类。
+ * The MCP tools exposed by the import module, aggregated and registered by /app/core/mcp-server.
+ * Handlers only forward "schema -> logic", sharing the same validation and implementation as REST.
+ * Note: uploading itself doesn't go through MCP (large base64 files aren't suited to tool calls); MCP only offers querying and manual classification.
  */
 
 const listUploadedDocumentsMcpTool = {
   name: "list_uploaded_documents",
   description:
-    "查询手动上传的文档池（uploaded_documents）：文件名/大小/哈希/解析状态/识别类型/复核状态，列表只带最多 500 字符的文本预览，不含全文",
+    "Query the manually uploaded document pool (uploaded_documents): filename/size/hash/parse status/detected type/review status; the list only includes a preview of up to 500 characters of text, not the full content",
   inputSchema: {
     review_status: z
       .enum(REVIEW_STATUSES)
       .optional()
-      .describe("pending=待人工归类（UNKNOWN）；filed=已归类；skipped=重复跳过"),
+      .describe("pending=awaiting manual classification (UNKNOWN); filed=already classified; skipped=duplicate, skipped"),
     detected_type: z
       .enum(DOCUMENT_TYPES)
       .optional()
-      .describe("按内容识别出的类型：SI / BL / OTHER / UNKNOWN"),
-    limit: z.number().int().min(1).max(200).optional().describe("每页条数，缺省 20，最大 200"),
-    offset: z.number().int().min(0).optional().describe("跳过多少条，缺省 0"),
+      .describe("Type detected from content: SI / BL / OTHER / UNKNOWN"),
+    limit: z.number().int().min(1).max(200).optional().describe("Items per page, default 20, max 200"),
+    offset: z.number().int().min(0).optional().describe("Number of items to skip, default 0"),
   },
   annotations: {
     readOnlyHint: true,
@@ -42,14 +42,14 @@ const listUploadedDocumentsMcpTool = {
 const classifyUploadedDocumentMcpTool = {
   name: "classify_uploaded_document",
   description:
-    "人工归类一个已上传文档：把 UNKNOWN 文档改成 SI / BL / OTHER，并把复核状态置为 filed（会写库）。可选 expected_updated_at 做乐观锁，记录被改过时返回冲突错误",
+    "Manually classify an uploaded document: change an UNKNOWN document to SI / BL / OTHER, and set its review status to filed (this writes to the database). Optionally pass expected_updated_at for optimistic locking, returning a conflict error if the record was changed in the meantime",
   inputSchema: {
-    id: z.string().describe("文档 uuid（从 list_uploaded_documents 或上传结果里取）"),
-    detected_type: z.enum(MANUAL_DOCUMENT_TYPES).describe("人工归类结果：SI / BL / OTHER"),
+    id: z.string().describe("The document's uuid (from list_uploaded_documents or an upload result)"),
+    detected_type: z.enum(MANUAL_DOCUMENT_TYPES).describe("Manual classification result: SI / BL / OTHER"),
     expected_updated_at: z
       .string()
       .optional()
-      .describe("可选乐观锁：与库里当前 updated_at 不一致时拒绝保存并提示冲突"),
+      .describe("Optional optimistic lock: if it doesn't match the current updated_at in the database, the save is rejected with a conflict"),
   },
   annotations: {
     readOnlyHint: false,
@@ -59,7 +59,7 @@ const classifyUploadedDocumentMcpTool = {
   },
   handler: async (args: Record<string, unknown>) => {
     const doc = await classifyUploadedDocument(normalizeClassifyRequest(args));
-    // 归类结果只回元数据，不回整篇 extracted_text（避免 MCP 响应过大）
+    // The classification result only returns metadata, not the full extracted_text (to avoid an oversized MCP response)
     const { extracted_text: _text, ...meta } = doc;
     return { ok: true, ...meta };
   },

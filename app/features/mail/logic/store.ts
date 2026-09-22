@@ -1,11 +1,12 @@
 /**
- * mail 模块的数据库入口：所有表读写都从这里拿客户端（无状态，每次现建）。
+ * The database entry point for the mail module: every table read/write gets its client from here (stateless, built fresh each time).
  *
- * 为什么固定用"只依赖环境变量"的同步客户端：
- * supabase_projects 是"哪个项目启用"的管理表，它自己必须待在引导项目（env 配的那个）里，
- * 否则会自依赖——要知道用哪个项目，得先读这张表。切换 is_active 影响的是业务数据层的解析
- * （lib/shared/supabase.ts 的 getActiveSupabaseConfig / getSupabaseServiceClientAsync），
- * 不是这张表的位置（见 PHASE2_SPEC 4.2）。
+ * Why it's fixed to a synchronous client that "only depends on environment variables":
+ * supabase_projects is the management table for "which project is active", and it must itself stay
+ * in the bootstrap project (the one configured via env) or it would become self-dependent — to know
+ * which project to use, this table has to be read first. Toggling is_active affects how the business
+ * data layer resolves its connection (getActiveSupabaseConfig / getSupabaseServiceClientAsync in
+ * lib/shared/supabase.ts), not the location of this table itself (see PHASE2_SPEC 4.2).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServiceClient, isSupabaseServiceAvailable } from "@/lib/shared/supabase";
@@ -20,7 +21,7 @@ export function getMailDbClient(): SupabaseClient {
     return getSupabaseServiceClient();
   } catch (err) {
     throw new MailStoreUnavailableError(
-      `邮件模块不可用：${err instanceof Error ? err.message : "Supabase 服务端客户端初始化失败"}`
+      `Mail module unavailable: ${err instanceof Error ? err.message : "Failed to initialize the Supabase server-side client"}`
     );
   }
 }

@@ -1,19 +1,19 @@
 /**
- * 扰动集执行器（P1-10）
+ * Perturbation-set runner (P1-10)
  *
- * 读 data/perturb 的全部扰动邮件 → 跑完整流水线 → 写入 Supabase 同一张
- * verification_results 表（与正式 520 封混在一张表里，靠 email_id 前缀 "ptN_" 隔离）
- * → 按 manifest 里每个变体的"期望结果"逐条断言（不再一律"与原结果一致"）。
+ * Reads all perturbation emails from data/perturb -> runs the full pipeline -> writes into the same Supabase
+ * verification_results table (mixed in with the official 520 emails in one table, isolated by the "ptN_" email_id prefix)
+ * -> asserts against each variant's "expected result" from the manifest, one by one (no longer uniformly "must match the original result").
  *
- * 期望类型：
- *   same         与原 520 封结果完全一致（结构变形类）
- *   needs_review 必须为 NEEDS_REVIEW 且原因匹配（如扫描件 → unreadable）
- *   not_ok       不允许静默 OK（单文档内冲突值这类应升级或报缺陷）
+ * Expectation types:
+ *   same         Exactly matches the original result from the 520 emails (structural-transform variants)
+ *   needs_review Must be NEEDS_REVIEW with a matching reason (e.g. scanned document -> unreadable)
+ *   not_ok       Must not silently return OK (e.g. conflicting values within a single document should escalate or report a defect)
  *
- * 用法（项目根目录）：
- *   npm run perturb:run              # 全量
- *   npm run perturb:run -- --limit=40   # 只跑前 40 封（调试）
- *   npm run perturb:run -- --no-write   # 只算不写库
+ * Usage (from the project root):
+ *   npm run perturb:run              # full run
+ *   npm run perturb:run -- --limit=40   # only run the first 40 emails (debugging)
+ *   npm run perturb:run -- --no-write   # compute only, don't write to the database
  */
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -80,17 +80,17 @@ async function main() {
   manifest = JSON.parse(await readFile(path.join(PERTURB_DIR, "manifest.json"), "utf-8"));
 
   const inputs = await loadPerturbInputs();
-  console.log(`加载扰动邮件：${inputs.length} 封（共 ${Object.keys(manifest.variants).length} 个变体）`);
+  console.log(`Loaded perturbation emails: ${inputs.length} (across ${Object.keys(manifest.variants).length} variants)`);
 
   const startedAt = Date.now();
   const outcome = await runBatchPipeline(inputs, {
     concurrency: 4,
     onProgress: (done, total, emailId) => {
-      if (done % 200 === 0 || done === total) console.log(`  进度 ${done}/${total}（最近：${emailId}）`);
+      if (done % 200 === 0 || done === total) console.log(`  Progress ${done}/${total} (most recent: ${emailId})`);
     },
   });
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(`完成：成功 ${outcome.succeeded.length}，失败 ${outcome.failed.length}，耗时 ${elapsed}s`);
+  console.log(`Done: succeeded ${outcome.succeeded.length}, failed ${outcome.failed.length}, elapsed ${elapsed}s`);
 
   if (!NO_WRITE && isSupabaseServiceAvailable()) {
     const rows = [
@@ -102,9 +102,9 @@ async function main() {
       ),
     ];
     await upsertVerificationRows(rows);
-    console.log(`已写入 verification_results：${rows.length} 行（upsert，前缀隔离）`);
+    console.log(`Written to verification_results: ${rows.length} rows (upsert, isolated by prefix)`);
   } else if (!NO_WRITE) {
-    console.log("（没有 service key，跳过写库）");
+    console.log("(no service key, skipping database write)");
   }
 
   const originals = await loadStoredVerificationRows();
@@ -114,9 +114,9 @@ async function main() {
 }
 
 function describeExpectation(expectation: Expectation): string {
-  if (expectation.kind === "same") return "与原结果一致";
+  if (expectation.kind === "same") return "matches original result";
   if (expectation.kind === "needs_review") return `NEEDS_REVIEW/${expectation.reason}`;
-  return "不允许静默 OK";
+  return "must not silently return OK";
 }
 
 function evaluateExpectation(
@@ -125,17 +125,17 @@ function evaluateExpectation(
   expectation: Expectation
 ): string[] {
   if (expectation.kind === "same") {
-    if (!original || original.processing_status !== "ok") return ["缺少原结果，无法对比"];
+    if (!original || original.processing_status !== "ok") return ["Missing original result, cannot compare"];
     return diffResult(result, original);
   }
   if (expectation.kind === "needs_review") {
     if (result.status === "NEEDS_REVIEW" && result.review_reason === expectation.reason) return [];
     return [
-      `期望 NEEDS_REVIEW/${expectation.reason}，实际 ${result.status}/${result.review_reason ?? "-"}`,
+      `Expected NEEDS_REVIEW/${expectation.reason}, actual ${result.status}/${result.review_reason ?? "-"}`,
     ];
   }
   if (result.status !== "OK") return [];
-  return [`期望非 OK（应升级或报缺陷），实际 OK（defect_fields=${JSON.stringify(result.defect_fields)}）`];
+  return [`Expected non-OK (should escalate or report a defect), actual OK (defect_fields=${JSON.stringify(result.defect_fields)})`];
 }
 
 function buildReport(
@@ -149,7 +149,7 @@ function buildReport(
   const ensure = (variant: string) => {
     perVariant[variant] ??= {
       description: manifest.variants[variant]?.description ?? "",
-      expectation: "与原结果一致",
+      expectation: "matches original result",
       total: 0,
       pass: 0,
       fail: 0,
@@ -178,7 +178,7 @@ function buildReport(
         expected: describeExpectation(entry.expectation),
         actual: `${outcome.result.status}/${outcome.result.review_reason ?? "-"}/[${outcome.result.defect_fields.join(",")}]`,
       });
-      if (differences[0]) mismatches[mismatches.length - 1].expected += `（${differences.join("；")}）`;
+      if (differences[0]) mismatches[mismatches.length - 1].expected += ` (${differences.join("; ")})`;
     }
   }
 
@@ -192,14 +192,14 @@ function buildReport(
       id,
       origin: id.replace(/^pt\d+_/, ""),
       variant,
-      expected: "处理成功",
-      actual: `处理失败：${error instanceof Error ? error.message : String(error)}`,
+      expected: "processed successfully",
+      actual: `processing failed: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
 
   return {
     generatedAt: new Date().toISOString(),
-    engineExpectations: "same=与原结果一致；needs_review=必须升级且原因匹配；not_ok=不允许静默 OK",
+    engineExpectations: "same=matches original result; needs_review=must escalate with a matching reason; not_ok=must not silently return OK",
     total: succeeded.length + failed.length,
     failedRequests: failed.length,
     perVariant,
@@ -234,11 +234,11 @@ async function saveReport(report: PerturbReport) {
   await writeFile(path.join(dir, "report.json"), JSON.stringify(report, null, 2), "utf-8");
 
   const lines = [
-    `# 扰动测试报告（${report.generatedAt}）`,
+    `# Perturbation test report (${report.generatedAt})`,
     "",
-    `总计 ${report.total} 封，请求失败 ${report.failedRequests} 封。判定口径：${report.engineExpectations}`,
+    `Total ${report.total} emails, ${report.failedRequests} request failures. Judging criteria: ${report.engineExpectations}`,
     "",
-    "| 变体 | 期望 | 含义 | 总数 | 通过 | 不通过 | 失败 |",
+    "| Variant | Expectation | Description | Total | Pass | Fail | Errored |",
     "|---|---|---|---|---|---|---|",
   ];
   for (const [variant, stats] of Object.entries(report.perVariant)) {
@@ -247,29 +247,29 @@ async function saveReport(report: PerturbReport) {
     );
   }
   if (report.mismatches.length > 0) {
-    lines.push("", `## 不通过明细（前 100 条，共 ${report.mismatches.length}）`, "");
+    lines.push("", `## Failure details (first 100 of ${report.mismatches.length} total)`, "");
     for (const item of report.mismatches.slice(0, 100)) {
-      lines.push(`- ${item.id}（原 ${item.origin}）期望 ${item.expected}；实际 ${item.actual}`);
+      lines.push(`- ${item.id} (origin ${item.origin}) expected ${item.expected}; actual ${item.actual}`);
     }
   }
   await writeFile(path.join(dir, "summary.md"), lines.join("\n"), "utf-8");
-  console.log(`报告已保存：${path.relative(ROOT, dir)}`);
+  console.log(`Report saved: ${path.relative(ROOT, dir)}`);
 }
 
 function printReport(report: PerturbReport) {
-  console.log("\n================ 扰动期望断言报告 ================");
+  console.log("\n================ Perturbation expectation assertion report ================");
   for (const [variant, stats] of Object.entries(report.perVariant)) {
     const rate = stats.total === 0 ? "n/a" : `${((stats.pass / stats.total) * 100).toFixed(1)}%`;
     console.log(
-      `  ${variant} [${stats.expectation}]: 通过 ${stats.pass}/${stats.total} (${rate})  不通过 ${stats.fail}  失败 ${stats.failed}`
+      `  ${variant} [${stats.expectation}]: pass ${stats.pass}/${stats.total} (${rate})  fail ${stats.fail}  errored ${stats.failed}`
     );
   }
-  console.log(`  总计: ${report.total} 封，不通过 ${report.mismatches.length} 条`);
+  console.log(`  Total: ${report.total} emails, ${report.mismatches.length} failures`);
   for (const item of report.mismatches.slice(0, 25)) {
-    console.log(`  [不通过] ${item.id}: 期望 ${item.expected}；实际 ${item.actual}`);
+    console.log(`  [FAIL] ${item.id}: expected ${item.expected}; actual ${item.actual}`);
   }
   if (report.mismatches.length > 25) {
-    console.log(`  ...（其余 ${report.mismatches.length - 25} 条见报告文件）`);
+    console.log(`  ...(${report.mismatches.length - 25} more in the report file)`);
   }
 }
 
@@ -285,7 +285,7 @@ async function loadPerturbInputs(): Promise<PipelineEmailInput[]> {
     for (const rel of email.attachments ?? []) {
       const abs = path.resolve(PERTURB_DIR, rel);
       if (!abs.startsWith(PERTURB_DIR + path.sep)) {
-        throw new Error(`扰动附件路径越界：${rel}`);
+        throw new Error(`Perturbation attachment path escapes base dir: ${rel}`);
       }
       try {
         const buffer = await readFile(abs);
@@ -322,6 +322,6 @@ async function loadEnvLocal() {
 }
 
 main().catch((err) => {
-  console.error("\n扰动测试失败：", err);
+  console.error("\nPerturbation test failed:", err);
   process.exit(1);
 });

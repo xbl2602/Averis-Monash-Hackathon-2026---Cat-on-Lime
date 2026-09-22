@@ -1,11 +1,16 @@
 /**
- * 把一份附件解析成纯文字（供导入脚本使用；以后系统的预览/抽取也从这里取文字）。
+ * Parses an attachment into plain text (used by the import script; going forward, the
+ * system's preview/extraction features will also get their text from here).
  *
- * 现在数据里只有 4 种格式：txt / pdf / xlsx / docx。按团队定的口径：
- * - 文字层 PDF 正常读；扫描件 / 损坏 / 加密等读不出文字的 → 标 unreadable 先搁置
- *   （以后接 OCR 能力后重跑导入脚本即可补上，导入是 upsert，不会产生重复数据）
- * - 任何一种格式解析失败都不抛异常，返回带 error 说明的 unreadable 结果，
- *   由调用方决定怎么处理（对应"批量处理时单条失败不拖垮整批"的规范）
+ * Right now the data only has 4 formats: txt / pdf / xlsx / docx. Per the team's agreed convention:
+ * - Text-layer PDFs are read normally; scanned/corrupted/encrypted files etc. that yield no
+ *   text are marked unreadable and set aside for now
+ *   (once OCR support is added later, simply rerun the import script to fill them in — import
+ *   is an upsert, so it won't create duplicate data)
+ * - A parse failure in any format never throws; it returns an "unreadable" result with an
+ *   error description, and it's up to the caller to decide what to do
+ *   (this corresponds to the rule that "a single item failing during batch processing must
+ *   not take down the whole batch")
  */
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
@@ -17,13 +22,13 @@ export type AttachmentParseStatus = "ok" | "unreadable";
 export interface AttachmentTextResult {
   format: AttachmentFormat;
   status: AttachmentParseStatus;
-  /** 解析出的文字（unreadable 时可能为空或只有零星字符） */
+  /** The extracted text (may be empty or contain only stray characters when unreadable) */
   text: string;
-  /** 读不了时的原因说明，读成功时没有这个字段 */
+  /** The reason it couldn't be read; absent when parsing succeeded */
   error?: string;
 }
 
-// 能提取到的文字少于这个长度就当作"没读到内容"：扫描件 PDF 往往只返回空串或零星页眉字符
+// Extracted text shorter than this length is treated as "no content was read": scanned PDFs often return an empty string or just stray header characters
 const MIN_TEXT_LENGTH = 10;
 
 export async function extractAttachmentText(
@@ -39,7 +44,7 @@ export async function extractAttachmentText(
         format,
         status: "unreadable",
         text: trimmed,
-        error: `只提取到 ${trimmed.length} 个字符，可能是扫描件或空文件`,
+        error: `Only extracted ${trimmed.length} character(s) — this may be a scanned document or an empty file`,
       };
     }
     return { format, status: "ok", text: trimmed };
@@ -73,7 +78,7 @@ async function parseByFormat(format: AttachmentFormat, content: Buffer): Promise
     case "xlsx":
       return parseXlsx(content);
     case "unsupported":
-      throw new Error("暂不支持的文件格式（目前支持 txt / pdf / xlsx / docx）");
+      throw new Error("Unsupported file format (currently txt / pdf / xlsx / docx are supported)");
   }
 }
 
@@ -81,8 +86,9 @@ async function parsePdf(content: Buffer): Promise<string> {
   const parser = new PDFParse({ data: content });
   try {
     const result = await parser.getText();
-    // 用 pages 按页拼接：result.text 里会带 "-- 1 of 1 --" 这类页码分隔符，
-    // 扫描件里这类分隔符会把"其实没读到内容"的文件伪装成有文字，必须避开
+    // Join by page: result.text contains page-separator markers like "-- 1 of 1 --", and for
+    // scanned files these separators can make a file that actually has no content look like
+    // it has text — this must be avoided
     return result.pages.map((page) => page.text).join("\n");
   } finally {
     await parser.destroy();

@@ -1,11 +1,15 @@
 /**
- * 从 SI/BL 文档文本里用"标签规则"解析 7 个字段（不调用模型）。
- * 覆盖样例数据里出现过的全部版式（txt / xlsx / docx / 文字层 PDF 解析出的文本）：
- * - 标签变体：Shipper/Exporter、Consignee / To the Order of（提单常见）、Notify Party、
- *   POL / Load Port / Port of Loading、POD / Discharge Port / Port of Discharge、
- *   Total Containers / No. of Containers or Packages、Gross Wt / Gross Weight / TOTAL Gross Weightnn
- * - 值的位置：有的和标签同一行（txt/xlsx），有的在下面几行（docx/pdf）
- * - 占位符（TBA / N/A / ____MT / 空值）视为"没有这个字段"，交给上层判 missing_value
+ * Parse the 7 fields out of SI/BL document text using "label rules" (no model call).
+ * Covers every layout seen in the sample data (txt / xlsx / docx / text extracted from a
+ * text-layer PDF):
+ * - Label variants: Shipper/Exporter, Consignee / To the Order of (common on bills of lading),
+ *   Notify Party, POL / Load Port / Port of Loading, POD / Discharge Port / Port of Discharge,
+ *   Total Containers / No. of Containers or Packages, Gross Wt / Gross Weight / TOTAL Gross
+ *   Weightnn
+ * - Value position: sometimes on the same line as the label (txt/xlsx), sometimes a few lines
+ *   below (docx/pdf)
+ * - Placeholders (TBA / N/A / ____MT / empty) count as "field not present" and are left to the
+ *   caller to flag as missing_value
  */
 import type {
   ComparedField,
@@ -39,18 +43,20 @@ const LABELS: LabelDef[] = [
       /^containers\b/,
     ],
   },
-  // Weightnn 是样例里存在的印刷变体，用 \w* 兼容
+  // "Weightnn" is a print variant that shows up in the samples; \w* tolerates it
   { field: "gross_weight_kg", patterns: [/^(?:total\s+)?gross\s*(?:wt|weight)\w*/] },
 ];
 
-// 值收集时的停止词：遇到"像下一节标题"的行就停
+// Stop words when collecting a value: stop as soon as a line "looks like the next section header"
 const STOP_LINE =
   /^(shipper|consignee|notify|port of|pol\b|pod\b|load(?:ing)? port|discharge port|container|total containers?|no\. of containers?|gross\s*(?:wt|weight)|vessel|ocean vessel|voyage|commodity|description|kinds of packages|hs code|booking|freight|export carrier|bill of lading|b\/l|order no|oc no|net weight|invoice|seller|buyer|date|tel\b|contact|documentation|shipment|delivery|goods)/i;
 
-// 占位符/空值：出现这些就当没抽到（触发 missing_value 而不是当成"值"）
+// Placeholders/empty values: treat these as "nothing extracted" (triggers missing_value instead
+// of being accepted as a value)
 export const PLACEHOLDER_VALUE = /^[_\-\s.]*$|^(tba|n\/?a|null|—|-)$/i;
 
-// 每个字段的值必须通过校验才采信（防止把表头/无关行当成值）
+// Each field's value must pass validation before it's accepted (prevents a header row or an
+// unrelated line from being taken as the value)
 const VALUE_VALIDATORS: Partial<Record<ComparedField, (value: string) => boolean>> = {
   container_count: (value) => /^\d+(\s*x\s*.+)?$/i.test(value),
   gross_weight_kg: (value) => /^[\d,.\s]+\s*(kgs?|mts?)?\.?$/i.test(value),
@@ -66,8 +72,10 @@ export function parseDocumentFields(text: string): ExtractedDocumentFields {
 }
 
 /**
- * 带出处的解析（2026-09-21 P1-7）：每个字段记录命中的原文行号与那一行原文
- * （值在标签下一行时，记实际取到值的那一行）。只用于展示/复核，不影响字段值本身。
+ * Parsing with provenance (2026-09-21, P1-7): each field records the source line number and
+ * the original line text it matched (when the value sits on the line after the label, this
+ * records the line the value actually came from). Used for display/review only — it does not
+ * affect the field value itself.
  */
 export function parseDocumentFieldsWithEvidence(text: string): ParsedDocumentFields {
   const lines = text.split(/\r?\n/).map((line) => line.replace(/[ \t]+$/g, ""));
@@ -109,13 +117,15 @@ export function parseDocumentFieldsWithEvidence(text: string): ParsedDocumentFie
         found[field] = cleaned;
         evidence[field] = { line: evidenceLine, text: evidenceText, source: "rules" };
       }
-      break; // 一行只认一个字段
+      break; // only one field per line
     }
   }
   return { fields: found, evidence };
 }
 
-// 把标签后面紧贴的修饰（括号注释、毛重(KGS) 这类、/Intermediate Consignee 写法）剥掉
+// Strip modifiers that sit right after the label (parenthetical notes, the "毛重(KGS)" gross-weight
+// annotation, "/Intermediate Consignee" wording). NOTE: "毛重" (Chinese for "gross weight") is a
+// literal string that appears in real document content and must not be translated/removed.
 function consumeLabel(rest: string): string {
   let s = rest;
   for (let guard = 0; guard < 8; guard++) {
@@ -128,8 +138,10 @@ function consumeLabel(rest: string): string {
   return s.replace(/^[\s:：;]+/, "").trim();
 }
 
-// 值在标签下一行（docx/pdf 常见）：收集到下一节标题/分隔线/空行/上限为止。
-// 返回值带"实际取到值的第一行"（行号+原文），给字段级出处用。
+// When the value is on the line after the label (common in docx/pdf): collect lines until the
+// next section header/divider/blank line, up to a max.
+// Returns the value along with the "first line the value actually came from" (line number +
+// original text), used for field-level provenance.
 interface CollectedValue {
   value: string;
   line: number;
@@ -143,7 +155,8 @@ function collectFollowingLines(
 ): CollectedValue | null {
   const parts: string[] = [];
   let first: { line: number; text: string } | null = null;
-  // 公司名一般就在第一行，地址在随后的行；只取第一行避免把地址差异当公司名差异
+  // Company names are usually on the first line, with the address on the following lines; only
+  // take the first line so an address difference isn't mistaken for a company-name difference
   const maxLines = field === "shipper" || field === "consignee" || field === "notify_party" ? 1 : 3;
 
   for (let j = labelIndex + 1; j < lines.length; j++) {
@@ -163,7 +176,9 @@ function collectFollowingLines(
   return { value: parts.join(" "), line: first.line, text: first.text };
 }
 
-// 明显不是 SI/BL 的文档（样例里的 wrong_doc_type 陷阱：商业发票/装箱单/产地证）。
-// 实现已挪到 lib/shared/document-identify.ts：import 模块识别上传文档时用的是同一份规则，
-// 这里 re-export 保持现有调用方（extraction 内部）不变。
+// Documents that are clearly not SI/BL (the wrong_doc_type traps in the samples: commercial
+// invoice/packing list/certificate of origin).
+// The implementation has moved to lib/shared/document-identify.ts: the import module uses the
+// same rules when identifying uploaded documents; this re-export keeps existing callers
+// (inside extraction) unchanged.
 export { isLikelyOtherDocument } from "@/lib/shared/document-identify";

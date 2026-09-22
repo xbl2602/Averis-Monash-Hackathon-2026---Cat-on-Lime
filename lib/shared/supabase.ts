@@ -2,8 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret } from "./crypto";
 
 /**
- * Supabase 客户端（浏览器/服务端通用的 anon key 版本，只读）。
- * 需要在 .env.local 里配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY。
+ * Supabase client (the anon-key version shared by browser/server, read-only).
+ * Requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to be configured in .env.local.
  */
 export function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -11,7 +11,7 @@ export function getSupabaseClient(): SupabaseClient {
 
   if (!url || !anonKey) {
     throw new Error(
-      "缺少 Supabase 环境变量：请在 .env.local 里配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      "Missing Supabase environment variables: please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local"
     );
   }
 
@@ -19,8 +19,10 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 /**
- * 服务端专用客户端（service role key）：写库、调用缓存、批量任务用。
- * 这个 key 权限很高：不能加 NEXT_PUBLIC_ 前缀、不能给浏览器用，只在服务端/本地脚本里用。
+ * Server-only client (service role key): used for writing to the database, calling the
+ * cache, and batch jobs.
+ * This key has very high privileges: it must never get a NEXT_PUBLIC_ prefix and must never
+ * be used in the browser — server-side/local scripts only.
  */
 export function getSupabaseServiceClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,34 +30,36 @@ export function getSupabaseServiceClient(): SupabaseClient {
 
   if (!url || !serviceKey) {
     throw new Error(
-      "缺少 NEXT_PUBLIC_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY：写库/缓存/批量任务需要 service role key（见 .env.example）"
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY: writing to the database/cache/batch jobs requires the service role key (see .env.example)"
     );
   }
 
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-// 当前环境有没有配 service role key（没配时缓存等功能自动降级，不影响主流程）
+// Whether the current environment has a service role key configured (if not, features like the cache automatically degrade without affecting the main flow)
 export function isSupabaseServiceAvailable(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-/** 当前生效的 Supabase 配置：启用项目优先，其次环境变量。serviceKey 已解密或为 null */
+/** The Supabase configuration currently in effect: an enabled project takes priority, then environment variables. serviceKey is either already decrypted or null */
 export interface ActiveSupabaseConfig {
   url: string;
-  /** 项目行没配 anon key 时为空字符串（不做跨项目回退，避免拿错项目的 key） */
+  /** Empty string if the project row has no anon key configured (no cross-project fallback, to avoid picking up the wrong project's key) */
   anonKey: string;
-  /** 项目行没配或 env 没配时为 null；解密失败会直接抛错，不会回退到别的项目凭据 */
+  /** null if neither the project row nor env has it configured; a decryption failure throws directly rather than falling back to some other project's credentials */
   serviceKey: string | null;
 }
 
 /**
- * 解析当前生效的 Supabase 配置（第二阶段 SPEC 4.2）：
- * supabase_projects.is_active=true 的那条 > 环境变量。
+ * Resolves the currently effective Supabase configuration (phase-2 SPEC 4.2):
+ * the row in supabase_projects with is_active=true > environment variables.
  *
- * 关键点：读 supabase_projects 本身必须用"只依赖环境变量"的 getSupabaseServiceClient()，
- * 否则会变成"要读数据库里的配置才能知道用哪个数据库"的自依赖（PHASE2_SPEC 4.2）。
- * 表还没建好/暂时读不到时回退环境变量，并在控制台留下日志（不静默吞掉失败）。
+ * Key point: reading supabase_projects itself must use getSupabaseServiceClient(), which
+ * depends only on environment variables — otherwise we'd end up with a circular dependency
+ * where you need to read the database's configuration just to know which database to use
+ * (PHASE2_SPEC 4.2). If the table isn't set up yet / is temporarily unreadable, fall back to
+ * environment variables and leave a console log (don't swallow the failure silently).
  */
 export async function getActiveSupabaseConfig(): Promise<ActiveSupabaseConfig | null> {
   const active = await readActiveProjectConfig();
@@ -68,7 +72,7 @@ async function readActiveProjectConfig(): Promise<ActiveSupabaseConfig | null> {
   try {
     client = getSupabaseServiceClient();
   } catch {
-    return null; // 引导项目（env）都没配，谈不上有启用项目
+    return null; // Even the bootstrap project (env) isn't configured, so there's no question of an active project
   }
   const { data, error } = await client
     .from("supabase_projects")
@@ -76,7 +80,7 @@ async function readActiveProjectConfig(): Promise<ActiveSupabaseConfig | null> {
     .eq("is_active", true)
     .maybeSingle();
   if (error) {
-    console.warn(`[supabase] 读取启用项目失败，改用环境变量：${error.message}`);
+    console.warn(`[supabase] Failed to read the active project, falling back to environment variables: ${error.message}`);
     return null;
   }
   if (!data) return null;
@@ -85,7 +89,8 @@ async function readActiveProjectConfig(): Promise<ActiveSupabaseConfig | null> {
   return {
     url: row.project_url,
     anonKey: row.anon_key ?? "",
-    // 解密失败直接抛错：绝不能悄悄换个项目的凭据去写数据（会写到错误的库）
+    // Throw directly on decryption failure: we must never silently swap in a different
+    // project's credentials and write to the wrong database
     serviceKey: row.service_key ? decryptSecret(row.service_key) : null,
   };
 }
@@ -101,23 +106,27 @@ function readEnvSupabaseConfig(): ActiveSupabaseConfig | null {
 }
 
 /**
- * 用当前生效项目的配置创建 service client（写库/批量任务用）。
- * 和同步版 getSupabaseServiceClient 的区别：优先走数据库里启用的项目。
- * 每次调用现解析现建，不做模块级缓存（无服务器多实例环境，见 CLAUDE.md 高并发一节）。
+ * Creates a service client using the currently active project's configuration (for
+ * writing/batch jobs).
+ * Difference from the synchronous getSupabaseServiceClient: this one prefers the project
+ * enabled in the database.
+ * Resolved fresh on every call, with no module-level caching (there may be multiple
+ * serverless instances — see the "High Concurrency" section of CLAUDE.md).
  */
 export async function getSupabaseServiceClientAsync(): Promise<SupabaseClient> {
   const config = await getActiveSupabaseConfig();
-  // 出错时的可操作恢复指引：刚启用了地址不可达/配置错误的项目时，先停用它再回退环境变量
+  // Actionable recovery guidance for errors: if you just enabled a project whose address is
+  // unreachable/misconfigured, deactivate it first, then fall back to environment variables
   const deactivateHint =
-    "（如果刚切换过启用项目）可调用 POST /features/mail/api/supabase-projects/deactivate 停用该项目后恢复";
+    " (if you just switched the active project) you can call POST /features/mail/api/supabase-projects/deactivate to deactivate it and then fall back to environment variables";
   if (!config) {
     throw new Error(
-      `没有可用的 Supabase 配置：请配置环境变量（见 .env.example），或在 /features/mail/api/supabase-projects 启用一个项目${deactivateHint}`
+      `No Supabase configuration is available: please configure environment variables (see .env.example), or enable a project at /features/mail/api/supabase-projects${deactivateHint}`
     );
   }
   if (!config.serviceKey) {
     throw new Error(
-      `Supabase 项目 ${config.url} 没有可用的 service key（service_key 未配置或无法解密）：写库/批量任务需要它，请检查 supabase_projects 表或环境变量 SUPABASE_SERVICE_ROLE_KEY${deactivateHint}`
+      `Supabase project ${config.url} has no usable service key (service_key is not configured or could not be decrypted): writing to the database/batch jobs require it — please check the supabase_projects table or the SUPABASE_SERVICE_ROLE_KEY environment variable${deactivateHint}`
     );
   }
   return createClient(config.url, config.serviceKey, { auth: { persistSession: false } });

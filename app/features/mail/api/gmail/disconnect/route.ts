@@ -1,7 +1,7 @@
 /**
  * POST /features/mail/api/gmail/disconnect
- * 断开 Gmail（写保护）：清空 access/refresh token、status 置 disconnected。
- * 用 upsert（按固定账户 id），从未连接过也能安全调用。
+ * Disconnect Gmail (write-protected): clears the access/refresh tokens and sets status to disconnected.
+ * Uses upsert (by the fixed account id), so it's safe to call even if never connected before.
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";

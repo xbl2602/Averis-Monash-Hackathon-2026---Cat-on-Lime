@@ -4,8 +4,9 @@ import { searchParamsToRecord, toErrorResponse } from "./params";
 
 /**
  * GET /features/results/api
- * 按需求查询已存的核验结果（含未处理的邮件），支持筛选/排序/分组/分页。
- * 参数见 SHARED_INTERFACES.md「results 模块」。示例：
+ * Query stored verification results as needed (including unprocessed emails), with support for
+ * filtering/sorting/grouping/pagination.
+ * See the "results module" section of SHARED_INTERFACES.md for parameters. Example:
  *   ?category=BL_COMPARISON&status=MISMATCH&sort_by=defect_count&order=desc&group_by=category
  */
 export async function GET(req: NextRequest) {

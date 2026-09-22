@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 /**
- * 扰动测试集生成器（P1-10）
+ * Perturbation test-set generator (P1-10)
  *
- * A 组（结构变形，期望"与原结果一致"）：
- *   pt1 文件名扰动：附件改名，去掉 _SI/_BL 命名标记（考验附件识别是否只靠文件名）
- *   pt2 形式扰动：主题加 FW: 前缀 + 正文追加引用块（考验引用剥离与分类稳定性）
- *   pt3 顺序扰动：附件数组顺序反转（应当完全不影响结果）
- *   pt4 单位扰动：仅 .txt，MT→KG / LBS→KG 换算（两侧一致换算，语义不变）
- *   pt5 标签扰动：仅 .txt，字段标签换同义说法（考验别名表覆盖）
+ * Group A (structural distortions, expected to "match the original result"):
+ *   pt1 filename perturbation: rename attachments, dropping the _SI/_BL naming marker (tests whether attachment recognition relies only on the filename)
+ *   pt2 formatting perturbation: add an FW: prefix to the subject + append a quoted block to the body (tests quote-stripping and classification stability)
+ *   pt3 order perturbation: reverse the attachment array order (should have zero effect on the result)
+ *   pt4 unit perturbation: .txt only, MT→KG / LBS→KG conversion (converted consistently on both sides, meaning unchanged)
+ *   pt5 label perturbation: .txt only, swap field labels for synonyms (tests alias-table coverage)
  *
- * B 组（语义/对抗场景，逐条带"期望结果"断言）：
- *   pt6 扫描件模拟：SI 换成无文字层的空白 PDF → 期望 NEEDS_REVIEW/unreadable
- *   pt7 怪 Excel 布局：BL 由 txt 重建为 xlsx（合并单元格/空行/多 sheet）→ 期望与原结果一致
- *   pt8 数字多义：重量改成欧式写法（21.577,50）→ 期望与原结果一致（同值异格式）
- *   pt9 文档内同时出现 SI/BL 关键词：两侧各加一句互引 → 期望与原结果一致
- *   pt10 白话文正文：正文换成随意口语描述 → 期望与原结果一致
- *   pt11 误导性多轮口径：正文追加互相矛盾的历史邮件 → 期望与原结果一致（以当前邮件+附件为准）
- *   pt12 单文档内冲突值：SI 追加第二个不同重量的 Gross Weight 行 → 期望"不能是 OK"（应 REVIEW 或 MISMATCH）
- *   pt13 docx 怪布局：SI 由 txt 重建为 docx（标题+表格+空段）→ 期望与原结果一致
- *   pt14 港名/代码不对称：BL 只去掉 5 位 UN/LOCODE，保留港名 → 期望与原结果一致（名字应能匹配）
+ * Group B (semantic/adversarial scenarios, each with an "expected result" assertion):
+ *   pt6 simulated scanned document: SI replaced with a blank PDF with no text layer → expect NEEDS_REVIEW/unreadable
+ *   pt7 odd Excel layout: BL rebuilt from txt into xlsx (merged cells/blank rows/multiple sheets) → expect the same result as the original
+ *   pt8 ambiguous numeric format: weight rewritten in European style (21.577,50) → expect the same result as the original (same value, different format)
+ *   pt9 SI/BL keywords appearing in the same document: a cross-reference sentence added to each side → expect the same result as the original
+ *   pt10 colloquial body text: body replaced with a casual, conversational description → expect the same result as the original
+ *   pt11 misleading multi-turn thread: body appended with a contradictory quoted history → expect the same result as the original (only the current email + attachments count)
+ *   pt12 conflicting values within a single document: SI gets a second Gross Weight line with a different value appended → expect "cannot be OK" (should be REVIEW or MISMATCH)
+ *   pt13 odd docx layout: SI rebuilt from txt into docx (heading + table + blank paragraph) → expect the same result as the original
+ *   pt14 port name/code asymmetry: BL has only the 5-character UN/LOCODE removed, keeping the port name → expect the same result as the original (the name alone should still match)
  *
- * 隔离约定：
- *   - 扰动邮件 email_id = "<变体前缀>_<原 id>"，例如 pt6_email_004
- *   - 附件各自存放在 attachments/<变体>/ 下，互不覆盖
- *   - 不修改 data/sample 任何文件；data/perturb/ 已被 .gitignore 忽略
- *   - manifest.json 里每个扰动邮件都带 origin/variant/expectation，执行器按期望断言
+ * Isolation conventions:
+ *   - Perturbed email_id = "<variant prefix>_<original id>", e.g. pt6_email_004
+ *   - Attachments are stored separately under attachments/<variant>/, without overwriting each other
+ *   - No file under data/sample is modified; data/perturb/ is already ignored by .gitignore
+ *   - Every perturbed email in manifest.json carries origin/variant/expectation, which the runner asserts against
  */
 import { readFile, writeFile, readdir, mkdir, copyFile, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -37,20 +37,20 @@ const OUT = path.join(ROOT, "data", "perturb");
 const OFFICE_HELPER = path.join(ROOT, "scripts", "perturb_gen_office.py");
 
 const VARIANTS = {
-  pt1: { label: "filename：去掉 _SI/_BL 命名标记（附件改名）", expectation: { kind: "same" } },
-  pt2: { label: "format：主题加 FW: 前缀 + 正文追加引用块", expectation: { kind: "same" } },
-  pt3: { label: "order：附件顺序反转", expectation: { kind: "same" } },
-  pt4: { label: "unit：仅 txt，MT→KG / LBS→KG 换算", expectation: { kind: "same" } },
-  pt5: { label: "alias：仅 txt，字段标签换同义说法", expectation: { kind: "same" } },
-  pt6: { label: "scanned：SI 换成无文字层 PDF（模拟扫描件）", expectation: { kind: "needs_review", reason: "unreadable" } },
-  pt7: { label: "weird-xlsx：BL 重建为怪布局 xlsx", expectation: { kind: "same" } },
-  pt8: { label: "locale-number：重量改欧式写法（同值异格式）", expectation: { kind: "same" } },
-  pt9: { label: "cross-ref：文档内同时出现 SI/BL 关键词", expectation: { kind: "same" } },
-  pt10: { label: "colloquial：正文换白话文", expectation: { kind: "same" } },
-  pt11: { label: "misleading-thread：正文追加矛盾历史（多次改口径）", expectation: { kind: "same" } },
-  pt12: { label: "intra-conflict：SI 追加冲突重量行", expectation: { kind: "not_ok" } },
-  pt13: { label: "weird-docx：SI 重建为怪布局 docx", expectation: { kind: "same" } },
-  pt14: { label: "port-asymmetry：BL 去掉 UN/LOCODE 只留港名", expectation: { kind: "same" } },
+  pt1: { label: "filename: drop the _SI/_BL naming marker (rename attachments)", expectation: { kind: "same" } },
+  pt2: { label: "format: add FW: prefix to subject + append quoted block to body", expectation: { kind: "same" } },
+  pt3: { label: "order: reverse attachment order", expectation: { kind: "same" } },
+  pt4: { label: "unit: txt only, MT→KG / LBS→KG conversion", expectation: { kind: "same" } },
+  pt5: { label: "alias: txt only, swap field labels for synonyms", expectation: { kind: "same" } },
+  pt6: { label: "scanned: SI replaced with a PDF with no text layer (simulated scan)", expectation: { kind: "needs_review", reason: "unreadable" } },
+  pt7: { label: "weird-xlsx: BL rebuilt with an odd xlsx layout", expectation: { kind: "same" } },
+  pt8: { label: "locale-number: weight rewritten in European style (same value, different format)", expectation: { kind: "same" } },
+  pt9: { label: "cross-ref: SI/BL keywords appear in the same document", expectation: { kind: "same" } },
+  pt10: { label: "colloquial: body replaced with casual phrasing", expectation: { kind: "same" } },
+  pt11: { label: "misleading-thread: body appended with a contradictory history (conflicting figures)", expectation: { kind: "same" } },
+  pt12: { label: "intra-conflict: SI appended with a conflicting weight line", expectation: { kind: "not_ok" } },
+  pt13: { label: "weird-docx: SI rebuilt with an odd docx layout", expectation: { kind: "same" } },
+  pt14: { label: "port-asymmetry: BL has the UN/LOCODE removed, keeping only the port name", expectation: { kind: "same" } },
 };
 
 function renameAttachment(base) {
@@ -88,7 +88,7 @@ function transformAlias(text) {
   return out;
 }
 
-/** 21,577.50 KG -> 21.577,50 KG（同值、异格式） */
+/** 21,577.50 KG -> 21.577,50 KG (same value, different format) */
 function toEuropeanNumbers(text) {
   return text.replace(
     /(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+)\s*(KG|MT|LBS?)\b/g,
@@ -102,12 +102,12 @@ function toEuropeanNumbers(text) {
   );
 }
 
-/** 去掉 5 位 UN/LOCODE，例如 "PORT KLANG (MYPKG)" -> "PORT KLANG" */
+/** Strip the 5-character UN/LOCODE, e.g. "PORT KLANG (MYPKG)" -> "PORT KLANG" */
 function stripLocodes(text) {
   return text.replace(/\s*\([A-Z]{5}\)/g, "");
 }
 
-/** txt 转 label/value 行（供重建 xlsx/docx 用），保留多行续行 */
+/** Convert txt into label/value rows (for rebuilding as xlsx/docx), preserving multi-line continuations */
 function txtToRows(text) {
   const rows = [];
   let current = null;
@@ -124,7 +124,7 @@ function txtToRows(text) {
   return rows;
 }
 
-/** 最小可用空白 PDF（一页、无文字层，等价扫描件提取效果） */
+/** Minimal usable blank PDF (one page, no text layer, equivalent to a scanned-document extraction) */
 function buildBlankPdf() {
   const header = "%PDF-1.4\n";
   const objects = [
@@ -181,7 +181,7 @@ function transformSubjectBody(email, variant) {
 async function main() {
   const inboxDir = path.join(SAMPLE, "inbox");
   const files = (await readdir(inboxDir)).filter((f) => f.endsWith(".json")).sort();
-  console.log(`样例邮件：${files.length} 封`);
+  console.log(`Sample emails: ${files.length}`);
 
   const emails = [];
   for (const file of files) {
@@ -231,12 +231,12 @@ async function main() {
       expectation: VARIANTS[variant].expectation,
       emails: count,
     };
-    console.log(`  ${variant}: ${count} 封（${VARIANTS[variant].label}）`);
+    console.log(`  ${variant}: ${count} emails (${VARIANTS[variant].label})`);
   }
 
   await runOfficeHelper();
   await writeFile(path.join(OUT, "manifest.json"), JSON.stringify(manifest, null, 2), "utf-8");
-  console.log(`完成：${written} 封扰动邮件 → data/perturb/`);
+  console.log(`Done: ${written} perturbed emails → data/perturb/`);
 }
 
 function selectEmails(emails, variant) {
@@ -350,11 +350,11 @@ async function runOfficeHelper() {
   if (officeTasks.length === 0) return;
   const tasksFile = path.join(OUT, ".office-tasks.json");
   await writeFile(tasksFile, JSON.stringify(officeTasks, null, 2), "utf-8");
-  console.log(`  生成 office 文件 ${officeTasks.length} 个（python helper）...`);
+  console.log(`  Generating ${officeTasks.length} office file(s) (python helper)...`);
   execFileSync("python", [OFFICE_HELPER, tasksFile], { stdio: "inherit" });
 }
 
 main().catch((err) => {
-  console.error("生成失败：", err);
+  console.error("Generation failed:", err);
   process.exit(1);
 });

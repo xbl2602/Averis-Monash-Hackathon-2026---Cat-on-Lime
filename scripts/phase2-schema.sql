@@ -1,8 +1,8 @@
--- 第二阶段表结构（PHASE2_SPEC.md 第 3.1 / 4.1 / 5.1 节）
--- 用法：Supabase 控制台 → SQL Editor → 全部粘贴执行（可重复执行，幂等）
--- 执行后跑一次：node scripts/setup-phase2.mjs
+-- Phase-2 table structure (PHASE2_SPEC.md sections 3.1 / 4.1 / 5.1)
+-- Usage: Supabase console -> SQL Editor -> paste all and run (safe to re-run, idempotent)
+-- After running, execute once: node scripts/setup-phase2.mjs
 
--- 1) 配置中心：GUI 可调的运行时配置（敏感值加密后存这里）
+-- 1) Config center: runtime config adjustable via the GUI (sensitive values are encrypted before being stored here)
 create table if not exists app_config (
   key text primary key,
   category text not null default 'general',
@@ -11,7 +11,7 @@ create table if not exists app_config (
   updated_at timestamptz not null default now()
 );
 
--- 2) 邮件账户（Gmail 等，本阶段只做连接状态占位）
+-- 2) Mail accounts (Gmail etc.; this phase only stubs out the connection status)
 create table if not exists mail_accounts (
   id uuid primary key default gen_random_uuid(),
   provider text not null,
@@ -25,7 +25,7 @@ create table if not exists mail_accounts (
   updated_at timestamptz not null default now()
 );
 
--- 3) 可切换的 Supabase 项目（service_key 加密存储）
+-- 3) Switchable Supabase projects (service_key is stored encrypted)
 create table if not exists supabase_projects (
   id uuid primary key default gen_random_uuid(),
   label text not null,
@@ -36,11 +36,11 @@ create table if not exists supabase_projects (
   updated_at timestamptz not null default now()
 );
 
--- 同一时间最多一个项目处于启用状态
+-- At most one project is active at any given time
 create unique index if not exists supabase_projects_single_active
   on supabase_projects ((is_active)) where is_active;
 
--- 4) 手动上传的文档（原文件在 Storage bucket `uploads`，这里存元数据+解析文本）
+-- 4) Manually uploaded documents (the original file lives in the Storage bucket `uploads`; this stores metadata + parsed text)
 create table if not exists uploaded_documents (
   id uuid primary key default gen_random_uuid(),
   file_name text not null,

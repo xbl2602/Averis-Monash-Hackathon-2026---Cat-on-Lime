@@ -1,13 +1,19 @@
 /**
- * 编排层（pipeline）：把"分类 → 抽取 → 比对"串成唯一的一条线（见 DATA_FLOW.md）。
- * 网页、REST API、MCP、评测脚本要"跑一封/一整箱"都应该走这里，不要在别处重新拼顺序。
+ * Orchestration layer (pipeline): chains "classify -> extract -> compare" into the single
+ * canonical flow (see DATA_FLOW.md).
+ * The web page, REST API, MCP, and evaluation scripts should all go through here whenever
+ * they need to run "one email" or "a whole inbox" — don't re-assemble the sequence elsewhere.
  *
- * 这里同时负责 4 种"拿不准"的判定（对应官方的 review_reason）：
- * - missing_attachment：邮件里说"请核对 SI 和 draft BL"，但附件缺失
- *   （注意："请把 draft BL 发来检查"只是索取文件，没有可核对内容，基准算 OK）
- * - wrong_doc_type：附件不是 SI/BL（如商业发票/装箱单/产地证）
- * - unreadable：附件读不出文字（扫描件/损坏文件）
- * - missing_value：关键字段缺失（如占位符 TBA / N/A / ____MT）
+ * This is also where the 4 kinds of "uncertain" verdicts are decided (corresponding to the
+ * official review_reason):
+ * - missing_attachment: the email says something like "please check the SI against the draft
+ *   BL", but the attachment is missing
+ *   (note: "please send over the draft BL for review" is just requesting the file, there's
+ *   nothing to check yet, so the baseline is OK)
+ * - wrong_doc_type: the attachment isn't an SI/BL (e.g. commercial invoice/packing
+ *   list/certificate of origin)
+ * - unreadable: no text could be extracted from the attachment (scanned image/corrupted file)
+ * - missing_value: a key field is missing (e.g. a placeholder like TBA / N/A / ____MT)
  */
 import { createHash } from "node:crypto";
 import { classifyEmailHybrid } from "@/app/features/classification/logic";
@@ -25,8 +31,10 @@ import {
   type ReviewReason,
 } from "@/lib/shared/types";
 
-// 引擎版本号挪到叶子模块 lib/shared/versions.ts（导出函数只用版本号，不为此打包整个 pipeline）；
-// 这里 re-export，原有 import 路径（pipeline/logic、verification-store 等）全部不变。
+// The engine version number has moved to the leaf module lib/shared/versions.ts (so the
+// export function only needs the version number, without pulling in the whole pipeline just
+// for that); re-exported here so every existing import path (pipeline/logic,
+// verification-store, etc.) stays unchanged.
 export { PIPELINE_LOGIC_VERSION } from "./versions";
 
 export interface PipelineAttachment {
@@ -41,7 +49,7 @@ export interface PipelineEmailInput {
 }
 
 export interface PipelineOptions {
-  /** 抽取兜底 / 分类兜底用的文本模型（默认 gemini） */
+  /** The text model used for extraction/classification fallback (defaults to gemini) */
   textProvider?: LLMProvider;
 }
 
@@ -54,9 +62,9 @@ export interface PipelineMeta {
 export interface PipelineOutcome {
   result: EmailVerificationResult;
   meta: PipelineMeta;
-  /** 抽取到的字段（给结果层存 extracted_si / extracted_bl 用） */
+  /** The extracted fields (used by the results layer to store extracted_si / extracted_bl) */
   extracted: { si: ExtractedDocumentFields | null; bl: ExtractedDocumentFields | null };
-  /** 字段级出处（P1-7）：规则命中的行号/原句；LLM 兜底只标来源 */
+  /** Field-level evidence (P1-7): the line number/original sentence a rule matched; the LLM fallback only tags its source */
   evidence: { si: ExtractedDocumentEvidence | null; bl: ExtractedDocumentEvidence | null };
 }
 
@@ -148,7 +156,7 @@ export async function runEmailPipeline(
 }
 
 export interface BatchPipelineOptions extends PipelineOptions {
-  /** 同时最多处理几封，默认 4（见 CLAUDE.md「高并发」的限量并发要求） */
+  /** Max number to process at once, defaults to 4 (see the concurrency-limit requirement in the "High Concurrency" section of CLAUDE.md) */
   concurrency?: number;
   onProgress?: (done: number, total: number, emailId: string) => void;
 }
@@ -158,12 +166,12 @@ export interface BatchPipelineOutcome {
   failed: { input: PipelineEmailInput; error: unknown }[];
 }
 
-/** 批量跑：限量并发 + 单封失败不拖垮整批 */
+/** Batch run: bounded concurrency + a single failure doesn't take down the whole batch */
 export async function runBatchPipeline(
   inputs: PipelineEmailInput[],
   options: BatchPipelineOptions = {}
 ): Promise<BatchPipelineOutcome> {
-  let done = 0; // 本次调用内的局部变量，天然并发安全
+  let done = 0; // A local variable scoped to this call, so it's inherently concurrency-safe
 
   const outcome = await mapWithConcurrencyLimit(
     inputs,
@@ -183,7 +191,8 @@ export async function runBatchPipeline(
 }
 
 /**
- * 邮件级输入指纹（含附件解析结果）：内容没变、引擎版本没变，重跑时可以整封跳过。
+ * Email-level input fingerprint (includes the attachment parse results): if the content and
+ * the engine version are both unchanged, the whole email can be skipped on a rerun.
  */
 export function computeInputHash(input: PipelineEmailInput): string {
   const payload = {
@@ -203,8 +212,9 @@ export function computeInputHash(input: PipelineEmailInput): string {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
-// "请把 SI 和 draft BL 对比/核对一下"——承诺了要核对，附件却缺失 → missing_attachment；
-// 而"请把 draft BL 发来检查"只是索取文件 → 不触发
+// "Please compare/check the SI against the draft BL" — this commits to a comparison, but the
+// attachment is missing -> missing_attachment;
+// whereas "please send over the draft BL for review" is just requesting the file -> doesn't trigger it
 const ASKS_COMPARISON = /(compare|check)[^.\n]{0,60}(si\b|draft\s*bl|bill\s+of\s+lading)/i;
 
 export function emailAsksForComparison(body: string): boolean {
@@ -220,12 +230,17 @@ function findDocument(
 }
 
 /**
- * 配对 SI / BL 附件（2026-09-21 P0-3，见 DECISION_LOG 决策 26）：
- * 1. 先按文件名的 _SI / _BL 标记配对（历史行为，样例数据走这条）；
- * 2. 有缺位时，对没被占用、且能读出文字的附件按内容识别（关键词规则为准，规则判不出才问模型链），
- *    只补缺的那一侧，同一份附件不会被 SI 和 BL 抢两次；
- * 3. 内容也认不出就维持缺位，走原来的 missing_attachment / unreadable 分支。
- * 识别规则本身只在 lib/shared/document-identify.ts / document-identify-llm.ts，这里不重写。
+ * Pairs up the SI / BL attachments (2026-09-21 P0-3, see DECISION_LOG decision 26):
+ * 1. First pair by the _SI / _BL marker in the filename (the historical behavior; the sample
+ *    data follows this path);
+ * 2. If either side is still missing, run content-based identification (keyword rules take
+ *    priority; only fall back to the model chain when the rules can't tell) over the
+ *    attachments that aren't already claimed and that parsed to readable text — this only
+ *    fills in the missing side, and the same attachment can never be claimed by both SI and BL;
+ * 3. If content identification also can't tell, the side stays missing and we fall through to
+ *    the original missing_attachment / unreadable branches.
+ * The identification rules themselves live only in lib/shared/document-identify.ts /
+ * document-identify-llm.ts — don't reimplement them here.
  */
 async function resolveDocumentPair(
   attachments: PipelineAttachment[],

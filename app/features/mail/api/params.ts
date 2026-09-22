@@ -1,4 +1,4 @@
-/** HTTP 传输层的小工具：请求体解析 + 错误 → HTTP 响应（参数格式校验在 logic 里） */
+/** Small HTTP transport-layer utilities: request body parsing + errors -> HTTP responses (parameter format validation lives in logic) */
 import { NextResponse } from "next/server";
 import { CryptoConfigError } from "@/lib/shared/crypto";
 import { MailDataError, MailNotFoundError, MailRequestError, MailStoreUnavailableError } from "../logic";
@@ -9,16 +9,16 @@ export async function parseJsonBody(request: Request): Promise<Record<string, un
     const text = await request.text();
     body = text.trim() === "" ? {} : JSON.parse(text);
   } catch {
-    throw new MailRequestError("请求体不是合法 JSON");
+    throw new MailRequestError("The request body is not valid JSON");
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new MailRequestError("请求体必须是 JSON 对象");
+    throw new MailRequestError("The request body must be a JSON object");
   }
   return body as Record<string, unknown>;
 }
 
 export function toErrorResponse(err: unknown): NextResponse {
-  // 404 要放在 MailRequestError 之前判断（NotFound 是它的子类，否则会被吞成 400）
+  // 404 must be checked before MailRequestError (NotFound is its subclass, otherwise it would get swallowed as a 400)
   if (err instanceof MailNotFoundError) {
     return NextResponse.json({ error: err.message }, { status: 404 });
   }
@@ -31,10 +31,10 @@ export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof MailDataError) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-  // 缺 ENCRYPTION_MASTER_KEY 时 encryptSecret 抛这个：消息本身已经说明缺什么，可安全回显
+  // encryptSecret throws this when ENCRYPTION_MASTER_KEY is missing: the message itself already explains what's missing, so it's safe to echo back
   if (err instanceof CryptoConfigError) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-  console.error("[mail/api] 未预期错误", err);
-  return NextResponse.json({ error: "mail 模块内部错误，请稍后重试" }, { status: 500 });
+  console.error("[mail/api] Unexpected error", err);
+  return NextResponse.json({ error: "Internal error in the mail module, please try again later" }, { status: 500 });
 }

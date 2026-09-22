@@ -5,22 +5,22 @@ import { makeReviewMcpTools } from "@/lib/shared/review/mcp";
 import { extractFields } from "../logic";
 
 /**
- * extraction 模块的 MCP tool（只读）。
- * provider 只接受文本模型（TEXT_PROVIDER_IDS 排除了 jev；z.enum 在 handler 前就会挡掉）。
+ * MCP tool for the extraction module (read-only).
+ * provider only accepts text models (TEXT_PROVIDER_IDS excludes jev; z.enum rejects it before the handler runs).
  */
 export const extractionMcpTool = {
   name: "extract_document_fields",
   description:
-    "从一份 SI（Shipping Instruction）或 BL（Bill of Lading）文档文本里抽取 shipper/consignee/notify_party/port_of_loading/port_of_discharge/container_count/gross_weight_kg 这7个字段，并判断文档类型（OTHER = 不是 SI/BL，如发票/装箱单）",
+    "Extracts these 7 fields — shipper/consignee/notify_party/port_of_loading/port_of_discharge/container_count/gross_weight_kg — from an SI (Shipping Instruction) or BL (Bill of Lading) document's text, and determines the document type (OTHER = not an SI/BL, e.g. an invoice/packing list)",
   inputSchema: {
     attachment_path: z
       .string()
-      .describe('样例数据里的附件路径，例如 "attachments/email_004_SI.txt"'),
+      .describe('The attachment path in the sample data, e.g. "attachments/email_004_SI.txt"'),
     documentType: z.enum(["SI", "BL"]),
     provider: z
       .enum(TEXT_PROVIDER_IDS)
       .optional()
-      .describe("文本兜底模型，缺省 gemini；不支持 jev（jev 只能做结构化判断）"),
+      .describe("The text fallback model, defaults to gemini; jev is not supported (jev can only make structured judgments)"),
   },
   annotations: {
     readOnlyHint: true,
@@ -35,18 +35,18 @@ export const extractionMcpTool = {
     documentType: "SI" | "BL";
     provider?: (typeof TEXT_PROVIDER_IDS)[number];
   }) => {
-    // 按文件格式解析（PDF/xlsx/docx 不能按 UTF-8 直接读，那样只有乱码）
+    // Parses according to file format (PDF/xlsx/docx can't be read directly as UTF-8 — that would just produce garbled text)
     const parsed = await readSampleAttachmentParsed(attachment_path);
     if (parsed.status !== "ok") {
-      // 解析器原文只进服务端日志，不回传给 MCP 调用方（与 REST 侧同口径）
+      // The parser's raw error only goes into server-side logs, never back to the MCP caller (same convention as the REST side)
       console.warn(
-        `[extraction] 附件 ${attachment_path} 解析失败（原始信息只进服务端日志）：${parsed.error ?? "未知原因"}`
+        `[extraction] Attachment ${attachment_path} failed to parse (raw details are server-side log only): ${parsed.error ?? "unknown reason"}`
       );
-      throw new Error(`附件 ${attachment_path} 读不出文字（可能是扫描件或损坏文件），无法抽取字段`);
+      throw new Error(`Attachment ${attachment_path} has no extractable text (may be a scanned image or a corrupted file), cannot extract fields`);
     }
     return extractFields({ documentText: parsed.text, documentType, provider });
   },
 };
 
-// 人工复核闭环（P1-1）：队列 = NEEDS_REVIEW 且原因是抽取相关问题的邮件
-export const extractionReviewMcpTools = makeReviewMcpTools("extraction", "抽取");
+// Manual review loop (P1-1): the queue = emails that are NEEDS_REVIEW for an extraction-related reason
+export const extractionReviewMcpTools = makeReviewMcpTools("extraction", "extraction");

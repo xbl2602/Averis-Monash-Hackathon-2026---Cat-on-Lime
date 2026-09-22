@@ -1,7 +1,7 @@
 /**
  * GET /features/mail/api/gmail
- * 读 Gmail 连接状态（读接口开放，不回 token）。从未连接时返回 status=disconnected 的默认值，不报错。
- * 真实的 OAuth 回调地址是 /features/mail/api/gmail/callback（本阶段未实现，见 connect 接口注释）。
+ * Read Gmail connection status (read endpoint is open, never returns the token). Returns the default status=disconnected when never connected, without erroring.
+ * The real OAuth callback address is /features/mail/api/gmail/callback (not implemented at this stage, see the comment on the connect endpoint).
  */
 import { NextResponse } from "next/server";
 import { getGmailConnection, isMailStoreAvailable } from "../../logic";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   if (!isMailStoreAvailable()) {
     return NextResponse.json(
-      { error: "邮件存储不可用：服务端缺少 Supabase service key（见 .env.example）" },
+      { error: "Mail storage is unavailable: the server is missing a Supabase service key (see .env.example)" },
       { status: 503 }
     );
   }

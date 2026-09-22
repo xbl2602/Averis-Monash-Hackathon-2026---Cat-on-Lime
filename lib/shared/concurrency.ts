@@ -1,11 +1,13 @@
 /**
- * 批量处理时的并发控制工具（见 CLAUDE.md「高并发与数据同步/冲突处理」）。
- * 用于替代"一个个排队处理"（太慢）或"一次性全部并行"（容易把 LLM API 限流、
- * 把 Supabase 连接数打满）这两种极端做法。
+ * Concurrency-control utility for batch processing (see the "High Concurrency & Data
+ * Sync/Conflict Handling" section of CLAUDE.md).
+ * Used in place of the two extremes of "process one at a time in a queue" (too slow) or
+ * "run everything in parallel at once" (easily rate-limits the LLM API or exhausts Supabase's
+ * connection pool).
  */
 
 export interface ConcurrencyLimitOptions {
-  /** 同一时间最多处理几个，默认 3 */
+  /** Max number processed at the same time, defaults to 3 */
   concurrency?: number;
 }
 
@@ -25,9 +27,10 @@ export interface ConcurrencyLimitOutcome<T, R> {
 }
 
 /**
- * 对 items 逐一调用 fn，但同时最多只有 `concurrency` 个在跑。
- * 单个 item 处理失败不会中断其他 item——失败的会被收集进 failed，
- * 不会跟着抛出让整批调用者一起崩掉（对应"单条数据失败不能拖垮整批"的要求）。
+ * Calls fn once for each item in items, but with at most `concurrency` running at the same time.
+ * A single item failing doesn't interrupt the others — failures are collected into `failed`
+ * instead of being thrown and crashing the whole batch of callers together (this satisfies
+ * the requirement that "a single failed item must not take down the whole batch").
  */
 export async function mapWithConcurrencyLimit<T, R>(
   items: T[],

@@ -1,101 +1,101 @@
-# TODO（待办清单）
+# TODO (To-Do List)
 
-> 来源：2026-09-21 的一次"题目要求 × 竞品调研 × 现码核对"审计（只读核对，未改代码）。
-> 用法：拿一项做一项；**做完把 `[ ]` 改成 `[x]`、在下面加一行"证据:"，不要只改状态**。
-> 优先级：P0 = 影响"能不能交/能不能跑"；P1 = 明显加分项；P2 = 有余力再做。
-> 每个任务都自带"证据（现状）"与"验收标准"，新接手的 AI 不需要再通读全仓就能开工。
-
----
-
-## P0 — 先解决"能不能跑/能不能交"
-
-### [x] P0-1 把核心三表 DDL 补进仓库（否则换环境跑不起来）
-- **做了什么**：新增 `scripts/core-schema.sql`——用 Supabase `list_tables` 内省正式项目（`rapuvaalzlrsjodjwqtw`）导出的真实结构（不是从代码猜的），含 `raw_emails` / `parsed_attachments` / `verification_results` / `llm_call_cache` 四张表的完整 DDL（列/默认值/check 约束/外键/comment）+ 视图 `verification_overview`（`security_invoker=true`）+ 三张业务表的 anon select 策略（`llm_call_cache` 故意不给 anon 策略，只走 service role，和线上 `pg_policies` 查询结果一致）。全部 `create table if not exists` / `create or replace view`，幂等。
-- **同步更新**：README「数据库初始化」一节改成先跑 `core-schema.sql` 再跑 `phase2-schema.sql` + `phase2-rls.sql`。
-- **验收待做**：还没在一个全新 Supabase 项目上实跑验证过（本地开发用的是现有正式项目，没有"全新项目"可测）；以后真要换/新建 Supabase 项目时留意是否需要微调。
-- **注意**：DDL 里不含任何答案/ground_truth 内容。
-
-### [x] P0-2 README 的 ground_truth 口径改准
-- **做了什么**：README 那句话改成"ground_truth 仅用于本地自测：官方已明确确认题目包（含 `ground_truth.json`）允许参赛者使用，唯一约束是它只用于自测、绝不进最终提交文件（口径见 `AGENTS.md`/`CLAUDE.md`「评审沉淀」⑤）"——去掉了容易引起歧义的"Discord 已澄清"表述，改成直接指向仓库里已经写明的权威口径来源。
+> Source: a 2026-09-21 audit cross-referencing "problem-statement requirements x competitor research x current code" (read-only review, no code changed).
+> Usage: pick up one item at a time; **once done, change `[ ]` to `[x]` and add an "Evidence:" line below it — don't just flip the status**.
+> Priority: P0 = affects "can we submit/can it run at all"; P1 = a clear scoring bonus; P2 = do if there's time to spare.
+> Every task carries its own "evidence (current state)" and "acceptance criteria," so a new AI picking this up can start working without reading the whole repo first.
 
 ---
 
-## P1 — 明显加分（对齐竞品头部做法）
+## P0 — Solve "can it run / can we submit" first
 
-### [x] P1-1 人工复核闭环——后端（REST+MCP）已做完，GUI 留给队友A
-- **做了什么**：没有做"最小版"，而是按 `docs/REVIEW_SPEC.md` 把四个模块（classification/extraction/comparison/pipeline）的 REST（`api/review/{route,history,undo,bulk}`）+ MCP（4 tool × 4 模块 = 16 个）都接完了，共用层在 `lib/shared/review/`（`store`/`actions`/`normalize`/`merge`/`rerun`/`http`/`mcp`/`types`，8 个文件）；`scripts/review-schema.sql` 两张表已建并应用到正式 Supabase 项目；results 导出已接 `applyOverridesToSubmission`（`X-Review-Pending`/`X-Review-Deferred` 响应头）。**没做 GUI**（按要求）。
-- **三处偏差**（详细原因见 `docs/REVIEW_SPEC.md` 第15节 / `DECISION_LOG.md` 决策31）：① 没建 httpOnly cookie 会话——GUI 不做，REST/MCP 沿用现有 `x-admin-token` 口径，等做 GUI 时再补；② classification 复核队列目前只覆盖"全模型失败降级"，不覆盖"Jev 置信度<0.85 但没失败"（这个信号目前没持久化进 `verification_results`，需要单独一次 schema 改动，需要操作者确认，未包含在这轮）；③ MCP 没做独立 bulk tool（批量只走 REST，符合 REVIEW_SPEC §8 原定范围，不算真偏差）。
-- **实测中发现并修了一个真 bug**：`listOverrides` 原来用 PostgREST 的 `.in()` 传几百个 email_id 会被判 400（URL 太长）；改成按 `target_kind` 整表取回再在内存过滤，问题消失。
-- **验收**：本地 `next dev` 对 comparison 模块实测 confirm/correct/undo/bulk（含失败隔离）/ 乐观锁 409 / 一致性校验 400 / 导出叠加头随动作变化，全部通过；测试数据已清空不留库里；`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations`（白名单已更新）均通过。
-- **注意**：没有任何地方读取/引用 `ground_truth`。
+### [x] P0-1 Add the core three tables' DDL to the repo (otherwise it won't run in a new environment)
+- **What was done**: added `scripts/core-schema.sql` — the real structure exported via Supabase `list_tables` introspection of the production project (`rapuvaalzlrsjodjwqtw`) (not guessed from code), containing the complete DDL (columns/defaults/check constraints/foreign keys/comments) for the four tables `raw_emails` / `parsed_attachments` / `verification_results` / `llm_call_cache`, plus the `verification_overview` view (`security_invoker=true`) and the anon select policies for the three business tables (`llm_call_cache` deliberately has no anon policy and is service-role only, matching the live `pg_policies` query result). Everything is `create table if not exists` / `create or replace view`, so it's idempotent.
+- **Kept in sync**: the README's "Database initialization" section now says to run `core-schema.sql` first, then `phase2-schema.sql` + `phase2-rls.sql`.
+- **Acceptance still pending**: this hasn't actually been run against a brand-new Supabase project yet (local development uses the existing production project, so there's no "brand-new project" to test against); keep an eye out for whether tweaks are needed whenever a Supabase project is actually switched/created.
+- **Note**: the DDL contains no answer/ground_truth content of any kind.
 
-### [x] P1-2 AI 失败改为"自动重试一次"，而不是只给一键重试
-- **做了什么**：`lib/llm/index.ts` 的 `callLLM` 现在对超时/限流/上游5xx/网络错误（`isRetryableUpstreamError`）在同一 provider 内自动重试一次（等 2 秒）；401/403/400/422 这类重试也没用的错误不重试、直接失败。这层重试只发生在单个 provider 内部，**不影响、不替代**现有的 `lib/shared/llm-chain.ts` 跨 provider 降级链——同一次分类/抽取/比对里，会先在当前 provider 内重试一次，仍失败才轮到降级链换下一个 provider，最后才是 `degraded` 兜底。`callJev` 保持不重试（失败直接转上层降级路径，行为不变）。
-- **同步文档**：`docs/DECISION_SPEC.md` §1.5、`lib/llm/errors.ts`、`lib/llm/jev.ts` 里"不重试"的旧说法已更新；`DECISION_LOG.md` 新增决策30记录这次改动。
-- **验收**：`npm run typecheck` 通过；重试只在 console.warn 留痕，不改变对外错误契约（仍是 LLMConfigError / UpstreamServiceError 两种）。
-
-### [ ] P1-3 写一份风险文档（扰动结果 + 已知弱点 + 反文件依赖加固）
-- **现状/证据**：扰动测试已做：`scripts/perturb-generate.mjs` / `perturb-run.ts` / `perturb-score.ts`，最近一次结果在 `private/perturb-runs/2026-09-20T13-59-45-official/summary.md`（总体 accuracy 1.000、缺陷 F1 0.986、端到端 287/294=0.976、review recall 0.911）。**但风险文档不存在**（`private/` 目前只有竞品调研两个文件）。
-- **做法**：在 `private/`（不提交、不公开）写 `risk-notes.md`：① 扰动各组结论与**已知弱点**（pt7/pt13 的 field F1=0.600，需写明原因与影响面）；② 附件类型识别对文件名的依赖程度与已加的"看内容"兜底（`lib/shared/document-identify.ts`）；③ 无 OCR 的策略与影响（扫描件→`unreadable`，见 `docs/FINALS_ROADMAP.md:44,80`）；④ "520 封满分 ≠ 未见数据"的局限声明。
-- **验收**：文档能回答"换一批没见过的邮件，最可能在哪几类出错、怎么发现"。
-
-### [x] P1-4 重量/数量容差：已实现（审计时看漏，非新做）
-- **证据**：`docs/DECISION_LOG.md` 决策28 + `app/features/results/logic/numeric-query.ts`——conflicts 查询已支持 `numeric_mode=exact|fuzzy`、`tolerance`、`value_field`/`value` 按值搜索，用户可选精确/模糊；默认容差重量 `max(0.5kg, 0.1%)`、箱数 0。REST + MCP 同参，conflicts 导出同样支持。
-- **口径**：这个容差**只用于冲突查询/筛选**，不进 `scope=submission` 的最终判定——官方生成器差异量级大，提交路径加容差会漏检，故提交判定保持精确比较（`comparison/logic/index.ts` 不变）。这条本来就是决策28的既定口径，不是新决定。
-- **结论**：这项 TODO 是 2026-09-21 审计时的疏漏（漏看了决策28和已有代码），实际不需要再做。
-
-### [ ] P1-5 多 LLM 云端验收（DeepSeek 待下次部署后重测，Claude/OpenAI 仍缺 key）
-- **现状/证据（2026-09-21 复核）**：`DEEPSEEK_API_KEY` 已经填进 Vercel（`filter_project_envs` 确认变量存在），但填入时间（`updatedAt=1789952512687`）晚于当时线上最新一次部署（`d071ae9`，`created=1789914468786`）——Vercel 的环境变量改动只在下一次部署后才对已运行的函数生效。实测 `POST https://hackathonaveris.vercel.app/features/classification/api {"provider":"deepseek"}` 目前仍返回"缺少环境变量"，符合这个解释（不是没填，是没重新部署）。
-- **做法**：本轮改动 push 后会自动触发新部署，到时候重新跑一次上面这条 curl 验证 DeepSeek 转正；`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 仍需团队自己申请后填入 Vercel。
-- **验收**：新部署后 DeepSeek 分类请求返回正常结果（不再报缺 key）；Claude/OpenAI 补齐前如实在 README 标注"未配置"。
+### [x] P0-2 Fix the README's wording about ground_truth
+- **What was done**: the README sentence now reads "ground_truth is for local self-testing only: the organizers have explicitly confirmed that the problem package (including `ground_truth.json`) is allowed for participants to use, with the sole constraint that it's for self-testing only and must never go into the final submission file (see `AGENTS.md`/`CLAUDE.md` 'Review Notes' item 5)" — this removes the ambiguity-prone "Discord has clarified" phrasing and instead points directly to the authoritative source already documented in the repo.
 
 ---
 
-## P2 — 有余力再做
+## P1 — Clear scoring bonuses (matching top competitors' approaches)
 
-### [ ] P2-1 封版指纹（"交的卷子和考的一致"）
-- **现状/证据**：只有 `logic_version` / `input_hash` 落库（`lib/shared/versions.ts`、`lib/shared/verification-store.ts`），没有"判卷用到的源文件清单 + 指纹 + 一键校验"脚本。
-- **做法**：新增脚本，对判卷/提交链路上的源码与脚本算哈希清单落盘，附一个 `verify` 命令比对。**清单文件不要包含答案内容**。
-- **验收**：`verify` 在不改动代码时全绿，改一行则报出是哪一份文件变了。
+### [x] P1-1 Manual review loop — backend (REST+MCP) is done, GUI left for teammate A
+- **What was done**: rather than a "minimal version," this fully wired up REST (`api/review/{route,history,undo,bulk}`) + MCP (4 tools x 4 modules = 16) across all four modules (classification/extraction/comparison/pipeline) per `docs/REVIEW_SPEC.md`, with the shared layer in `lib/shared/review/` (`store`/`actions`/`normalize`/`merge`/`rerun`/`http`/`mcp`/`types`, 8 files); the two tables in `scripts/review-schema.sql` have been created and applied to the production Supabase project; the results export now calls `applyOverridesToSubmission` (`X-Review-Pending`/`X-Review-Deferred` response headers). **No GUI was built** (as required).
+- **Three deviations** (full reasoning in `docs/REVIEW_SPEC.md` section 15 / `DECISION_LOG.md` decision 31): (1) no httpOnly cookie session was built — since there's no GUI, REST/MCP stick with the existing `x-admin-token` approach, to be revisited once the GUI is built; (2) the classification review queue currently only covers "the model chain fully failed and degraded," not "Jev confidence < 0.85 but didn't fail" (this signal currently isn't persisted into `verification_results`, which would need a separate schema change requiring operator sign-off, not included in this round); (3) MCP has no standalone bulk tool (bulk only goes through REST, which matches REVIEW_SPEC §8's original scope, so this isn't really a deviation).
+- **A real bug found and fixed during testing**: `listOverrides` used to pass several hundred email_ids through PostgREST's `.in()`, which got rejected with a 400 (URL too long); switching to fetching the whole table by `target_kind` and filtering in memory made the problem go away.
+- **Acceptance**: locally on `next dev`, confirm/correct/undo/bulk (including failure isolation) / optimistic-lock 409 / consistency-check 400 / the export's overlay headers changing with the action were all tested against the comparison module and all passed; test data has been cleared and nothing is left in the database; `npm run typecheck`, `npm run build`, and `npm run test:mcp-annotations` (allowlist updated) all pass.
+- **Note**: nothing anywhere reads/references `ground_truth`.
 
-### [ ] P2-2 "不做 OCR"的策略写进对外的 README/提交材料
-- **现状/证据**：策略已写在内部 `docs/FINALS_ROADMAP.md:44,80`（扫描件/无文字层 → `NEEDS_REVIEW`），但 README 与提交材料没写，容易被误认为"漏做"。
-- **做法**：在 README 的"能力边界"处补 2-3 句：为什么不做 OCR、遇到扫描件怎么处理、这对准确率轴的影响。
+### [x] P1-2 Change AI failures to "automatically retry once" instead of only offering a manual one-click retry
+- **What was done**: `callLLM` in `lib/llm/index.ts` now automatically retries once within the same provider (waiting 2 seconds) for timeouts/rate limits/upstream 5xx/network errors (`isRetryableUpstreamError`); errors where retrying is pointless (401/403/400/422) are never retried and fail immediately. This retry layer happens only inside a single provider and **does not affect or replace** the existing cross-provider fallback chain in `lib/shared/llm-chain.ts` — within a single classify/extract/compare call, it retries once in the current provider first, and only moves to the fallback chain's next provider if that still fails, with `degraded` as the final fallback. `callJev` still doesn't retry (a failure goes straight to the upper-level fallback path as before, unchanged).
+- **Docs kept in sync**: the old "no retry" wording in `docs/DECISION_SPEC.md` §1.5, `lib/llm/errors.ts`, and `lib/llm/jev.ts` has been updated; `DECISION_LOG.md` gained decision 30 recording this change.
+- **Acceptance**: `npm run typecheck` passes; retries are only logged via console.warn and don't change the external error contract (still just the two types, LLMConfigError / UpstreamServiceError).
 
-### [ ] P2-3 分类"需人工看"用到界面上（前端，队友A）
-- **现状/证据**：后端已返回 `needs_review`，竞品调研第 7 节点名"算了不展示"是暗坑（`private/competitor-research-plain.md` 第 132、155 行）。
-- **做法**：结果列表/详情把 `needs_review` 与 `review_reason` 显式展示并可筛选。
+### [ ] P1-3 Write a risk document (perturbation results + known weaknesses + anti-filename-dependency hardening)
+- **Current state/evidence**: perturbation testing is already built: `scripts/perturb-generate.mjs` / `perturb-run.ts` / `perturb-score.ts`; the most recent results are in `private/perturb-runs/2026-09-20T13-59-45-official/summary.md` (overall accuracy 1.000, defect F1 0.986, end-to-end 287/294=0.976, review recall 0.911). **But the risk document doesn't exist yet** (`private/` currently only has the two competitor-research files).
+- **Approach**: write `risk-notes.md` in `private/` (never committed, never public): (1) conclusions from each perturbation group plus **known weaknesses** (pt7/pt13 have field F1=0.600 — document why and the scope of impact); (2) how much attachment-type detection depends on filenames, and the "look at content" fallback already added (`lib/shared/document-identify.ts`); (3) the no-OCR policy and its impact (scanned documents -> `unreadable`, see `docs/FINALS_ROADMAP.md:44,80`); (4) a limitations statement that "a perfect score on the 520 emails != performance on unseen data."
+- **Acceptance**: the document can answer "given a new batch of unseen emails, where are we most likely to get things wrong, and how would we notice."
 
-### [ ] P2-4 修导航里指向不存在页面的链接（前端，队友A）
-- **现状/证据**：竞品调研与 `docs/UI_GUIDE.md` 都提到有一个导航链接指向尚不存在的页面（`/features/verification`，`docs/HISTORY.md:407` 记录过 404）。`app/features/verification/ui` 文件存在，需要确认路由与导航是否对上。
-- **验收**：导航里每个链接点开都是 200。
+### [x] P1-4 Weight/quantity tolerance: already implemented (missed during the audit, not new work)
+- **Evidence**: `docs/DECISION_LOG.md` decision 28 + `app/features/results/logic/numeric-query.ts` — the conflicts query already supports `numeric_mode=exact|fuzzy`, `tolerance`, and searching by value via `value_field`/`value`, letting the user choose exact or fuzzy; the default tolerance is weight `max(0.5kg, 0.1%)`, container count 0. REST + MCP take the same parameters, and the conflicts export supports this too.
+- **Scope**: this tolerance is used **only for conflict queries/filtering** and never enters the final `scope=submission` verdict — the official generator's differences are large in magnitude, so adding tolerance to the submission path would cause missed detections, hence the submission verdict stays an exact comparison (`comparison/logic/index.ts` unchanged). This was already decision 28's established scope, not a new decision.
+- **Conclusion**: this TODO item was an oversight from the 2026-09-21 audit (decision 28 and the existing code were missed) and doesn't actually need any further work.
 
-### [ ] P2-5 加最小 lint + CI
-- **现状/证据**：有 `npm run typecheck`（`package.json:13`，`tsconfig.json` strict），但**无 ESLint、无 `.github/workflows`**，验证靠手跑脚本。
-- **做法**：加 ESLint（Next 官方配置）+ 一个 CI 跑 `typecheck`（+ 可选的 `test:mcp-annotations`、`test:crypto`）。不要引入重型框架。
-
-### [x] P2-6 同步文档里已知的 6 处不一致
-- **做了什么**：`docs/PHASE2_SPEC.md` 删掉不存在的 `documents/export` 端点、`test` 接口目标清单补 `lmstudio`、`§4.2` 补 `supabase-projects/deactivate`、import 列表端点补 `detected_type` 查询参数、`§1` 加了一句澄清"口令规则只管 config/mail/import 自己的接口，不是全项目所有 POST"。`docs/SHARED_INTERFACES.md` 补了 classification/extraction/comparison 三个 REST 端点的表格和对应的 3 个 MCP tool 名。`docs/UI_GUIDE.md` 第6节清空重复内容，改成指回这两份文件。
-
-### [x] 验证：评委安装部署便利性 + 新增 sandbox 模块（评委自带测试集，单条版）
-- **做了什么**：① 实测（不是看文档猜）本地零配置 `npm run dev` 和 Docker `docker compose up --build` 两条路径，确认首页/Full pipeline 预览页/`dry_run` 批量预览在完全没有 Supabase/LLM key 的情况下也能正常工作（规则引擎优先 + 样例数据读本地文件，不依赖数据库）；README 新增"评委/新人 30 秒看到它跑起来"一节把这条路径讲清楚，并说明 Supabase 的 anon key 本身不敏感、可以直接问操作者要现成的，不需要评委自己注册账号。② 发现一个真实架构缺口：分类/抽取的单文档接口只能对着仓库自带样例数据用，评委带自己的新邮件/SI/BL 文件没法测——新增 `app/features/sandbox/`（`POST /features/sandbox/api` + MCP `run_adhoc_test`）补上，不写库、不需要配置 Supabase，复用生产同一套抽取/比对引擎。顺带把 `import` 模块的文件校验逻辑抽出成 `lib/shared/file-validate.ts` 供两边共用。
-- **决策记录**：`DECISION_LOG.md` 决策32。
-- **验收**：用真实样例文件（已知有差异的 email_004 SI/BL）当"评委自己的文档"喂给 sandbox 接口，结果和正式流水线完全一致；错误路径（坏扩展名/坏base64/超限/缺文件）都返回可读错误。`npm run typecheck`、`npm run build`、`npm run test:mcp-annotations` 均通过。
-- **还没做**：批量测试集版本（一次上传一整批邮件+附件跑整箱）——操作者明确说"两个都要，先做单条"，批量版视时间决定；sandbox 的 GUI 页面（`docs/UI_GUIDE.md` §2.8 已写好交接说明，归队友A）。
+### [ ] P1-5 Multi-LLM cloud acceptance (DeepSeek to be retested after the next deploy; Claude/OpenAI still missing keys)
+- **Current state/evidence (re-checked 2026-09-21)**: `DEEPSEEK_API_KEY` has already been added to Vercel (`filter_project_envs` confirms the variable exists), but it was added (`updatedAt=1789952512687`) after the latest live deployment at the time (`d071ae9`, `created=1789914468786`) — a Vercel environment-variable change only takes effect for already-running functions after the next deploy. Testing `POST https://hackathonaveris.vercel.app/features/classification/api {"provider":"deepseek"}` currently still returns "missing environment variable," which is consistent with this explanation (it's not that the key wasn't set, it's that there hasn't been a redeploy since).
+- **Approach**: pushing this round's changes will automatically trigger a new deployment; re-run the curl command above afterward to confirm DeepSeek is fully working; `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` still need the team to obtain their own keys and add them to Vercel.
+- **Acceptance**: after the new deployment, a DeepSeek classification request returns a normal result (no more missing-key error); until Claude/OpenAI are filled in, the README honestly marks them "not configured."
 
 ---
 
-## 已完成（不要重复做）
+## P2 — Do if there's time to spare
 
-- [x] 官方判卷并留档：`private/eval-runs/20260920-1757/official-score.json`（final 1.0；分类 1.0、缺陷 F1 1.0、端到端 46/46、reliability 20/20；`score_cli.py` 交叉同分）
-- [x] AI 失败退回规则（`lib/shared/llm-chain.ts` + `rules.ts` best-effort）
-- [x] 附件按内容识别兜底（`lib/shared/document-identify.ts`）
-- [x] 提交前格式/覆盖检查（`app/features/results/logic/export/index.ts:108,155-158`）
-- [x] 文字比对分级（canonical → exact → 中间地带才 Jev）
-- [x] 字段级出处落库（`label-parser.ts:88-115` + `scripts/phase3-evidence-migration.sql`）
-- [x] 扰动测试 harness 与最近一次成绩
-- [x] MCP 注解 fail-closed + 自检脚本（`scripts/check-mcp-annotations.ts`）
-- [x] 三种部署文件齐备（`Dockerfile` / `docker-compose.yml` / `next.config.mjs` standalone）
-- [x] 已把 `docs/REVIEW_SPEC.md` 登记进 `docs/README.md`
-- [x] 导出新增 `format=csv`（响应 2026-09-21 workshop 业务方明确要的"SI/BL值+为什么mismatch"表格，见 `docs/HISTORY.md` Workshop 2、`docs/DECISION_LOG.md` 决策33）。`scope=conflicts` 是一行一个待改字段的 amendment list；`submission` 仍只认 json。README/UI_GUIDE 已同步
-- [x] 开发者模式后端（数据库清空/恢复，仅内部/评委验证用，见 `docs/DECISION_LOG.md` 决策34）：`app/features/devmode/` 三个端点（状态查询/清空/恢复），双门槛（口令+确认短语逐字匹配），刻意不注册 MCP tool。**GUI 还没做**——`docs/UI_GUIDE.md` §2.9 写了硬性要求（持续可见警示条、打字确认而非一键弹窗），交给队友A，优先级低于人工复核 GUI
+### [ ] P2-1 Release fingerprinting ("the paper we hand in matches the paper that was graded")
+- **Current state/evidence**: only `logic_version` / `input_hash` are persisted (`lib/shared/versions.ts`, `lib/shared/verification-store.ts`) — there's no script that produces "a manifest of the source files used for scoring + fingerprints + a one-click verification."
+- **Approach**: add a script that hashes the source code and scripts on the scoring/submission path into a manifest file, plus a `verify` command to compare against it. **The manifest file must not contain any answer content.**
+- **Acceptance**: `verify` is all-green when no code has changed, and reports exactly which file changed if even one line is edited.
+
+### [ ] P2-2 Document the "no OCR" policy in the public README/submission materials
+- **Current state/evidence**: the policy is already documented internally in `docs/FINALS_ROADMAP.md:44,80` (scanned/no-text-layer documents -> `NEEDS_REVIEW`), but it's absent from the README and submission materials, so it's easy to mistake for "something that was missed."
+- **Approach**: add 2-3 sentences to the README's "Capability boundaries" section: why OCR isn't done, how scanned documents are handled, and the effect on the accuracy axis.
+
+### [ ] P2-3 Surface classification's "needs human review" in the UI (frontend, teammate A)
+- **Current state/evidence**: the backend already returns `needs_review`; competitor research section 7 specifically calls out "computing it but not displaying it" as a hidden pitfall (`private/competitor-research-plain.md` lines 132, 155).
+- **Approach**: explicitly display `needs_review` and `review_reason` in the result list/detail view, with filtering support.
+
+### [ ] P2-4 Fix a nav link pointing to a page that doesn't exist (frontend, teammate A)
+- **Current state/evidence**: both the competitor research and `docs/UI_GUIDE.md` mention a nav link pointing to a page that doesn't exist yet (`/features/verification`; `docs/HISTORY.md:407` recorded a 404 for it). The `app/features/verification/ui` file exists, so it needs to be confirmed whether the route and the nav are actually wired together.
+- **Acceptance**: every link in the navigation returns 200 when clicked.
+
+### [ ] P2-5 Add minimal lint + CI
+- **Current state/evidence**: there's `npm run typecheck` (`package.json:13`, `tsconfig.json` strict), but **no ESLint and no `.github/workflows`** — verification relies on manually running scripts.
+- **Approach**: add ESLint (Next's official config) + a CI job that runs `typecheck` (plus optionally `test:mcp-annotations`, `test:crypto`). Don't bring in a heavyweight framework.
+
+### [x] P2-6 Sync up 6 known inconsistencies in the docs
+- **What was done**: `docs/PHASE2_SPEC.md` removed the nonexistent `documents/export` endpoint, added `lmstudio` to the `test` endpoint's target list, added `supabase-projects/deactivate` to `§4.2`, added the `detected_type` query parameter to the import list endpoint, and added a clarifying sentence to `§1` that "the passphrase rule only governs config/mail/import's own endpoints, not every POST in the whole project." `docs/SHARED_INTERFACES.md` gained a table for the three classification/extraction/comparison REST endpoints and their corresponding 3 MCP tool names. Section 6 of `docs/UI_GUIDE.md` had its duplicated content cleared out and now just points back to these two files.
+
+### [x] Verification: ease of judge install/deploy + a new sandbox module (judge-supplied test set, single-item version)
+- **What was done**: (1) actually tested (not guessed from the docs) both the local zero-config `npm run dev` path and the Docker `docker compose up --build` path, confirming that the homepage / full-pipeline preview page / `dry_run` batch preview all work with no Supabase/LLM key configured at all (the rules engine takes priority + sample data is read from local files, no database dependency); the README gained a "see it running in 30 seconds as a judge/newcomer" section spelling this path out, and notes that the Supabase anon key itself isn't sensitive and can just be requested ready-made from the operator, with no need for judges to register their own account. (2) found a real architectural gap: the classification/extraction single-document endpoints only work against the repo's own bundled sample data, so judges bringing their own new emails/SI/BL files had no way to test them — added `app/features/sandbox/` (`POST /features/sandbox/api` + the MCP tool `run_adhoc_test`) to fill this gap; it writes nothing to the database, needs no Supabase configuration, and reuses the exact same extraction/comparison engine as production. Also extracted the `import` module's file-validation logic into `lib/shared/file-validate.ts` so both sides can share it.
+- **Decision record**: `DECISION_LOG.md` decision 32.
+- **Acceptance**: fed real sample files (email_004 SI/BL, known to have a discrepancy) into the sandbox endpoint as "the judge's own documents," and the result exactly matched the official pipeline; error paths (bad extension/bad base64/over the limit/missing file) all return readable errors. `npm run typecheck`, `npm run build`, and `npm run test:mcp-annotations` all pass.
+- **Not done yet**: a batch test-set version (upload a whole batch of emails + attachments at once and run the lot) — the operator explicitly said "we want both, do the single-item version first"; whether the batch version gets built depends on time available; the sandbox's GUI page (`docs/UI_GUIDE.md` §2.8 already has handoff notes written up, belongs to teammate A).
+
+---
+
+## Completed (don't redo these)
+
+- [x] Official scoring run, archived: `private/eval-runs/20260920-1757/official-score.json` (final 1.0; classification 1.0, defect F1 1.0, end-to-end 46/46, reliability 20/20; cross-checked with `score_cli.py`, same score)
+- [x] AI failures fall back to rules (`lib/shared/llm-chain.ts` + `rules.ts` best-effort)
+- [x] Content-based attachment-type detection fallback (`lib/shared/document-identify.ts`)
+- [x] Pre-submission format/coverage check (`app/features/results/logic/export/index.ts:108,155-158`)
+- [x] Tiered text comparison (canonical -> exact -> only the middle ground goes to Jev)
+- [x] Field-level provenance persisted (`label-parser.ts:88-115` + `scripts/phase3-evidence-migration.sql`)
+- [x] Perturbation-test harness and its most recent score
+- [x] MCP annotations fail-closed + a self-check script (`scripts/check-mcp-annotations.ts`)
+- [x] All three deployment files in place (`Dockerfile` / `docker-compose.yml` / `next.config.mjs` standalone)
+- [x] `docs/REVIEW_SPEC.md` has been registered in `docs/README.md`
+- [x] Export gained `format=csv` (in response to the "SI/BL values + why it's a mismatch" table the business side explicitly asked for at the 2026-09-21 workshop; see `docs/HISTORY.md` Workshop 2, `docs/DECISION_LOG.md` decision 33). `scope=conflicts` is an amendment list, one row per field to fix; `submission` still only accepts json. README/UI_GUIDE have been kept in sync
+- [x] Developer-mode backend (database wipe/restore, for internal/judge verification use only; see `docs/DECISION_LOG.md` decision 34): three endpoints under `app/features/devmode/` (status query/wipe/restore), gated by two factors (a passphrase + a confirmation phrase matched verbatim), deliberately not registered as an MCP tool. **The GUI still isn't built** — `docs/UI_GUIDE.md` §2.9 documents the hard requirements (a persistently visible warning banner, typed confirmation rather than a one-click popup), handed off to teammate A, lower priority than the manual-review GUI

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""扰动测试集的 office 文件生成器（被 scripts/perturb-generate.mjs 调用）。
+"""Office-file generator for the perturbation test set (called by scripts/perturb-generate.mjs).
 
-输入：一个 JSON 任务文件，每项 {kind: "xlsx"|"docx", outPath, title, rows:[{label,value}], notes:[str]}
-用途：把 txt 附件重建为"奇怪但合法"的 xlsx / docx，测试解析器对布局变化的鲁棒性。
+Input: a JSON task file, each item {kind: "xlsx"|"docx", outPath, title, rows:[{label,value}], notes:[str]}
+Purpose: rebuild txt attachments as "weird but valid" xlsx / docx files, to test the parser's
+robustness against layout variation.
 """
 import json
 import sys

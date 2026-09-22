@@ -1,6 +1,7 @@
 /**
- * 批量请求参数的唯一校验/归一化入口。
- * HTTP 层（JSON body）和 MCP 层（typed 参数）都走这里，不在各自传输层重写规则。
+ * The single validation/normalization entry point for batch request parameters.
+ * Both the HTTP layer (JSON body) and the MCP layer (typed parameters) go through here, instead of
+ * each transport layer rewriting the rules.
  */
 import { isLLMProvider, type LLMProvider } from "@/lib/llm";
 import { BatchRequestError } from "./errors";
@@ -25,7 +26,7 @@ export interface RawBatchInput {
 export function normalizeBatchRequest(raw: unknown): RunBatchRequest {
   if (raw === undefined || raw === null) raw = {};
   if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw new BatchRequestError("请求体必须是一个 JSON 对象");
+    throw new BatchRequestError("The request body must be a JSON object");
   }
   const input = raw as RawBatchInput;
 
@@ -33,7 +34,7 @@ export function normalizeBatchRequest(raw: unknown): RunBatchRequest {
   const retryFailed = toBoolean(input.retry_failed, "retry_failed") ?? false;
   if (retryFailed && emailIds) {
     throw new BatchRequestError(
-      "retry_failed 不能和 email_ids 同时使用：重试名单由服务端从结果表里自动挑（处理失败或降级的邮件）"
+      "retry_failed cannot be used together with email_ids: the retry list is picked automatically by the server from the results table (emails that failed processing or were degraded)"
     );
   }
 
@@ -63,7 +64,7 @@ function toEmailIds(value: unknown): string[] | undefined {
     .filter((item) => item !== "");
   if (ids.length === 0) return undefined;
   if (ids.length > BATCH_MAX_LIMIT) {
-    throw new BatchRequestError(`email_ids 一次最多 ${BATCH_MAX_LIMIT} 个`);
+    throw new BatchRequestError(`email_ids can have at most ${BATCH_MAX_LIMIT} entries per call`);
   }
   return [...new Set(ids)];
 }
@@ -72,12 +73,12 @@ function toProvider(value: unknown): LLMProvider | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (!isLLMProvider(value)) {
     throw new BatchRequestError(
-      `provider 不支持：${String(value)}（可选 claude / openai / deepseek / gemini / lmstudio）`
+      `provider not supported: ${String(value)} (allowed: claude / openai / deepseek / gemini / lmstudio)`
     );
   }
   if (value === "jev") {
     throw new BatchRequestError(
-      "jev 只能做结构化判断（分类/比对），不能当批量流程里的文本兜底模型，请换 gemini 等文本模型"
+      "jev can only do structured judgments (classification/comparison), it cannot be used as the text fallback model in the batch pipeline — please use gemini or another text model instead"
     );
   }
   return value;
@@ -89,7 +90,7 @@ function toBoolean(value: unknown, label: string): boolean | undefined {
   const text = String(value).toLowerCase();
   if (text === "true" || text === "1") return true;
   if (text === "false" || text === "0") return false;
-  throw new BatchRequestError(`${label} 只能是 true / false，收到：${String(value)}`);
+  throw new BatchRequestError(`${label} must be true / false, got: ${String(value)}`);
 }
 
 function toInteger(
@@ -102,7 +103,7 @@ function toInteger(
   if (value === undefined || value === null || value === "") return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-    throw new BatchRequestError(`${label} 必须是 ${min}~${max} 之间的整数，收到：${String(value)}`);
+    throw new BatchRequestError(`${label} must be an integer between ${min} and ${max}, got: ${String(value)}`);
   }
   return parsed;
 }

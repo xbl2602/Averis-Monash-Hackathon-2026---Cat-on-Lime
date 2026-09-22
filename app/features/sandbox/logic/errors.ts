@@ -1,9 +1,10 @@
 /**
- * sandbox feature 的错误类型：api 层据此映射 HTTP 状态码（见 lib/shared/request-errors.ts）。
- * 显式设置 name：请求错误映射按稳定 name 匹配，不用互相 import 错误类。
+ * Error types for the sandbox feature: the API layer maps these to HTTP status codes
+ * (see lib/shared/request-errors.ts). name is set explicitly so the request-error mapping
+ * can match on a stable name without importing the error classes across modules.
  */
 
-/** 请求参数/文件内容不合法 → 400 */
+/** Invalid request parameters/file content → 400 */
 export class SandboxRequestError extends Error {
   constructor(message: string) {
     super(message);
@@ -11,7 +12,7 @@ export class SandboxRequestError extends Error {
   }
 }
 
-/** 单文件超过大小上限 → 413 */
+/** A single file exceeds the size limit → 413 */
 export class SandboxFileTooLargeError extends Error {
   constructor(message: string) {
     super(message);

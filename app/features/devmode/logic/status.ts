@@ -2,7 +2,7 @@ import { getSupabaseServiceClient } from "@/lib/shared/supabase";
 import { DEVMODE_DATA_TABLES, DEVMODE_EXCLUDED_TABLES, DEVMODE_WARNING } from "./types";
 import type { DevModeStatusResponse, TableStatus } from "./types";
 
-/** 只读：给开发者模式页面展示"现在每张表有多少行"，不改任何数据 */
+/** Read-only: shows the developer-mode page "how many rows each table currently has," without changing any data */
 export async function getDevModeStatus(): Promise<DevModeStatusResponse> {
   const supabase = getSupabaseServiceClient();
 

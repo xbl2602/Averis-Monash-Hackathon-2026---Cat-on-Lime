@@ -1,4 +1,4 @@
-/** JSON 序列化：唯一的 JSON 出口，保证缩进/编码一致 */
+/** JSON serialization: the single JSON exit point, ensuring consistent indentation/encoding */
 export function toJson(payload: unknown): string {
   return JSON.stringify(payload, null, 2);
 }

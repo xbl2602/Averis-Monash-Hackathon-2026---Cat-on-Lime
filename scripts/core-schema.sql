@@ -1,14 +1,14 @@
--- 核心三表 + 只读视图 + 模型调用缓存表（P0-1，2026-09-21）
--- 用法：Supabase 控制台 → SQL Editor → 全部粘贴执行（幂等，可重复执行）。
--- 执行顺序：先跑这份，再跑 scripts/phase2-schema.sql + scripts/phase2-rls.sql（第二阶段业务表），
--- 最后跑 scripts/phase3-evidence-migration.sql（本文件已包含它的最终结果，通常不需要再单独跑）。
--- 执行后按 README「数据库初始化（新环境/换项目必读）」做一次 anon 只读探测。
+-- The three core tables + read-only view + model-call cache table (P0-1, 2026-09-21)
+-- Usage: Supabase console -> SQL Editor -> paste all and run (idempotent, safe to re-run).
+-- Run order: run this one first, then scripts/phase2-schema.sql + scripts/phase2-rls.sql (phase-2 business tables),
+-- and finally scripts/phase3-evidence-migration.sql (this file already includes its final result, so you usually don't need to run it separately).
+-- After running, do an anon read-only probe as described in the README's "Database initialization (must-read for a new environment/project)".
 --
--- 说明：本文件的列定义是从现有正式 Supabase 项目（rapuvaalzlrsjodjwqtw）用
--- list_tables 内省导出的真实结构，不是从代码反推的猜测；新建环境跑完这份应该和正式项目结构一致。
+-- Note: the column definitions in this file are the real structure exported via list_tables introspection
+-- from the existing production Supabase project (rapuvaalzlrsjodjwqtw) — not a guess reverse-engineered from code; a new environment should match the production structure after running this.
 
 -- ============================================================
--- 1) raw_emails：原始层（邮件原样数据，只读不改，由导入脚本写入）
+-- 1) raw_emails: raw layer (emails verbatim, read-only, written by the import script)
 -- ============================================================
 create table if not exists public.raw_emails (
   email_id text primary key,
@@ -21,11 +21,11 @@ create table if not exists public.raw_emails (
   content_hash text
 );
 
-comment on table public.raw_emails is '原始层：邮件原样数据（sender/subject/body/附件清单），由 scripts/import-sample-data.mjs 导入，只读不改';
-comment on column public.raw_emails.content_hash is '邮件原样内容的指纹（sha256）：增量导入时内容没变就跳过';
+comment on table public.raw_emails is 'Raw layer: emails verbatim (sender/subject/body/attachment list), imported by scripts/import-sample-data.mjs, read-only';
+comment on column public.raw_emails.content_hash is 'Fingerprint (sha256) of the raw email content: skipped during incremental import if content is unchanged';
 
 -- ============================================================
--- 2) parsed_attachments：文字层（附件解析出的文字 + 扁平化文本）
+-- 2) parsed_attachments: text layer (text parsed from attachments + flattened text)
 -- ============================================================
 create table if not exists public.parsed_attachments (
   email_id text not null references public.raw_emails (email_id),
@@ -40,11 +40,11 @@ create table if not exists public.parsed_attachments (
   primary key (email_id, file_path)
 );
 
-comment on table public.parsed_attachments is '文字层：附件解析出的文字与扁平化文本；扫描件/损坏文件 parse_status=unreadable（以后接 OCR 重跑导入补上）';
-comment on column public.parsed_attachments.content_hash is '解析结果（状态+文字）的指纹：增量导入时没变就跳过';
+comment on table public.parsed_attachments is 'Text layer: text parsed from attachments and flattened text; scanned/corrupted files get parse_status=unreadable (to be backfilled later by re-running import with OCR)';
+comment on column public.parsed_attachments.content_hash is 'Fingerprint of the parse result (status + text): skipped during incremental import if unchanged';
 
 -- ============================================================
--- 3) verification_results：结果层（分类/抽取/比对结果，按 email_id upsert 写入）
+-- 3) verification_results: results layer (classification/extraction/comparison results, written via upsert keyed on email_id)
 -- ============================================================
 create table if not exists public.verification_results (
   email_id text primary key references public.raw_emails (email_id),
@@ -71,15 +71,15 @@ create table if not exists public.verification_results (
   evidence_bl jsonb
 );
 
-comment on table public.verification_results is '结果层：分类/抽取/比对结果（按 email_id upsert 写入）';
-comment on column public.verification_results.input_hash is '产出该结果时的输入指纹（邮件+附件文本）：没变就跳过重算';
-comment on column public.verification_results.logic_version is '引擎版本号：规则/提示词改动时手动 +1，用于让旧结果/旧缓存失效';
-comment on column public.verification_results.processing_status is '流水线处理状态：ok=正常产出结果；failed=处理失败（原因见 error_message）';
-comment on column public.verification_results.error_message is '处理失败时的可读错误信息，成功时为 null';
-comment on column public.verification_results.defect_count is 'defect_fields 的数量（生成列，数据库自动维护），用于排序和统计';
+comment on table public.verification_results is 'Results layer: classification/extraction/comparison results (written via upsert keyed on email_id)';
+comment on column public.verification_results.input_hash is 'Fingerprint of the input (email + attachment text) at the time this result was produced: skip recomputation if unchanged';
+comment on column public.verification_results.logic_version is 'Engine version number: manually incremented when rules/prompts change, used to invalidate old results/old cache entries';
+comment on column public.verification_results.processing_status is 'Pipeline processing status: ok = result produced normally; failed = processing failed (see error_message for the reason)';
+comment on column public.verification_results.error_message is 'Human-readable error message when processing fails; null on success';
+comment on column public.verification_results.defect_count is 'Count of defect_fields (a generated column maintained automatically by the database), used for sorting and stats';
 
 -- ============================================================
--- 4) llm_call_cache：模型调用缓存（仅服务端 service role 可读写，无 anon 策略）
+-- 4) llm_call_cache: model-call cache (readable/writable only by the server-side service role, no anon policy)
 -- ============================================================
 create table if not exists public.llm_call_cache (
   cache_key text primary key,
@@ -92,13 +92,13 @@ create table if not exists public.llm_call_cache (
   last_used_at timestamptz not null default now()
 );
 
-comment on table public.llm_call_cache is '模型调用缓存：键=实际发送内容的指纹+模型+用途+版本；仅服务端（service role）可读写';
-comment on column public.llm_call_cache.cache_key is 'sha256(用途|版本|provider|model|实际发送内容)';
-comment on column public.llm_call_cache.request_payload is '当次实际发送给模型的内容（含截断后的版本），用于核对缓存对应哪次输入';
-comment on column public.llm_call_cache.response_payload is '模型返回的完整结果（不存截断版）';
+comment on table public.llm_call_cache is 'Model-call cache: key = fingerprint of the actual sent content + model + purpose + version; readable/writable only server-side (service role)';
+comment on column public.llm_call_cache.cache_key is 'sha256(purpose|version|provider|model|actual sent content)';
+comment on column public.llm_call_cache.request_payload is 'The content actually sent to the model for this call (including the truncated version), used to verify which input the cache entry corresponds to';
+comment on column public.llm_call_cache.response_payload is 'The full result returned by the model (the truncated version is not stored)';
 
 -- ============================================================
--- 5) verification_overview：只读视图（results 模块查询用；含 phase3 的 evidence 两列）
+-- 5) verification_overview: read-only view (used by the results module's queries; includes the two phase-3 evidence columns)
 -- ============================================================
 create or replace view public.verification_overview
 with (security_invoker = true) as
@@ -127,7 +127,7 @@ from public.raw_emails e
 left join public.verification_results r on r.email_id = e.email_id;
 
 -- ============================================================
--- 6) RLS：三张业务表开放 anon 只读；llm_call_cache 不给 anon 任何策略（服务端专用）
+-- 6) RLS: the three business tables allow anon read-only; llm_call_cache has no anon policy at all (server-only)
 -- ============================================================
 alter table public.raw_emails enable row level security;
 alter table public.parsed_attachments enable row level security;
@@ -146,6 +146,6 @@ drop policy if exists "public read verification_results" on public.verification_
 create policy "public read verification_results"
   on public.verification_results for select to anon using (true);
 
--- llm_call_cache 故意不建 anon 策略：RLS 已启用且没有任何策略 = 默认拒绝所有非 service role 访问，
--- 写入/读取都走 service role key（绕过 RLS），这是 results 模块 stats/list/conflicts/export 之外
--- 唯一不需要 anon 可读的表。
+-- llm_call_cache intentionally has no anon policy: RLS is enabled with no policies at all = deny by default for any
+-- non-service-role access; both writes and reads go through the service role key (bypassing RLS). This is the
+-- only table outside the results module's stats/list/conflicts/export that doesn't need to be anon-readable.

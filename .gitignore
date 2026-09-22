@@ -9,7 +9,7 @@ next-env.d.ts
 # production build
 /build
 
-# env files — 真正的密钥只放在这些文件里，不要提交
+# env files — real secrets live only in these files; do not commit them
 .env
 .env.local
 .env*.local
@@ -22,13 +22,13 @@ npm-debug.log*
 # TypeScript build info
 *.tsbuildinfo
 
-# 私有调研资料与编排日志 —— 不进 git、不提交、不推送
+# Private research materials and orchestration logs — never added to git, committed, or pushed
 /private/
 /.paizhang/
 
-# 扰动测试集为生成物（由 scripts/perturb-generate.mjs 重建）
+# The perturbation test set is generated output (rebuilt by scripts/perturb-generate.mjs)
 /data/perturb/
 
-# Python 缓存（score_cli.py 本地运行产生）
+# Python cache (produced by running score_cli.py locally)
 __pycache__/
 *.pyc

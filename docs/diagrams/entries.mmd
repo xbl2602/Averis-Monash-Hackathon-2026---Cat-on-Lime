@@ -1,7 +1,7 @@
-%% 源码：README Ecosystem 节多入口图 + docs/diagrams/entries.png。
-%% 重渲染命令（仓库根目录）：npx -y @mermaid-js/mermaid-cli -i docs/diagrams/entries.mmd -o docs/diagrams/entries.png -c docs/diagrams/mermaid-config.json -b white -s 2
-%% 1→3 扇形用 LR 两列排（约 4:3）；写保护细节折进标签，匿名 dry_run 见 caption。
+%% Source: the README Ecosystem section multi-entry-point diagram + docs/diagrams/entries.png.
+%% Re-render command (from repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/entries.mmd -o docs/diagrams/entries.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% The 1-to-3 fan-out is laid out in two LR columns (roughly 4:3); write-protection details are folded into the labels — see the caption for anonymous dry_run.
 flowchart LR
-    L["同一套 logic/<br/>分类·抽取·比对·批量·复核"] --> G["Web UI<br/>人点的页面"]
-    L --> A["REST API<br/>读开放 · 写要口令"]
-    L --> M["MCP Server<br/>AI agent 调的 tools"]
+    L["Same logic/ layer<br/>classification · extraction · comparison · batch · review"] --> G["Web UI<br/>pages people click through"]
+    L --> A["REST API<br/>reads open · writes need a passphrase"]
+    L --> M["MCP Server<br/>tools called by AI agents"]

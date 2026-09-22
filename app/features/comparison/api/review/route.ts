@@ -1,11 +1,11 @@
 import { makeReviewActionPostHandler, makeReviewQueueGetHandler } from "@/lib/shared/review/http";
 
-// 人工复核闭环（P1-1）：comparison 是 MISMATCH/NEEDS_REVIEW 签字的核心入口。
-// GET 返回复核队列（?include_ok/q/status/reason/review_state/limit/offset）；
-// POST 应用一个动作（需要 x-admin-token）。字段/动作契约见 docs/REVIEW_SPEC.md、SHARED_INTERFACES.md。
+// Manual review loop (P1-1): comparison is the core sign-off entry point for MISMATCH/NEEDS_REVIEW.
+// GET returns the review queue (?include_ok/q/status/reason/review_state/limit/offset);
+// POST applies an action (requires x-admin-token). See docs/REVIEW_SPEC.md and SHARED_INTERFACES.md for the field/action contract.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// rerun 动作会跑一次完整流水线（可能调模型），给够时间
+// The rerun action runs the full pipeline once (may call a model), so allow enough time
 export const maxDuration = 30;
 
 export const GET = makeReviewQueueGetHandler("comparison");

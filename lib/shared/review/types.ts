@@ -1,7 +1,8 @@
 /**
- * 人工复核闭环（P1-1，见 docs/REVIEW_SPEC.md）的共用类型。
- * 唯一来源：四个模块（classification/extraction/comparison/pipeline）的 REST/MCP
- * 都从这里 import，不要各自重复定义一份。
+ * Shared types for the human-review loop (P1-1, see docs/REVIEW_SPEC.md).
+ * Single source of truth: the REST/MCP of all four modules
+ * (classification/extraction/comparison/pipeline) import from here — don't redefine a copy
+ * in each module.
  */
 import type {
   ComparedField,
@@ -26,7 +27,7 @@ export function isReviewTargetKind(value: unknown): value is ReviewTargetKind {
 export const REVIEW_STATES = ["confirmed", "corrected", "deferred"] as const;
 export type ReviewState = (typeof REVIEW_STATES)[number];
 
-// /review 接受的动作；undo 走独立的 /review/undo 端点，不在这个枚举里
+// Actions accepted by /review; undo goes through the separate /review/undo endpoint and isn't in this enum
 export const REVIEW_ACTION_TYPES = [
   "confirm",
   "correct",
@@ -38,7 +39,7 @@ export const REVIEW_ACTION_TYPES = [
 ] as const;
 export type ReviewActionType = (typeof REVIEW_ACTION_TYPES)[number];
 
-// 审计日志里出现的动作类型比 REVIEW_ACTION_TYPES 多一个 undo
+// The audit log has one more action type than REVIEW_ACTION_TYPES: undo
 export const REVIEW_AUDIT_ACTION_TYPES = [...REVIEW_ACTION_TYPES, "undo"] as const;
 export type ReviewAuditActionType = (typeof REVIEW_AUDIT_ACTION_TYPES)[number];
 
@@ -56,7 +57,7 @@ export function isReviewDisposition(value: unknown): value is ReviewDisposition 
   return typeof value === "string" && (REVIEW_DISPOSITIONS as readonly string[]).includes(value);
 }
 
-/** review_overrides 表的一行（当前生效的人工结论） */
+/** A row in the review_overrides table (the currently effective human conclusion) */
 export interface ReviewOverride {
   target_kind: ReviewTargetKind;
   email_id: string;
@@ -74,7 +75,7 @@ export interface ReviewOverride {
   updated_at: string;
 }
 
-/** review_actions 表的一行（append-only 审计） */
+/** A row in the review_actions table (append-only audit log) */
 export interface ReviewActionRow {
   id: number;
   target_kind: ReviewTargetKind;
@@ -90,7 +91,7 @@ export interface ReviewActionRow {
   created_at: string;
 }
 
-/** 复核队列一项：系统原始结论 + 人工覆盖 + 合并后的有效结论 */
+/** One item in the review queue: the system's original conclusion + the human override + the merged effective conclusion */
 export interface ReviewQueueItem {
   email_id: string;
   subject: string;
@@ -105,7 +106,7 @@ export interface ReviewQueueItem {
   updated_at: string | null;
 }
 
-/** POST .../review 请求体（一次一个动作） */
+/** POST .../review request body (one action at a time) */
 export interface ApplyReviewActionRequest {
   email_id: string;
   action: ReviewActionType;

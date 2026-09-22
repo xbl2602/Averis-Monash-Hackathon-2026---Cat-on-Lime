@@ -1,11 +1,15 @@
 /**
- * 把人工覆盖叠加到系统结果之上，供 results 导出的 scope=submission 使用（§5.1/§5.2）。
- * 只有 classification（改 category）和 comparison（改 status/review_reason/defect_fields）
- * 两个 target_kind 会影响最终提交格式——extraction/pipeline 的覆盖不直接进 EmailVerificationResult
- * （官方提交格式本来就不含抽取字段/处置状态，见 lib/shared/types.ts 的 EmailVerificationResult）。
+ * Layers human overrides on top of the system results, for use by the results export's
+ * scope=submission (§5.1/§5.2).
+ * Only the classification (changes category) and comparison (changes
+ * status/review_reason/defect_fields) target_kinds affect the final submission format —
+ * extraction/pipeline overrides don't feed directly into EmailVerificationResult (the
+ * official submission format doesn't include extracted fields/disposition status to begin
+ * with, see EmailVerificationResult in lib/shared/types.ts).
  *
- * 只有 scope=submission 套用覆盖；scope=results/conflicts 仍展示系统原值（§5.3），
- * 所以这个函数只从 export/index.ts 的 buildSubmissionDocument 调用，不要在别处复用。
+ * Only scope=submission applies overrides; scope=results/conflicts still show the system's
+ * original values (§5.3), so this function should only be called from
+ * buildSubmissionDocument in export/index.ts — don't reuse it elsewhere.
  */
 import type { ComparedField, EmailVerificationResult } from "@/lib/shared/types";
 import { isConsistentOverride } from "./normalize";
@@ -14,9 +18,9 @@ import type { ReviewOverride } from "./types";
 
 export interface ApplyOverridesResult {
   payload: Record<string, EmailVerificationResult>;
-  /** 应该复核但还没处置的项数：NEEDS_REVIEW/MISMATCH 且没有对应的非-deferred 覆盖 */
+  /** Number of items that should have been reviewed but haven't been dispositioned yet: NEEDS_REVIEW/MISMATCH with no corresponding non-deferred override */
   reviewPending: number;
-  /** 被搁置、未闭环的项数 */
+  /** Number of items that were deferred and never closed out */
   reviewDeferred: number;
 }
 
@@ -90,7 +94,7 @@ function mergeOne(
 
   if (!isConsistentOverride({ comparison_status: status, review_reason, defect_fields })) {
     console.warn(
-      `[review/merge] 邮件 ${emailId} 的人工结论合并后不合法（${status}/${review_reason}/${defect_fields.length}个缺陷），回退系统结果，不静默放过`
+      `[review/merge] The merged human conclusion for email ${emailId} is invalid (${status}/${review_reason}/${defect_fields.length} defect(s)); falling back to the system result instead of silently letting it through`
     );
     return system;
   }

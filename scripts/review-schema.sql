@@ -1,9 +1,9 @@
--- 人工复核闭环的两张表（P1-1，见 docs/REVIEW_SPEC.md §3）
--- 用法：Supabase 控制台 → SQL Editor → 全部粘贴执行（幂等，可重复执行）。
--- 读对 anon 开放（复核队列/历史匿名可看），写只有 service role（REST/MCP 走 service client）。
+-- The two tables for the manual review loop (P1-1, see docs/REVIEW_SPEC.md §3)
+-- Usage: Supabase console -> SQL Editor -> paste all and run (idempotent, safe to re-run).
+-- Reads are open to anon (the review queue/history are visible anonymously); writes are service-role only (REST/MCP go through the service client).
 
 -- ============================================================
--- 1) review_overrides：当前生效的人工结论，每个 (target_kind, email_id) 一行
+-- 1) review_overrides: the currently effective human conclusion, one row per (target_kind, email_id)
 -- ============================================================
 create table if not exists public.review_overrides (
   id uuid primary key default gen_random_uuid(),
@@ -30,10 +30,10 @@ create table if not exists public.review_overrides (
   unique (target_kind, email_id)
 );
 
-comment on table public.review_overrides is '人工复核闭环：当前生效的人工结论（每个 target_kind+email_id 一行，upsert 写入，updated_at 做乐观锁）';
+comment on table public.review_overrides is 'Manual review loop: the currently effective human conclusion (one row per target_kind+email_id, written via upsert, updated_at used as an optimistic lock)';
 
 -- ============================================================
--- 2) review_actions：append-only 审计日志
+-- 2) review_actions: append-only audit log
 -- ============================================================
 create table if not exists public.review_actions (
   id bigint generated always as identity primary key,
@@ -54,13 +54,13 @@ create table if not exists public.review_actions (
   created_at timestamptz not null default now()
 );
 
-comment on table public.review_actions is '人工复核闭环：只增不改的动作审计日志（撤销也是追加一条 undo 行）';
+comment on table public.review_actions is 'Manual review loop: an append-only action audit log (an undo is also just an appended undo row)';
 
 create index if not exists review_actions_target_idx
   on public.review_actions (target_kind, email_id, created_at desc);
 
 -- ============================================================
--- 3) RLS：读开放给 anon，写只走 service role（不建 anon 的 insert/update 策略）
+-- 3) RLS: reads open to anon; writes go through service role only (no anon insert/update policies are created)
 -- ============================================================
 alter table public.review_overrides enable row level security;
 alter table public.review_actions enable row level security;

@@ -1,8 +1,10 @@
 /**
- * 把样例邮件批量加载成流水线输入（邮件本体 + 每个附件解析出的文字）。
+ * Batch-loads the sample emails into pipeline inputs (the email itself + the parsed text of
+ * each attachment).
  *
- * 这是"读数据"的基础设施，放在 /lib/shared：批量入口、评测脚本都用这一份，
- * 不要各自复制"读 inbox 目录 + 逐附件解析"的逻辑（DATA_FLOW.md 数据流规则第 4 条）。
+ * This is "data-reading" infrastructure that lives in /lib/shared: both the batch entry point
+ * and the evaluation scripts use this single copy — don't each duplicate the "read the inbox
+ * directory + parse each attachment" logic (rule 4 of the data-flow rules in DATA_FLOW.md).
  */
 import path from "node:path";
 import { extractAttachmentText, type AttachmentTextResult } from "./attachment-text";
@@ -11,12 +13,13 @@ import { listSampleEmails, readSampleAttachmentBuffer } from "./inbox";
 import type { PipelineAttachment, PipelineEmailInput } from "./pipeline";
 import type { InboxEmail } from "./types";
 
-// 纯本地文件解析的并发上限（不调模型，只是别一次开 520 个文件句柄）
+// Concurrency cap for pure local file parsing (no model calls here, just to avoid opening 520 file handles at once)
 const PARSE_CONCURRENCY = 8;
 
 /**
- * 单份样例附件 → 解析后的文字（PDF/xlsx/docx/txt 都走这里）。
- * extraction 的 REST/MCP 单文档接口用它，不要直接按 UTF-8 读 PDF（那样只能读出乱码）。
+ * A single sample attachment -> its parsed text (PDF/xlsx/docx/txt all go through here).
+ * extraction's REST/MCP single-document endpoint uses this — don't read a PDF as raw UTF-8
+ * directly (that only produces garbage).
  */
 export async function readSampleAttachmentParsed(
   attachmentPath: string
@@ -25,10 +28,10 @@ export async function readSampleAttachmentParsed(
   return extractAttachmentText(path.basename(attachmentPath), buffer);
 }
 
-// 只读文件名、不解析 JSON 的轻量清单（实现已挪到 inbox.ts；这里 re-export 保持调用方路径不变）
+// A lightweight listing that only reads filenames without parsing the JSON (the implementation has moved to inbox.ts; re-exported here so callers' import paths stay unchanged)
 export { listSampleEmailIds } from "./inbox";
 
-/** emailIds 不传 = 全部；limit 不传 = 不限制（评测脚本 --limit 用） */
+/** emailIds omitted = all of them; limit omitted = unlimited (used by the evaluation script's --limit) */
 export async function loadSamplePipelineInputs(
   emailIds?: string[],
   limit?: number
@@ -38,7 +41,8 @@ export async function loadSamplePipelineInputs(
   const selected =
     limit === undefined ? selectedByEmailIds : selectedByEmailIds.slice(0, limit);
 
-  // 并发解析，但结果按 inbox 原始顺序返回：批量入口的 limit=前 N 封 必须可复现
+  // Parsed concurrently, but the results are returned in the original inbox order: the batch
+  // entry point's "limit = first N emails" must be reproducible
   const indexed = selected.map((email, index) => ({ email, index }));
   const { succeeded, failed } = await mapWithConcurrencyLimit(
     indexed,
@@ -49,7 +53,7 @@ export async function loadSamplePipelineInputs(
   if (failed.length > 0) {
     const first = failed[0];
     throw new Error(
-      `加载样例邮件 ${first.item.email.email_id} 失败：${describeError(first.error)}`
+      `Failed to load sample email ${first.item.email.email_id}: ${describeError(first.error)}`
     );
   }
 
@@ -71,10 +75,11 @@ async function toPipelineInput(email: InboxEmail): Promise<PipelineEmailInput> {
         const parsed = await extractAttachmentText(path.basename(attachmentPath), buffer);
         return { path: attachmentPath, parseStatus: parsed.status, text: parsed.text };
       } catch (err) {
-        // 附件文件本身读不出来（缺失/权限等）：按"读不了的附件"处理，
-        // 让流水线判 unreadable，而不是让整批一起失败
+        // The attachment file itself couldn't be read (missing/permissions/etc.): treat it as
+        // an "unreadable attachment" so the pipeline marks it unreadable instead of failing
+        // the whole batch
         console.warn(
-          `[sample-inputs] 附件 ${attachmentPath} 读取失败，按 unreadable 处理：${describeError(err)}`
+          `[sample-inputs] Failed to read attachment ${attachmentPath}, treating as unreadable: ${describeError(err)}`
         );
         return { path: attachmentPath, parseStatus: "unreadable", text: "" };
       }

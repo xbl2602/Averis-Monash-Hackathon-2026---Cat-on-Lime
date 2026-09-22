@@ -1,8 +1,8 @@
 /**
- * results 模块的两类可预期错误：
- * - ResultQueryError：查询参数不合法（HTTP 400 / MCP 返回可读错误）
- * - DataAccessError：读取 Supabase 失败（HTTP 503）
- * 其余未预期错误由各传输层兜底成 500，不在这里吞掉。
+ * The two expected error types in the results module:
+ * - ResultQueryError: invalid query parameters (HTTP 400 / MCP returns a readable error)
+ * - DataAccessError: failed to read from Supabase (HTTP 503)
+ * Any other unexpected error is caught as a 500 by each transport layer — not swallowed here.
  */
 
 export class ResultQueryError extends Error {

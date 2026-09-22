@@ -1,9 +1,12 @@
 /**
- * verification_results 结果表的读写封装（唯一入口）。
+ * Read/write wrapper for the verification_results table (single entry point).
  *
- * 谁用：评测脚本 `scripts/evaluate.ts`、批量入口 `app/features/pipeline/`。
- * 写入一律 upsert（冲突键 email_id，见 CLAUDE.md「高并发」），不要"先查后插"。
- * 读用公开只读的 anon key，写用 service role key（有权限差异，别混）。
+ * Used by: the evaluation script `scripts/evaluate.ts` and the batch entry point
+ * `app/features/pipeline/`.
+ * Writes always use upsert (conflict key email_id, see the "High Concurrency" section of
+ * CLAUDE.md) — never "query then insert".
+ * Reads use the publicly readable anon key; writes use the service role key (they carry
+ * different permissions, so don't mix them up).
  */
 import { getSupabaseClient, getSupabaseServiceClient } from "./supabase";
 import {
@@ -22,7 +25,7 @@ import type {
 
 export type ProcessingStatus = "ok" | "failed";
 
-/** 从结果表读回来的一行（增量跳过判断用） */
+/** A row read back from the results table (used for incremental-skip decisions) */
 export interface StoredVerificationRow {
   email_id: string;
   category: EmailCategory | null;
@@ -36,7 +39,7 @@ export interface StoredVerificationRow {
   processing_status: ProcessingStatus;
 }
 
-/** 要写进 verification_results 的一行（snake_case 对应数据库列名） */
+/** A row to write into verification_results (snake_case matches the DB column names) */
 export interface VerificationResultRow {
   email_id: string;
   category: EmailCategory | null;
@@ -67,7 +70,7 @@ export async function loadStoredVerificationRows(): Promise<Map<string, StoredVe
     .select(SELECT_COLUMNS)
     .limit(5000);
 
-  if (error) throw new Error(`读取 verification_results 失败：${error.message}`);
+  if (error) throw new Error(`Failed to read verification_results: ${error.message}`);
 
   const rows = new Map<string, StoredVerificationRow>();
   for (const row of (data ?? []) as StoredVerificationRow[]) {
@@ -105,7 +108,7 @@ export function buildSuccessRow(
   };
 }
 
-/** 处理失败的邮件也要留痕：结果层看得见 failed + 原因，重跑时也会自动重试（见增量判断） */
+/** Emails that fail processing must also leave a trace: the results layer can see failed + the reason, and reruns will automatically retry them (see incremental-skip logic) */
 export function buildFailureRow(
   input: PipelineEmailInput,
   error: unknown,
@@ -141,7 +144,7 @@ export async function upsertVerificationRows(rows: VerificationResultRow[]): Pro
       .upsert(batch, { onConflict: "email_id" });
     if (error) {
       throw new Error(
-        `写入 verification_results 第 ${i + 1}~${i + batch.length} 行失败：${error.message}`
+        `Failed to write verification_results rows ${i + 1}-${i + batch.length}: ${error.message}`
       );
     }
   }

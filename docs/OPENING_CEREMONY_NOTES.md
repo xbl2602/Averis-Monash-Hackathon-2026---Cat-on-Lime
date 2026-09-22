@@ -1,139 +1,139 @@
-# 开幕式纪要（2026-09-18 虚拟开幕式）
+# Opening Ceremony Notes (2026-09-18 Virtual Opening Ceremony)
 
-来源：官方开幕式录音转录文本（会议记录）。本文件是整理后的重点摘要，不是逐字稿；原始转录文本较乱（含语音识别错误、多语言混杂），已按内容整理成结构化条目。
+Source: the official transcript of the opening-ceremony recording (meeting minutes). This document is an organized summary of the highlights, not a verbatim transcript; the raw transcript was messy (speech-recognition errors, mixed languages), so it has been organized into structured entries by content.
 
-> 注意：转录文本里主办方名字被识别成了"Everest"，但结合《Rules and Regulations.md》和赛事官网，正确名字应为 **Averis**，下面统一写 Averis。这是语音识别的错误，不是真的改名了。
-
----
-
-## 1. 主办方背景（比之前调研更明确）
-
-- Averis 是一家全球性的**商业与技术服务提供商**（business and technology services provider），业务覆盖财务、技术、数据、数字化转型等领域，属于共享服务/外包性质的公司。
-- 开幕式主讲嘉宾：**Ms. Chin**，Averis 的 Head of HR, IT and Digital（人力资源、IT与数字化负责人），做开场致辞。
-- 题目由 **Mr. Sergio**（Averis 的 software engineer）现场公布并答疑。
-- 致辞里提到的招聘偏好，可以作为团队展示时的加分方向：Averis 提到他们看重的不只是技术能力，还有好奇心、适应力、学习意愿、团队协作——路演/文档里适度体现这些会更贴合评委喜好。
+> Note: in the transcript, the organizer's name was recognized as "Everest," but cross-referencing "Rules and Regulations.md" and the event's official website, the correct name is **Averis** — used consistently as Averis below. This is a speech-recognition error, not an actual name change.
 
 ---
 
-## 2. 赛程更新（对照 TEAM_HANDBOOK.md 第1节）
+## 1. Organizer Background (clearer than earlier research)
 
-| 日期 | 事项 |
+- Averis is a global **business and technology services provider**, covering finance, technology, data, digital transformation, and similar areas — a shared-services/outsourcing-type company.
+- Opening ceremony keynote speaker: **Ms. Chin**, Averis's Head of HR, IT and Digital, who gave the opening remarks.
+- The problem statement was announced live, with Q&A, by **Mr. Sergio** (a software engineer at Averis).
+- The hiring preferences mentioned in the remarks could be a useful angle for the team's presentation: Averis noted that they value not just technical ability but also curiosity, adaptability, willingness to learn, and teamwork — reflecting these appropriately in the pitch/documentation would likely resonate well with the judges.
+
+---
+
+## 2. Schedule Update (cross-referenced against TEAM_HANDBOOK.md section 1)
+
+| Date | Event |
 |---|---|
-| 9/18（今天） | 虚拟开幕式 + 题目公布 |
-| 9/20 | Workshop 1（讲者：Sharik、Darren，非Averis人员） |
-| 9/21 | Workshop 2（讲者：来自 Averis） |
-| 9/22 12:00pm | **初赛提交截止**（Google Form 提交，从9/18起就可以开始提交窗口） |
-| 9/24 | 十强名单公布 |
-| 9/26（见下方⚠️） | 决赛路演日，地点：**Monash University Malaysia，Bandar Sunway, Subang Jaya** |
+| 9/18 (today) | Virtual opening ceremony + problem statement announcement |
+| 9/20 | Workshop 1 (speakers: Sharik, Darren — not Averis staff) |
+| 9/21 | Workshop 2 (speakers: from Averis) |
+| 9/22 12:00pm | **Preliminary submission deadline** (via Google Form; the submission window opens 9/18) |
+| 9/24 | Top-10 list announced |
+| 9/26 (see the warning below) | Finals pitch day, location: **Monash University Malaysia, Bandar Sunway, Subang Jaya** |
 
-⚠️ **需要在 Discord 核实的一处矛盾**：转录里决赛日期先说"26号"，后面问答环节又说了一次"20号"。按逻辑推算（十强名单9/24公布，决赛不可能在这之前），**26号**更可能是对的，20号大概率是语音识别或口误。建议找官方/Discord 公告确认一下具体日期，不要直接按这份笔记定行程。
+⚠️ **A discrepancy that needs verifying on Discord**: in the transcript, the finals date was first stated as "the 26th," but later in the Q&A it was said again as "the 20th." Logically (the top-10 list is announced 9/24, so the finals can't be before that), **the 26th** is more likely correct, and "the 20th" was probably a speech-recognition error or a slip of the tongue. It's recommended to confirm the exact date via an official/Discord announcement rather than scheduling directly off this note.
 
-**日程提醒**：9/20、9/21 两天分别有 workshop，虽然是冲刺期，但这两天大概率要抽时间参加（尤其9/21是Averis自己讲的，内容可能跟题目直接相关），排计划时留出时间，别把这两天排满纯写代码。
+**Schedule reminder**: there are workshops on both 9/20 and 9/21. Even though this is crunch time, it's likely worth carving out time to attend both (especially 9/21, which is given by Averis themselves and may relate directly to the problem statement) — leave room for them when planning, rather than filling those two days entirely with coding.
 
-十强队伍额外福利：会配一位专属导师（mentor），在决赛前给技术和策略上的指导。决赛当天每队15分钟：10分钟路演+演示 + 5分钟问答，**全员必须到场**（线下，物理到场，不是线上）。
+Extra perk for top-10 teams: they'll be assigned a dedicated mentor for technical and strategic guidance ahead of the finals. Each team gets 15 minutes on finals day: a 10-minute pitch + demo plus a 5-minute Q&A, and **the whole team must be present** (in person, physically — not online).
 
-奖金确认：第一名 RM5,000，第二名 RM3,000，第三名 RM1,000（与《Rules and Regulations.md》一致）。
-
----
-
-## 3. 题目正式公布：航运单证核验（Shipping Documents Verification）
-
-### 业务背景
-Averis 的航运操作团队（shipping operation team）用同一个邮箱收发所有相关邮件，一天可能收到**多达约2000封邮件**，类型混杂：
-- 提供 / 修改 **Shipping Instruction（托运指示，简称 SI）** —— 客户给的原始要求，以邮件附件形式发来
-- 确认 / 修改 **Bill of Lading（提单草稿，简称 BL）** —— 航运操作团队按 SI 起草出来给船公司的正式单据
-- 询问发票相关问题
-- 垃圾邮件
-
-核心工作：把起草出来的 BL 和对应的 SI 逐项核对，只要有一项对不上，就要修改 BL 直到两边信息完全一致，才能定稿发给船公司。
-
-### 三个核心痛点（官方原话）
-1. **找邮件耗时**——2000封邮件里找到该处理的那封，人工翻找很慢
-2. **人工比对重复且容易出错**——要读邮件内容、理解指示、检查附件、再回头核对文档，步骤多
-3. **两边用词不统一**——SI 和 BL 是不同环节产生的文档，同一个字段两边的叫法/格式可能不一样，增加比对难度
-
-### 系统必须具备的三项能力（评分对着这三点看）
-1. **分类（Classification）**：判断一封邮件属于哪一类——是 SI？是 BL 确认/修改请求？是发票询问？还是垃圾邮件？正文和附件里的内容都要能识别
-2. **理解意图+抽取信息（Extraction）**：不管信息在邮件正文还是附件（比如PDF）里，都要能抽取出来。样例数据里明确要抽取的字段：
-   - shipper（发货方）
-   - consignee（收货方）
-   - notify party（通知方）
-   - port of loading（起运港，POL）
-   - port of discharge（卸货港，POD）
-   - container count（集装箱数量）
-   - weight in kg（重量，公斤）
-3. **比对（Comparison）**：拿抽取出的 BL 字段去核对 SI 字段，找出不一致的地方，帮航运团队在定稿前发现错误
-4. **兜底机制（官方明确要求）**：系统如果分类/抽取/比对时**判断不了或者不确定**，应该主动"举手"，向操作人员寻求澄清/帮助，而不是硬给一个可能错的结果
-
-### 样例数据
-- 官方提供约 **500 封邮件 + 100多份附件**
-- 两种使用方式，二选一都行：
-  1. 直接当静态文件用（配套一个 Python 脚本查看数据）
-  2. 用官方提供的 **Docker** 镜像跑一个模拟 API，程序直接调接口拿数据
-- 语言：样例数据主要是**英文**。如果想额外支持马来文/印尼文/中文属于加分项，非必须。
-- Docker 包里可能配 API key，官方说如果有会通过组织方（Discord/邮件）另行分发。
+Prize money confirmed: 1st place RM5,000, 2nd place RM3,000, 3rd place RM1,000 (consistent with "Rules and Regulations.md").
 
 ---
 
-## 4. 技术与提交要求
+## 3. Official Problem Statement: Shipping Documents Verification
 
-### 技术自由度
-- **没有指定编程语言/框架/平台/工具**，完全自由选择
-- 官方建议：不要只想着"比赛期间能跑起来"，也要考虑**可扩展性、可维护性、可延展性**，以及比赛结束后是否有继续开发的可能——这块对应评分里的"系统设计与架构"
-- **两项硬性要求**（缺一不可，否则明显扣分）：
-  1. **必须有意义地整合 AI**（作为核心功能/开发过程/部署方式的一部分）
-  2. **必须使用云基础设施**——官方明确说了 Docker / Docker Compose 就算数，不是非要用 AWS/GCP/Azure 付费服务；Cloudflare、静态网页托管等都算"云基础设施"的范畴
-- **官方不提供任何云服务/AI额度预算**，需要队伍自己想办法用免费方案（对应 TEAM_HANDBOOK.md 第4节"提前申请云/AI额度"那条准备清单）
-- **AI 使用完全没有限制**：官方原话是可以"as much as you like"，无论是用来头脑风暴还是作为产品核心功能，agentic / agent-to-agent 等任何形式都可以，**没有指定必须遵循的工作流**（不需要照抄 Averis 内部现有流程，可以自己设计）
+### Business Background
+Averis's shipping operations team sends and receives all related email through a single shared mailbox, receiving **as many as roughly 2000 emails a day**, of mixed types:
+- Providing / revising a **Shipping Instruction (SI)** — the customer's original requirements, sent as an email attachment
+- Confirming / revising a **Bill of Lading (BL) draft** — the formal document the shipping operations team drafts from the SI to send to the carrier
+- Invoice-related inquiries
+- Spam
 
-### 提交清单（比 Rules and Regulations.md 更细）
-提交入口：**Google Form**，提交窗口 9/18 – 9/22 12:00pm（sharp，过时不候）
+Core task: check the drafted BL against its corresponding SI field by field; if even one field doesn't match, the BL must be revised until both sides agree completely before it can be finalized and sent to the carrier.
 
-必交项：
-1. **项目说明**：项目名称、目的、要解决的问题
-2. **演示视频**：
-   - 上传 YouTube（unlisted 或 public）或 Google Drive（分享设置必须是"任何人持链接可查看"）
-   - **私享（private）视频不接受**
-   - **最长5分钟**，超时惩罚：每超30秒扣1分
-   - 内容要覆盖：团队+项目介绍、问题说明、技术栈、工作原型演示、影响力/价值
-3. **GitHub 仓库链接**，附带清楚的 **README（含环境搭建/运行说明）**
-4. **可公开访问的原型/demo 链接**——评审期间必须能正常访问和使用（这意味着我们需要真的部署上线，不能只是本地能跑）
-5. **幻灯片或文档链接**：技术架构、实现细节、遇到的挑战、未来规划。**没有页数限制**
+### Three Core Pain Points (in the organizer's own words)
+1. **Finding the right email is time-consuming** — manually searching through 2000 emails to find the one that needs handling is slow
+2. **Manual comparison is repetitive and error-prone** — it involves reading the email, understanding the instructions, checking the attachments, and then cross-checking the documents, with many steps
+3. **Terminology isn't consistent between the two sides** — SI and BL are documents produced at different stages, so the same field may be labeled/formatted differently on each side, adding to the difficulty of comparison
 
-### 评分（与 Rules and Regulations.md 权重一致，这里是官方口头给的框架）
-- 总体分两大块：**技术 70分 + 产品与影响力 30分**
-- 技术70分细项（=之前文档里的初赛权重）：
-  - 可运行的核心原型（Working Core Prototype）25分
-  - 系统设计与架构 15分
-  - 技术整合 15分
-  - 技术可行性与验证 15分
-- 产品与影响力30分细项：
-  - 问题理解 10分
-  - 创新与方案思路 10分
-  - 实际价值与潜力 10分
-- **准确率不是初赛主要评分点**，决赛才会用没见过的新邮件实测系统准确率——所以初赛阶段"先做通"比"做多准"更重要，符合 TEAM_HANDBOOK.md 第3节的策略建议
+### Three Capabilities the System Must Have (scoring is measured against these three)
+1. **Classification**: determine which category an email belongs to — is it an SI? A BL confirmation/revision request? An invoice inquiry? Or spam? Content in both the body and any attachments must be recognized.
+2. **Understanding intent + extracting information (Extraction)**: information must be extractable whether it's in the email body or in an attachment (e.g. a PDF). The fields explicitly called out for extraction in the sample data:
+   - shipper
+   - consignee
+   - notify party
+   - port of loading (POL)
+   - port of discharge (POD)
+   - container count
+   - weight in kg
+3. **Comparison**: check the extracted BL fields against the SI fields, find any discrepancies, and help the shipping team catch errors before finalizing the document
+4. **A fallback mechanism (explicitly required by the organizers)**: if the system **can't decide or isn't sure** during classification/extraction/comparison, it should proactively "raise its hand" and ask the operator for clarification/help, rather than forcing out a result that might be wrong
 
----
-
-## 5. 现场 Q&A 重点整理
-
-- **AI 使用有没有限制？** 完全没有限制，想怎么用都行。
-- **有没有 Averis 内部现成的工作流程可以参考，还是要自己设计？** 不是必须照搬固定流程，可以是 agentic、agent-to-agent 或任何自己设计的方案，只要最终解决分类+理解意图+比对这三件事。
-- **云基础设施/AI服务的费用谁出？** 官方不提供预算，鼓励用免费/有创意的方案，不需要考虑花钱升级。
-- **Docker 里的 API key 怎么拿？** 现场没有确切答案，官方说如果之后有会通过组织方分发。
-- **有没有涉及 HS code（商品编码）？** 现场没答上来，建议去 Discord 追问。
-- **"云基础设施"具体指什么，是不是必须用 AWS/GCP/Azure 且要自己掏钱？** 不是，普通网页托管、Cloudflare、Docker/Docker Compose 都算数。
-- **有没有固定的输出格式，怎么评分（分类准确率还是错配检测）？会不会用没见过的邮件测试？** 初赛不太考核准确率，决赛会用未公开的邮件实测。
-- **样例邮件是不是只有英文，会不会有其他语言？** 样例数据主要是英文；额外支持马来文/印尼文/中文属于加分项。
-- **文档/幻灯片有没有页数限制？** 没有，只要能配合5分钟演示视频的时间就行。
-- **要不要做AI方案，UI/UX重不重要？** 官方期待里有AI组件是默认预期；UI/UX形式自由（很多人会做成聊天界面），核心是分类和比对这两件事必须做对，做不准时要给用户反馈/提示，而不是装作很确定。
+### Sample Data
+- The organizers provide roughly **500 emails + 100+ attachments**
+- Two usage methods, either is fine:
+  1. Use them directly as static files (with an accompanying Python script for viewing the data)
+  2. Run a mock API using the official **Docker** image, and call the endpoint directly from your program to fetch data
+- Language: the sample data is mostly in **English**. Additionally supporting Malay/Indonesian/Chinese is a bonus, not a requirement.
+- The Docker package may include an API key; the organizers said if there is one, it will be distributed separately through official channels (Discord/email).
 
 ---
 
-## 6. 对我们团队的直接影响 / 建议行动
+## 4. Technical and Submission Requirements
 
-1. **CLAUDE.md 已经按这份题目更新**——`classification`（分类）/ `extraction`（抽取）/ `comparison`（比对）三个模块的划分建议就是从上面"系统必须具备的三项能力"直接推出来的，正好可以三人各领一块。
-2. **今天就应该做的事**：三人内部认领上面三个模块之一，把名字填进 CLAUDE.md"各功能模块负责人"那一节。
-3. **别忘了"举手求助"机制**——官方明确要求系统拿不准的时候要能提示需要人工介入，这个功能本身工作量不大但是官方点名要求的能力，建议列进初赛的核心功能清单，不要漏掉。
-4. **决赛日期需要在 Discord 上核实**（见第2节的⚠️），先按9/26规划，等确认后更新 TEAM_HANDBOOK.md 时间线。
-5. **部署这件事不能拖到最后**——提交要求里"可公开访问的原型链接在评审期间必须能用"，意味着我们至少要在9/22前把东西真正部署上线（不是本地跑得起来就行），建议尽早在 Vercel 上建好项目骨架，边开发边部署，别留到最后一天才第一次部署。
+### Technical Freedom
+- **No programming language/framework/platform/tool is mandated** — completely free choice
+- Official guidance: don't just think about "getting it running during the hackathon" — also consider **scalability, maintainability, and extensibility**, and whether development could continue after the event ends. This maps to the "System Design & Architecture" scoring item.
+- **Two hard requirements** (both mandatory — missing either clearly costs points):
+  1. **AI must be meaningfully integrated** (as part of the core functionality/development process/deployment method)
+  2. **Cloud infrastructure must be used** — the organizers explicitly stated that Docker / Docker Compose counts; it doesn't have to be a paid AWS/GCP/Azure service. Cloudflare, static site hosting, and similar all count as "cloud infrastructure."
+- **The organizers provide no cloud service/AI credit budget** — teams need to find their own free options (this maps to the prep-checklist item "apply for cloud/AI credits in advance" in TEAM_HANDBOOK.md section 4)
+- **There is no restriction whatsoever on AI usage**: the organizers' own words were that you can use it "as much as you like," whether for brainstorming or as the product's core feature; agentic / agent-to-agent or any other form is fine, and **no specific workflow is mandated** (there's no need to copy Averis's existing internal process — you can design your own)
+
+### Submission Checklist (more detailed than Rules and Regulations.md)
+Submission portal: **Google Form**, submission window 9/18 - 9/22 12:00pm (sharp, no late submissions)
+
+Required items:
+1. **Project description**: project name, purpose, the problem being solved
+2. **Demo video**:
+   - Upload to YouTube (unlisted or public) or Google Drive (sharing must be set to "anyone with the link can view")
+   - **Private videos are not accepted**
+   - **Maximum 5 minutes**; overtime penalty: 1 point deducted per 30 seconds over
+   - Content must cover: team + project introduction, problem explanation, tech stack, working prototype demo, impact/value
+3. **GitHub repository link**, with a clear **README** (including environment setup/run instructions)
+4. **A publicly accessible prototype/demo link** — it must work normally throughout the judging period (meaning we need it actually deployed live, not just runnable locally)
+5. **Slides or document link**: technical architecture, implementation details, challenges encountered, future plans. **No page limit.**
+
+### Scoring (weights consistent with Rules and Regulations.md; this is the framework given verbally by the organizers)
+- Overall split into two blocks: **Technical 70 points + Product & Impact 30 points**
+- Technical 70-point breakdown (= the preliminary-round weights from the earlier document):
+  - Working Core Prototype: 25 points
+  - System Design & Architecture: 15 points
+  - Technology Integration: 15 points
+  - Technical Feasibility & Validation: 15 points
+- Product & Impact 30-point breakdown:
+  - Problem Statement Understanding: 10 points
+  - Innovation & Solution Approach: 10 points
+  - Practical Value & Potential: 10 points
+- **Accuracy is not a major scoring factor in the preliminary round** — the finals are where the system's accuracy gets tested against new, unseen emails. So during the preliminary round, "getting it working" matters more than "getting it precise," consistent with the strategy advice in TEAM_HANDBOOK.md section 3.
+
+---
+
+## 5. Live Q&A Highlights
+
+- **Is there any restriction on AI usage?** None at all — use it however you like.
+- **Is there an existing internal Averis workflow to reference, or do we design our own?** There's no fixed process you must copy — it can be agentic, agent-to-agent, or any design of your own, as long as it ultimately handles classification + intent understanding + comparison.
+- **Who covers the cost of cloud infrastructure/AI services?** The organizers provide no budget; they encourage free/creative solutions and there's no need to consider paid upgrades.
+- **How do we get the API key in the Docker package?** No definite answer was given live; the organizers said if one becomes available it will be distributed through official channels.
+- **Does this involve HS codes (commodity codes)?** This wasn't answered live — recommended to follow up on Discord.
+- **What exactly does "cloud infrastructure" mean — does it have to be AWS/GCP/Azure, and paid for out of pocket?** No — ordinary web hosting, Cloudflare, and Docker/Docker Compose all count.
+- **Is there a fixed output format, and how is it scored (classification accuracy or mismatch detection)? Will it be tested with unseen emails?** The preliminary round doesn't focus much on accuracy; the finals will test with undisclosed emails.
+- **Are the sample emails English-only, or will there be other languages?** The sample data is mostly English; additionally supporting Malay/Indonesian/Chinese is a bonus.
+- **Is there a page limit for the docs/slides?** No, as long as it fits within the 5-minute demo video's timeframe.
+- **Do we need an AI solution, and does UI/UX matter?** Having an AI component is the default expectation; the UI/UX form is free (many teams go with a chat interface) — what matters most is getting classification and comparison right, and giving the user feedback/a prompt when uncertain rather than pretending to be confident.
+
+---
+
+## 6. Direct Impact on Our Team / Recommended Actions
+
+1. **CLAUDE.md has already been updated for this problem statement** — the suggested split into three modules, `classification` / `extraction` / `comparison`, is derived directly from the "three capabilities the system must have" above, and maps neatly onto the three of us each owning one.
+2. **Something to do today**: have each of the three of us claim one of the modules above, and put our names into the "module owners" section of CLAUDE.md.
+3. **Don't forget the "raise your hand for help" mechanism** — the organizers explicitly require the system to signal when it needs human intervention. This feature isn't much work by itself, but it's a capability the organizers specifically called out, so it should be on the preliminary round's core feature checklist — don't miss it.
+4. **The finals date needs to be verified on Discord** (see the warning in section 2) — plan around 9/26 for now, and update the TEAM_HANDBOOK.md timeline once confirmed.
+5. **Deployment can't be left until the last minute** — the submission requirements say "the publicly accessible prototype link must work throughout the judging period," which means we need it genuinely deployed live before 9/22 (not just runnable locally). It's recommended to set up the project skeleton on Vercel early and deploy continuously alongside development, rather than deploying for the first time on the last day.

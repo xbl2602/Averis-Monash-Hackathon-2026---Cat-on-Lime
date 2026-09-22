@@ -1,7 +1,9 @@
 /**
- * 人工复核闭环的 MCP tool 工厂（见 docs/REVIEW_SPEC.md §8）。
- * 每个模块的 mcp/index.ts 用目标 target_kind 调这里，拿到 4 个 tool 定义加进自己导出的数组。
- * 写 tool 必须显式 readOnlyHint:false（汇总层 gate 按 fail-closed 判定，见 app/core/mcp-server/route.ts）。
+ * MCP tool factory for the human-review loop (see docs/REVIEW_SPEC.md §8).
+ * Each module's mcp/index.ts calls this with its target target_kind to get the 4 tool
+ * definitions and add them into the array it exports.
+ * Write tools must explicitly set readOnlyHint:false (the aggregation layer's gate is
+ * fail-closed, see app/core/mcp-server/route.ts).
  */
 import { z } from "zod";
 import { LLM_PROVIDER_IDS } from "@/lib/llm";
@@ -26,21 +28,21 @@ const payloadSchema = z
     disposition: z.enum(REVIEW_DISPOSITIONS).optional(),
     provider: z.enum(LLM_PROVIDER_IDS).optional(),
   })
-  .describe("视 action 而定，具体字段见 docs/REVIEW_SPEC.md §4");
+  .describe("Depends on the action; see the specific fields in docs/REVIEW_SPEC.md §4");
 
 export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: string) {
   const listReviewTool = {
     name: `list_${targetKind}_review`,
-    description: `列出${moduleLabel}的人工复核队列（默认只显示异常驱动的项：需要复核/有差异/失败/降级）`,
+    description: `Lists the human-review queue for ${moduleLabel} (by default only shows anomaly-driven items: needs review / has a mismatch / failed / degraded)`,
     inputSchema: {
-      include_ok: z.boolean().optional().describe("true = 也显示已判 OK 的项"),
-      q: z.string().optional().describe("按邮件ID/主题关键词搜索"),
+      include_ok: z.boolean().optional().describe("true = also show items already marked OK"),
+      q: z.string().optional().describe("Search by email ID / subject keyword"),
       status: z.enum(COMPARISON_STATUSES).optional(),
       reason: z.enum(REVIEW_REASONS).optional(),
       review_state: z
         .enum(["confirmed", "corrected", "deferred", "none"])
         .optional()
-        .describe("none = 还没有任何人工处置的项"),
+        .describe("none = items with no human disposition yet"),
       limit: z.number().int().min(1).max(200).optional(),
       offset: z.number().int().min(0).optional(),
     },
@@ -59,7 +61,7 @@ export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: st
 
   const historyTool = {
     name: `get_${targetKind}_review_history`,
-    description: `查看${moduleLabel}某封邮件的人工复核动作时间线（审计日志）`,
+    description: `Views the human-review action timeline (audit log) for a given email in ${moduleLabel}`,
     inputSchema: { email_id: z.string() },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async ({ email_id }: { email_id: string }) => {
@@ -74,8 +76,8 @@ export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: st
   const applyTool = {
     name: `apply_${targetKind}_review_action`,
     description:
-      `对${moduleLabel}的一封邮件应用人工复核动作（会写库）：` +
-      `confirm 确认系统结论 / correct 修正 / disposition 分拣去向 / defer 搁置 / undefer 恢复 / note 备注 / rerun 重跑。`,
+      `Applies a human-review action to one email in ${moduleLabel} (writes to the database): ` +
+      `confirm the system's conclusion / correct it / disposition to route it / defer to set it aside / undefer to restore it / note to add a comment / rerun to recompute it.`,
     inputSchema: {
       email_id: z.string(),
       action: z.enum(REVIEW_ACTION_TYPES),
@@ -85,7 +87,7 @@ export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: st
       expected_updated_at: z
         .string()
         .optional()
-        .describe("乐观锁：传当前 override 的 updated_at，不匹配会失败（并发冲突）"),
+        .describe("Optimistic lock: pass the current override's updated_at; a mismatch fails (concurrent conflict)"),
     },
     annotations: { readOnlyHint: false, openWorldHint: false },
     handler: async (args: Record<string, unknown>) =>
@@ -94,7 +96,7 @@ export function makeReviewMcpTools(targetKind: ReviewTargetKind, moduleLabel: st
 
   const undoTool = {
     name: `undo_${targetKind}_review_action`,
-    description: `撤销${moduleLabel}某封邮件最近一次人工复核动作（会写库），或撤销指定 action_id`,
+    description: `Undoes the most recent human-review action for a given email in ${moduleLabel} (writes to the database), or a specific action_id`,
     inputSchema: {
       email_id: z.string(),
       action_id: z.number().int().optional(),

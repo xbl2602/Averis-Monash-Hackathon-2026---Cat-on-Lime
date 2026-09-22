@@ -1,11 +1,11 @@
 /**
  * POST /features/mail/api/gmail/connect
- * 发起 Gmail 连接（写保护）。本阶段不实现真实 OAuth，返回 not_implemented 占位说明 + redirect_uri。
+ * Initiate a Gmail connection (write-protected). Real OAuth isn't implemented at this stage; returns a not_implemented placeholder explanation + redirect_uri.
  *
- * 真实路径（PHASE2_SPEC 4.3）：Google OAuth（scope gmail.readonly）
- * → /features/mail/api/gmail/callback 用授权码换 token → encryptSecret 后写 mail_accounts
- * → 定时/手动 users.messages.list 拉邮件 → 复用分类/抽取/比对流水线 → 结果落 verification_results。
- * 实现真实回调时，本文件的 POST 改成 302 跳转到 Google 授权页，并把 state 存进 mail_accounts。
+ * Real path (PHASE2_SPEC 4.3): Google OAuth (scope gmail.readonly)
+ * -> /features/mail/api/gmail/callback exchanges the authorization code for a token -> encryptSecret then writes to mail_accounts
+ * -> scheduled/manual users.messages.list fetches emails -> reuses the classify/extract/compare pipeline -> results land in verification_results.
+ * When the real callback is implemented, this file's POST should become a 302 redirect to Google's authorization page, storing state in mail_accounts.
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/shared/admin-guard";

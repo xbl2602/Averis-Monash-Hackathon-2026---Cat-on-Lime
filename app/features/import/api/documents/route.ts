@@ -1,7 +1,7 @@
 /**
- * GET  /features/import/api/documents  文档池列表（读开放）
+ * GET  /features/import/api/documents  Document pool list (read is open)
  *   ?review_status=pending|filed|skipped & detected_type=SI|BL|OTHER|UNKNOWN & limit= & offset=
- * PUT  /features/import/api/documents  人工归类（x-admin-token 写保护）
+ * PUT  /features/import/api/documents  Manual classification (x-admin-token write-protected)
  *   body: { id, detected_type: "SI"|"BL"|"OTHER", expected_updated_at? }
  */
 import { NextResponse } from "next/server";

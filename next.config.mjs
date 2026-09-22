@@ -1,23 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // "standalone" 产物体积小、依赖打包好，是 Docker 部署要用的模式（见 CLAUDE.md "部署要求"）
+  // "standalone" output is small and has dependencies pre-bundled — this is the mode required for Docker deployment (see CLAUDE.md "Deployment requirements")
   output: 'standalone',
-  // 只影响本地 `next dev`：① 每次启动会自动往 AGENTS.md 追加一段规则，破坏
-  // "CLAUDE.md ⇄ AGENTS.md 逐字一致"的同步规则，所以关掉；② 开发角标默认在左下角，
-  // 会盖住侧边栏底部的 Settings 按钮，挪到右下角。生产构建/线上不受影响。
+  // Only affects local `next dev`: (1) it auto-appends a rule to AGENTS.md on every startup, which breaks
+  // the "CLAUDE.md <-> AGENTS.md must match verbatim" sync rule, so it's disabled here; (2) the dev indicator badge defaults to the
+  // bottom-left, which covers the Settings button at the bottom of the sidebar, so it's moved to the bottom-right. Production builds/deployment are unaffected.
   agentRules: false,
   devIndicators: { position: 'bottom-right' },
-  // pdf-parse / pdfjs-dist 不能被打包器打进 server bundle：
-  // pdfjs 运行时要按 import.meta.url 找同目录的 pdf.worker.mjs，打包后会丢失这个文件，
-  // 导致服务端解析 PDF 失败（实测报 "Cannot find module .../pdf.worker.mjs"）。
-  // 声明成 external 后运行时可从 node_modules 正常加载。
+  // pdf-parse / pdfjs-dist must not be bundled into the server bundle by the bundler:
+  // at runtime, pdfjs looks up pdf.worker.mjs in the same directory via import.meta.url, and bundling would lose that file,
+  // causing server-side PDF parsing to fail (observed error: "Cannot find module .../pdf.worker.mjs").
+  // Declaring them as external lets them load normally from node_modules at runtime.
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
-  // 下面这些路由在运行时用 fs 读 data/sample（样例邮件/附件），Vercel 默认只打包
-  // 静态分析到的文件，这里显式把它们包含进函数包（整个 data/sample 约 1.2MB），
-  // 否则线上部署后 classify/extract 这类工具会"找不到样例文件"。
-  // 另外把外部化的 PDF 解析依赖显式带上：pdf-parse 依赖 pdfjs-dist（运行时按
-  // import.meta.url 找 pdf.worker.mjs）和 @napi-rs/canvas（提供 DOMMatrix 等 polyfill），
-  // 不显式包含的话 standalone/Docker 里会报 DOMMatrix is not defined。
+  // The routes below read data/sample (sample emails/attachments) via fs at runtime. Vercel by default only bundles
+  // statically-analyzed files, so they're explicitly included in the function bundle here (the whole data/sample dir is about 1.2MB) —
+  // otherwise, after deployment, tools like classify/extract would report "sample file not found".
+  // Also explicitly bring along the externalized PDF-parsing dependencies: pdf-parse depends on pdfjs-dist (which looks up
+  // pdf.worker.mjs via import.meta.url at runtime) and @napi-rs/canvas (which provides polyfills like DOMMatrix) —
+  // without including them explicitly, standalone/Docker builds throw "DOMMatrix is not defined".
   outputFileTracingIncludes: {
     '/core/mcp-server': [
       './data/sample/**',
@@ -38,8 +38,8 @@ const nextConfig = {
       './node_modules/pdfjs-dist/**',
       './node_modules/@napi-rs/**',
     ],
-    // 导出函数只用样例清单（inbox 文件名）做完整性分母，不需要附件本体：
-    // 只带 inbox 文件名，避免把 pdfjs/@napi-rs 等解析依赖打进导出函数包
+    // The export function only uses the sample manifest (inbox filenames) as the completeness denominator and doesn't need the attachment bodies:
+    // only bring along the inbox filenames, to avoid pulling parsing dependencies like pdfjs/@napi-rs into the export function bundle
     '/features/results/api/export': ['./data/sample/inbox/**'],
     '/features/jev-lab': ['./data/sample/**'],
   },

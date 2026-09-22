@@ -4,8 +4,9 @@ import { searchParamsToRecord, toErrorResponse } from "../params";
 
 /**
  * GET /features/results/api/export
- * Save as：scope=results|conflicts|stats|submission × format=json|md|txt|csv（submission 仅支持 json）。
- * 返回带下载头的文件本体；完整性信息都在响应头里（`<a>` 直接下载读不到，前端要用 fetch + blob）：
+ * Save as: scope=results|conflicts|stats|submission x format=json|md|txt|csv (submission only supports json).
+ * Returns the file body with download headers; completeness info is all in the response headers
+ * (a plain `<a>` download can't read them, the frontend needs to use fetch + blob):
  *   X-Export-Scope / Format / Items / Incomplete / Expected-Source / Missing / Stale ...
  *   ?scope=conflicts&format=md
  *   ?scope=submission&format=json
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** 头里最多列 20 个 email_id，其余用 (+N) 计数表示（避免头部过长） */
+/** List at most 20 email_ids in the header, with the rest shown as a (+N) count (to avoid an oversized header) */
 function formatIdList(ids: string[]): string {
   if (ids.length === 0) return "";
   const shown = ids.slice(0, 20).join(",");

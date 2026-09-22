@@ -1,17 +1,23 @@
 /**
- * 开发者模式（devmode）：⚠️ 不是正式产品功能。
+ * Developer mode (devmode): ⚠️ not an official product feature.
  *
- * 用途：给团队/评委在验证阶段快速清空或恢复数据库，不是航运单证核验业务的一部分。
- * 硬性边界（操作者与团队约定，2026-09-21）：
- * - 不注册 MCP tool——这类破坏性操作绝不能被 AI agent 自动调用，只能是人手动点按钮。
- * - 不进 SHARED_INTERFACES.md 的正常端点表，单独放一节并标注"仅限开发者模式使用"。
- * - 每个写操作都要 x-admin-token（见 write-policy.ts）+ 请求体里精确匹配的 confirm 短语
- *   两道门槛，防止误触和被脚本无意间连坐调用。
- * - GUI（队友A负责）必须有明显、持续可见的警示——这条不是文档层面的建议，是产品要求。
+ * Purpose: lets the team/judges quickly wipe or restore the database during verification —
+ * this is not part of the shipping-document verification business logic.
+ * Hard boundaries (agreed between the operator and the team, 2026-09-21):
+ * - Not registered as an MCP tool — this kind of destructive operation must never be callable
+ *   automatically by an AI agent, only by a human manually clicking a button.
+ * - Not listed in SHARED_INTERFACES.md's normal endpoint table — kept in its own section marked
+ *   "developer mode only."
+ * - Every write operation requires two gates: x-admin-token (see write-policy.ts) + a confirm
+ *   phrase that must match exactly in the request body, to prevent accidental triggers and
+ *   scripts calling it inadvertently.
+ * - The GUI (owned by teammate A) must show an obvious, persistently visible warning — this is
+ *   not just documentation-level advice, it's a product requirement.
  */
 
-// 删除顺序即依赖顺序：子表在前、raw_emails 最后（parsed_attachments/verification_results
-// 都有外键指向 raw_emails.email_id，其余表互不依赖，谁先谁后无所谓）
+// Deletion order is dependency order: child tables first, raw_emails last (parsed_attachments/
+// verification_results both have foreign keys pointing to raw_emails.email_id; the rest of the
+// tables don't depend on each other, so their relative order doesn't matter)
 export const DEVMODE_DATA_TABLES = [
   "parsed_attachments",
   "verification_results",
@@ -23,8 +29,9 @@ export const DEVMODE_DATA_TABLES = [
 ] as const;
 export type DevModeDataTable = (typeof DEVMODE_DATA_TABLES)[number];
 
-// 每张表用来"删全部"的过滤列——必须是 not null 列，配合 .not(col, 'is', null) 匹配所有行
-// （PostgREST 的 delete 要求带过滤条件，不能裸 delete）
+// The filter column each table uses to "delete all" — must be a not-null column, paired with
+// .not(col, 'is', null) to match every row (PostgREST's delete requires a filter condition; a
+// bare delete isn't allowed)
 export const DELETE_ALL_FILTER_COLUMN: Record<DevModeDataTable, string> = {
   parsed_attachments: "email_id",
   verification_results: "email_id",
@@ -35,21 +42,22 @@ export const DELETE_ALL_FILTER_COLUMN: Record<DevModeDataTable, string> = {
   raw_emails: "email_id",
 };
 
-// 刻意不包含在"开发者模式"清空范围内的表——这些是连接/身份配置，不是核验数据本身，
-// 清掉会破坏 LLM/Supabase 的连接设置，跟"重置测试数据"是两件事
+// Tables deliberately excluded from "developer mode" wiping — these are connection/identity
+// configuration, not verification data itself; wiping them would break the LLM/Supabase connection
+// settings, which is a different concern from "resetting test data"
 export const DEVMODE_EXCLUDED_TABLES = ["app_config", "mail_accounts", "supabase_projects"] as const;
 
 export const DEVMODE_WARNING =
-  "⚠️ 开发者模式：仅供内部/评委验证阶段使用，不是本产品的正式功能。这里的操作会直接、不可逆地" +
-  "修改共享数据库，请勿在不清楚后果的情况下调用。";
+  "⚠️ Developer mode: for internal/judge verification use only, not an official feature of this product. " +
+  "Actions here directly and irreversibly modify the shared database — do not invoke this without understanding the consequences.";
 
-// 两个写操作各自要求的确认短语（必须在请求体里逐字符匹配，光靠 admin token 不够）
+// The confirmation phrase each write operation requires (must match character-for-character in the request body; the admin token alone isn't enough)
 export const WIPE_CONFIRM_PHRASE = "WIPE ALL DATA";
 export const RESTORE_CONFIRM_PHRASE = "RESTORE SAMPLE DATA";
 
 export interface TableStatus {
   table: DevModeDataTable;
-  /** 读取行数失败时为 null（不影响其它表的状态展示） */
+  /** null when reading the row count fails (doesn't affect the status display of other tables) */
   rowCount: number | null;
 }
 

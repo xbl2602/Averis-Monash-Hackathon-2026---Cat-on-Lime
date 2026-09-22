@@ -1,11 +1,12 @@
 /**
- * uploaded_documents 表 + Storage(uploads bucket) 的读写层。
+ * Read/write layer for the uploaded_documents table + Storage (uploads bucket).
  *
- * 并发约定（SPEC 第 6 节）：
- * - 去重写入用 upsert + onConflict(file_hash) + ignoreDuplicates：
- *   并发上传同一个文件时由数据库保证只有一行，后到的请求拿到空结果，
- *   按 duplicate 返回；绝不"先查再插"，也不覆盖已有记录
- * - 读用 anon client（表对 anon 开放 select），写用 service client
+ * Concurrency conventions (SPEC section 6):
+ * - Deduplicated writes use upsert + onConflict(file_hash) + ignoreDuplicates: when the same file is
+ *   uploaded concurrently, the database guarantees only one row exists, the later request gets an
+ *   empty result and is returned as duplicate; never "check first, then insert", and never overwrite
+ *   an existing record
+ * - Reads use the anon client (the table has select open to anon), writes use the service client
  */
 import { getSupabaseClient, getSupabaseServiceClient } from "@/lib/shared/supabase";
 import { DocumentStoreError } from "./errors";
@@ -22,11 +23,11 @@ function getReadClient() {
   try {
     return getSupabaseClient();
   } catch (err) {
-    throw new DocumentStoreError(err instanceof Error ? err.message : "Supabase 只读客户端初始化失败");
+    throw new DocumentStoreError(err instanceof Error ? err.message : "Failed to initialize the Supabase read-only client");
   }
 }
 
-/** 去重预检：只看 id/detected_type，重复文件不需要再解析 */
+/** Dedup pre-check: only looks at id/detected_type, a duplicate file doesn't need to be parsed again */
 export async function findDocumentByHash(
   fileHash: string
 ): Promise<Pick<UploadedDocumentRow, "id" | "detected_type"> | null> {
@@ -35,13 +36,13 @@ export async function findDocumentByHash(
     .select("id, detected_type")
     .eq("file_hash", fileHash)
     .maybeSingle();
-  if (error) throw new DocumentStoreError(`查询重复文档失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to query for duplicate document: ${error.message}`);
   return data as Pick<UploadedDocumentRow, "id" | "detected_type"> | null;
 }
 
 /**
- * 插入文档记录。返回 null 表示文件哈希已存在（并发下别人先插入了）——
- * 调用方应返回 duplicate，而不是覆盖原记录。
+ * Insert a document record. Returning null means the file hash already exists (someone else inserted
+ * it first under concurrency) — the caller should return duplicate rather than overwriting the original record.
  */
 export async function insertDocumentRow(row: NewDocumentRow): Promise<UploadedDocumentRow | null> {
   const { data, error } = await getSupabaseServiceClient()
@@ -49,11 +50,11 @@ export async function insertDocumentRow(row: NewDocumentRow): Promise<UploadedDo
     .upsert(row, { onConflict: "file_hash", ignoreDuplicates: true })
     .select("*")
     .maybeSingle();
-  if (error) throw new DocumentStoreError(`写入文档记录失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to write document record: ${error.message}`);
   return (data as UploadedDocumentRow | null) ?? null;
 }
 
-/** 列表查询：返回匹配总数（total）和当前页行 */
+/** List query: returns the matching total count and the current page's rows */
 export async function listDocumentRows(
   query: DocumentListQuery
 ): Promise<{ total: number; rows: UploadedDocumentRow[] }> {
@@ -66,7 +67,7 @@ export async function listDocumentRows(
   if (query.detected_type) request = request.eq("detected_type", query.detected_type);
 
   const { data, error, count } = await request;
-  if (error) throw new DocumentStoreError(`查询文档列表失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to query document list: ${error.message}`);
   return { total: count ?? 0, rows: (data ?? []) as UploadedDocumentRow[] };
 }
 
@@ -76,13 +77,13 @@ export async function getDocumentRowById(id: string): Promise<UploadedDocumentRo
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) throw new DocumentStoreError(`查询文档详情失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to query document detail: ${error.message}`);
   return (data as UploadedDocumentRow | null) ?? null;
 }
 
 /**
- * 人工归类：更新 detected_type 并把 review_status 置 filed。
- * 带 expected_updated_at 时用乐观锁；更新不到行再区分"不存在"和"被改过"。
+ * Manual classification: updates detected_type and sets review_status to filed.
+ * Uses optimistic locking when expected_updated_at is given; if no row is updated, distinguishes between "doesn't exist" and "was changed".
  */
 export async function updateDocumentClassification(
   request: ClassifyDocumentRequest
@@ -100,14 +101,14 @@ export async function updateDocumentClassification(
   }
 
   const { data, error } = await update.select("*").maybeSingle();
-  if (error) throw new DocumentStoreError(`更新文档归类失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to update document classification: ${error.message}`);
   if (data) return { status: "ok", row: data as UploadedDocumentRow };
 
   const existing = await getDocumentRowById(request.id);
   return existing ? { status: "conflict" } : { status: "not_found" };
 }
 
-/** 把原文件写进 Storage：路径按内容哈希生成，同一份内容重复写是幂等的（upsert） */
+/** Write the original file into Storage: the path is generated from the content hash, so writing the same content again is idempotent (upsert) */
 export async function uploadOriginalFile(
   storagePath: string,
   content: Buffer,
@@ -116,19 +117,19 @@ export async function uploadOriginalFile(
   const { error } = await getSupabaseServiceClient()
     .storage.from(UPLOAD_BUCKET)
     .upload(storagePath, content, { contentType, upsert: true });
-  if (error) throw new DocumentStoreError(`上传原文件到 Storage 失败：${error.message}`);
+  if (error) throw new DocumentStoreError(`Failed to upload the original file to Storage: ${error.message}`);
 }
 
-/** 补偿操作（落库失败时删掉刚上传的原文件）：尽力而为，失败只告警不抛错 */
+/** Compensating action (deletes the just-uploaded original file if the database write fails): best-effort, logs a warning on failure instead of throwing */
 export async function removeStoredFile(storagePath: string): Promise<void> {
   try {
     const { error } = await getSupabaseServiceClient()
       .storage.from(UPLOAD_BUCKET)
       .remove([storagePath]);
     if (error) {
-      console.warn(`[import] 回滚删除 Storage 文件失败（${storagePath}）：${error.message}`);
+      console.warn(`[import] Failed to roll back (delete) Storage file (${storagePath}): ${error.message}`);
     }
   } catch (err) {
-    console.warn(`[import] 回滚删除 Storage 文件异常（${storagePath}）：`, err);
+    console.warn(`[import] Exception while rolling back (deleting) Storage file (${storagePath}):`, err);
   }
 }

@@ -1,10 +1,11 @@
 /**
- * 结果列表查询（筛选 + 排序 + 分组 + 分页）。
+ * Result list query (filter + sort + group + paginate).
  *
- * 读的是数据库视图 verification_overview（raw_emails 左连接 verification_results）：
- * - 未处理的邮件也在里面（processing_status='pending'、processed=false），能被查到
- * - 所有可用字段都是扁平列，筛选/排序直接做，不依赖 PostgREST 的内嵌表语义
- *   （内嵌排序实测不会影响父行顺序，之前踩过坑）
+ * Reads from the database view verification_overview (raw_emails left-joined with verification_results):
+ * - Unprocessed emails are included too (processing_status='pending', processed=false), and can be queried
+ * - Every usable field is a flat column, so filtering/sorting works directly without relying on PostgREST's
+ *   embedded-table semantics (embedded sorting was empirically found not to affect parent row order —
+ *   we got burned by this before)
  */
 import type { ComparisonStatus, EmailCategory, ReviewReason } from "@/lib/shared/types";
 import { fetchAllRows, getReadClient, ilikeFragment, sanitizeSearchTerm } from "./db";
@@ -67,8 +68,8 @@ function buildBaseQuery(options?: { withCount?: boolean }) {
 }
 
 /**
- * 查询构造器只用到这几个方法（结构类型）：
- * 这样列表查询和分组查询可以用同一个 applyFilters，不需要关心 PostgREST 泛型细节。
+ * The query builder only needs these methods (structural typing):
+ * this lets the list query and the group query share the same applyFilters without worrying about PostgREST generic details.
  */
 interface FilterableBuilder<T> {
   in(column: string, values: readonly unknown[]): T;
@@ -83,7 +84,7 @@ export async function listResults(query: ResultQuery): Promise<ResultList> {
   const { data, error, count } = await applyOrder(builder, query)
     .range(query.offset, query.offset + query.limit - 1);
 
-  if (error) throw new DataAccessError(`查询结果列表失败：${error.message}`);
+  if (error) throw new DataAccessError(`Failed to query result list: ${error.message}`);
 
   const items = ((data ?? []) as unknown as OverviewRow[]).map(toResultRow);
   const groups = query.groupBy ? await fetchGroups(query) : null;
@@ -100,7 +101,7 @@ export async function listResults(query: ResultQuery): Promise<ResultList> {
   };
 }
 
-/** 导出/报表用：同样筛选条件下，把所有匹配行都取回来（分页拉全量） */
+/** For export/reporting: fetch back all matching rows under the same filters (paginate through the full set) */
 export async function listAllResults(query: ResultQuery): Promise<ResultRow[]> {
   const rows = await fetchAllRows<OverviewRow>((from, to) => {
     const builder = applyFilters(buildBaseQuery(), query);
@@ -153,7 +154,7 @@ function buildGroupQuery(groupColumn: string) {
   return client.from(OVERVIEW_VIEW).select(`email_id,${groupColumn}`);
 }
 
-/** 分组计数：对"筛选后的全集"统计，不受分页影响 */
+/** Group counts: aggregated over the "full filtered set", unaffected by pagination */
 async function fetchGroups(query: ResultQuery): Promise<{ key: string; count: number }[]> {
   const groupColumn = query.groupBy as string;
   const rows = await fetchAllRows<Record<string, unknown>>((from, to) =>

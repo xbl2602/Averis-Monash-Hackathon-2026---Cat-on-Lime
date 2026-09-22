@@ -2,7 +2,7 @@
  * Fields the screens are READY for but the server does not send yet. Everything here is optional on purpose:
  * each feature switches itself on the moment its field shows up in a response, and stays out of the way until then.
  * So when the backend adds one, nothing on the frontend needs to change. The names below are the contract that was
- * built against (also written up in docs/UI_GUIDE.md "前端已备好、等后端补字段"); if the backend picks a different
+ * built against (also written up in docs/UI_GUIDE.md "Frontend ready, waiting for backend fields"); if the backend picks a different
  * name, change it here and nowhere else.
  *
  * 1. Classifier uncertainty (was: confidence is computed but never saved)

@@ -1,9 +1,11 @@
 /**
- * results 模块（结果查询 / 统计 / 冲突对 / 导出）的类型与常量。
+ * Types and constants for the results module (result queries / stats / conflict pairs / export).
  *
- * 这些是"读模型"，只在本模块内部使用；对外契约（HTTP 响应 / MCP tool 返回格式）
- * 写在 SHARED_INTERFACES.md「results 模块」一节，两边改动要同步。
- * 不要从别的 feature 直接 import 这里的内部实现（见 CLAUDE.md「一切皆插件」）。
+ * These are "read models" used only within this module; the external contract (HTTP response /
+ * MCP tool return format) is written in the "results module" section of SHARED_INTERFACES.md —
+ * keep both in sync when changing either.
+ * Do not import internal implementation details from here in another feature (see "everything is
+ * a plugin" in CLAUDE.md).
  */
 import type {
   ComparisonStatus,
@@ -12,7 +14,7 @@ import type {
   ReviewReason,
 } from "@/lib/shared/types";
 
-// 列表可排序的字段（白名单：只有这几列能进查询/排序，避免任意列名）
+// Fields the list can be sorted by (whitelist: only these columns can be used for querying/sorting, to avoid arbitrary column names)
 export const RESULT_SORT_FIELDS = [
   "email_id",
   "category",
@@ -22,40 +24,40 @@ export const RESULT_SORT_FIELDS = [
 ] as const;
 export type ResultSortField = (typeof RESULT_SORT_FIELDS)[number];
 
-// 冲突对可排序的字段
+// Fields conflict pairs can be sorted by
 export const CONFLICT_SORT_FIELDS = ["email_id", "defect_count", "updated_at"] as const;
 export type ConflictSortField = (typeof CONFLICT_SORT_FIELDS)[number];
 
 export const SORT_ORDERS = ["asc", "desc"] as const;
 export type SortOrder = (typeof SORT_ORDERS)[number];
 
-// 三态：processed=结果表里有行；failed=结果表里的行 processing_status='failed'；
-// pending=原始邮件还没有结果行（表里没有行不代表失败，是还没跑）
+// Three states: processed=there's a row in the results table; failed=the row in the results table has processing_status='failed';
+// pending=the raw email has no result row yet (no row in the table doesn't mean it failed, it just hasn't run yet)
 export const PROCESSING_STATES = ["processed", "pending", "failed"] as const;
 export type ProcessingState = (typeof PROCESSING_STATES)[number];
 
-// 列表可分组展示的字段（对应"自定义展示方式"）
+// Fields the list can be grouped by for display (corresponds to "custom display mode")
 export const GROUP_FIELDS = ["category", "comparison_status"] as const;
 export type GroupField = (typeof GROUP_FIELDS)[number];
 
 export const EXPORT_FORMATS = ["json", "md", "txt", "csv"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-// 导出场景：同一份数据，不同场景导出不同内容（见 SHARED_INTERFACES.md）
+// Export scenarios: the same underlying data exports different content depending on scenario (see SHARED_INTERFACES.md)
 export const EXPORT_SCOPES = ["results", "conflicts", "stats", "submission"] as const;
 export type ExportScope = (typeof EXPORT_SCOPES)[number];
 
 export interface ResultQuery {
-  /** 只要这几类；缺省=全部（含未处理） */
+  /** Only these categories; default = all (including unprocessed) */
   categories?: EmailCategory[];
   statuses?: ComparisonStatus[];
-  /** processed / pending / failed；缺省=全部 */
+  /** processed / pending / failed; default = all */
   processing?: ProcessingState;
-  /** 只看 MISMATCH（真正有缺陷）的 */
+  /** Only show MISMATCH (genuine defects) */
   hasDefect?: boolean;
-  /** model_provider 的子串匹配，例如 "jev"、"rules" */
+  /** Substring match on model_provider, e.g. "jev", "rules" */
   provider?: string;
-  /** 邮件ID / 发件人 / 主题 的关键词搜索 */
+  /** Keyword search by email ID / sender / subject */
   q?: string;
   sortBy: ResultSortField;
   order: SortOrder;
@@ -69,7 +71,7 @@ export interface ResultRow {
   from: string;
   subject: string;
   attachment_paths: string[];
-  /** 未处理的邮件，下面这些结果字段都是 null / 空 */
+  /** For unprocessed emails, all of these result fields are null / empty */
   category: EmailCategory | null;
   comparison_status: ComparisonStatus | null;
   review_reason: ReviewReason | null;
@@ -83,7 +85,7 @@ export interface ResultRow {
   updated_at: string | null;
   extracted_si: Record<string, string> | null;
   extracted_bl: Record<string, string> | null;
-  /** 字段级出处（规则命中的行号/原句；LLM 兜底只标来源），没有就是 null */
+  /** Field-level provenance (rule-matched line number/original sentence; LLM fallback only marks the source), null if none */
   evidence_si: ExtractedDocumentEvidence | null;
   evidence_bl: ExtractedDocumentEvidence | null;
 }
@@ -95,35 +97,36 @@ export interface ResultList {
   sortBy: ResultSortField;
   order: SortOrder;
   groupBy: GroupField | null;
-  /** 只有传了 groupBy 才有值（对筛选后的全集统计，不是只统计当前页） */
+  /** Only populated when groupBy is passed (counts the whole filtered set, not just the current page) */
   groups: { key: string; count: number }[] | null;
   items: ResultRow[];
 }
 
 export interface StatsSummary {
-  /** 原始邮件总数（raw_emails） */
+  /** Total number of raw emails (raw_emails) */
   total_emails: number;
-  /** 结果表里有行的数量（含 failed） */
+  /** Number of rows present in the results table (including failed) */
   processed: number;
-  /** 还没有结果行的数量 = total_emails - processed */
+  /** Number with no result row yet = total_emails - processed */
   pending: number;
-  /** processing_status='failed' 的数量 */
+  /** Number with processing_status='failed' */
   failed: number;
   mismatch: number;
   needs_review: number;
-  /** 5 个类别 + NOT_PROCESSED */
+  /** 5 categories + NOT_PROCESSED */
   by_category: Record<string, number>;
   /** OK / MISMATCH / NEEDS_REVIEW + NOT_PROCESSED */
   by_status: Record<string, number>;
-  /** 差异字段频次排行（MISMATCH 行里的 defect_fields） */
+  /** Ranking of defect field frequency (defect_fields from MISMATCH rows) */
   defect_field_frequency: { field: string; count: number }[];
-  /** model_provider 值的分布 */
+  /** Distribution of model_provider values */
   providers: Record<string, number>;
   last_updated_at: string | null;
 }
 
-// 数值搜索/模糊口径可用的字段（"精确/模糊"只对数字字段有意义；权威数字字段集合在 comparison 模块的
-// canonical.ts，这里是读侧子集，两边如有一方调整要同步）
+// Fields usable for numeric search / fuzzy matching ("exact/fuzzy" only makes sense for numeric fields;
+// the authoritative set of numeric fields lives in canonical.ts in the comparison module — this is the
+// read-side subset, keep both in sync if either changes)
 export const NUMERIC_SEARCH_FIELDS = ["container_count", "gross_weight_kg"] as const;
 export type NumericSearchField = (typeof NUMERIC_SEARCH_FIELDS)[number];
 
@@ -137,13 +140,13 @@ export interface ConflictQuery {
   order: SortOrder;
   limit: number;
   offset: number;
-  /** 数值口径：exact（默认，与结果表的存储判定一致）/ fuzzy（容差内的小差异不算冲突） */
+  /** Numeric comparison mode: exact (default, matches what's stored in the results table) / fuzzy (small differences within tolerance don't count as a conflict) */
   numericMode: NumericMode;
-  /** 仅 fuzzy 时可用；不传时各字段用默认容差（重量 max(0.5kg, 0.1%)、箱数 0） */
+  /** Only usable with fuzzy; when omitted each field uses its default tolerance (weight max(0.5kg, 0.1%), container count 0) */
   tolerance: number | null;
-  /** 按值搜索的字段（和 value 成对出现；都为空 = 不做值搜索） */
+  /** Field to search by value (paired with value; both empty = no value search) */
   valueField: NumericSearchField | null;
-  /** 按值搜索的数值（校验时已转成合法数字字符串） */
+  /** Numeric value to search for (already converted to a valid numeric string during validation) */
   value: string | null;
 }
 
@@ -151,7 +154,7 @@ export interface ConflictPair {
   email_id: string;
   from: string;
   subject: string;
-  /** 按附件文件名里的 _SI / _BL 区分，找不到就是 null */
+  /** Distinguished by _SI / _BL in the attachment filename; null if not found */
   si_file: string | null;
   bl_file: string | null;
   other_files: string[];
@@ -161,7 +164,7 @@ export interface ConflictPair {
   defect_count: number;
   si_values: Record<string, string>;
   bl_values: Record<string, string>;
-  /** 字段级出处（和 values 同源；规则命中才有行号/原句） */
+  /** Field-level provenance (same source as values; only present when a rule matched, giving line number/original sentence) */
   si_evidence: ExtractedDocumentEvidence | null;
   bl_evidence: ExtractedDocumentEvidence | null;
   updated_at: string | null;
@@ -179,7 +182,7 @@ export interface ConflictList {
 export interface ExportRequest {
   scope: ExportScope;
   format: ExportFormat;
-  /** scope=results / conflicts 时生效；stats / submission 忽略 */
+  /** Effective when scope=results / conflicts; ignored for stats / submission */
   query: ResultQuery;
   conflictQuery: ConflictQuery;
 }
@@ -190,37 +193,41 @@ export interface ExportDocument {
   format: ExportFormat;
   scope: ExportScope;
   itemCount: number;
-  /** scope=submission 时给出"应该有多少封"的分母，用来判断提交是否完整 */
+  /** When scope=submission, the denominator for "how many there should be", used to judge whether the submission is complete */
   expectedTotal: number | null;
   /**
-   * scope=submission 时：分母的来源。
-   * - sample = 官方样例清单（data/sample/inbox 的文件名，最可信）
-   * - db-fallback = 读不到清单，降级用数据库总数（此时 incomplete 强制为 true）
+   * When scope=submission: where the denominator came from.
+   * - sample = the official sample list (filenames under data/sample/inbox, most trustworthy)
+   * - db-fallback = the list couldn't be read, fell back to the database total (incomplete is forced to true in this case)
    */
   expectedSource: "sample" | "db-fallback" | null;
-  /** scope=submission 且 expectedSource=sample 时：清单里有、导出里没有的 email_id */
+  /** When scope=submission and expectedSource=sample: email_ids present in the list but missing from the export */
   missingIds: string[];
-  /** scope=submission 时：有结果但 logic_version 与当前引擎版本不一致的 email_id */
+  /** When scope=submission: email_ids that have a result but whose logic_version doesn't match the current engine version */
   staleIds: string[];
   /**
-   * scope=submission 时：行内字段自相矛盾（违反官方 schema，如 MISMATCH 却没有缺陷清单、
-   * NEEDS_REVIEW 却带着缺陷、复核缺少原因）的 email_id。非 submission 场景恒为空数组。
+   * When scope=submission: email_ids whose row fields are internally inconsistent (violating the official
+   * schema, e.g. MISMATCH with no defect list, NEEDS_REVIEW carrying defects, or a review missing its reason).
+   * Always an empty array for non-submission scenarios.
    */
   invalidIds: string[];
   /**
-   * submission 场景：expectedSource 非 sample、条数≠分母、有缺失/过期版本或失败行，
-   * 任意一条成立就是 true（fail-closed：宁可提示不完整，也不谎报"已完整"）
+   * submission scenario: true if any of the following holds: expectedSource isn't sample, the item count
+   * doesn't match the denominator, there are missing/stale-version/failed rows, or invalid rows
+   * (fail-closed: better to report incomplete than to falsely claim "complete").
    */
   incomplete: boolean;
   /**
-   * scope=submission 时：应该复核但还没处置的项数（NEEDS_REVIEW/MISMATCH 且没有对应的人工覆盖）。
-   * 人工复核闭环（P1-1，见 docs/REVIEW_SPEC.md §5.2）；非 submission 场景恒为 0。
-   * 大于 0 不影响 incomplete（提交格式仍合法），只是提示前端"还有 N 条未人工闭环"。
+   * When scope=submission: number of items that should be reviewed but haven't been resolved yet
+   * (NEEDS_REVIEW/MISMATCH with no corresponding manual override).
+   * Part of the manual review loop (P1-1, see docs/REVIEW_SPEC.md §5.2); always 0 for non-submission scenarios.
+   * Being greater than 0 doesn't affect incomplete (the submission format is still valid) — it just tells
+   * the frontend "N items are still not manually resolved".
    */
   reviewPending: number;
-  /** scope=submission 时：被人工搁置（defer）、尚未闭环的项数；非 submission 场景恒为 0 */
+  /** When scope=submission: number of items manually deferred and not yet resolved; always 0 for non-submission scenarios */
   reviewDeferred: number;
-  /** 文件内容本体：HTTP 直接作为响应体，MCP 作为 text 返回 */
+  /** The file content itself: used directly as the response body over HTTP, returned as text over MCP */
   content: string;
   generatedAt: string;
 }

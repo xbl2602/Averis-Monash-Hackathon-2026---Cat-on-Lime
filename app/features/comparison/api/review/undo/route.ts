@@ -1,6 +1,6 @@
 import { makeReviewUndoPostHandler } from "@/lib/shared/review/http";
 
-// POST { email_id, action_id?, expected_updated_at? }（需要 x-admin-token）
+// POST { email_id, action_id?, expected_updated_at? } (requires x-admin-token)
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 

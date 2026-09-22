@@ -1,9 +1,9 @@
 /**
- * 多 LLM 统一调用层（见 CLAUDE.md "多LLM支持"）。
- * 所有 feature 模块的 logic/ 只应该 import 这个文件里的 callLLM，
- * 不要在 feature 模块内部直接 import 某个具体 LLM 的 SDK。
+ * The unified multi-LLM call layer (see "Multi-LLM Support" in CLAUDE.md).
+ * Every feature module's logic/ should only import callLLM from this file — don't import a
+ * specific LLM's SDK directly inside a feature module.
  *
- * 公共区文件，改动前先跟操作者确认。
+ * This is a shared-area file; confirm with the operator before making changes.
  */
 import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -12,7 +12,7 @@ import { generateText, type LanguageModel } from "ai";
 import { isJevAvailable } from "./jev";
 import { isTimeoutError, LLMConfigError, UpstreamServiceError } from "./errors";
 
-// provider 的唯一权威清单，类型和运行时校验都从这里派生，不要另起一份
+// The single authoritative list of providers — both the type and the runtime validation are derived from here, don't start a second copy elsewhere
 export const LLM_PROVIDER_IDS = [
   "claude",
   "openai",
@@ -25,9 +25,10 @@ export const LLM_PROVIDER_IDS = [
 export type LLMProvider = (typeof LLM_PROVIDER_IDS)[number];
 
 /**
- * 文本生成类 provider（extraction 这种"写出一段文字"的场景用）。
- * jev 是结构化决策模型、不生成文本，不在其中；`as const satisfies` 保证它一定是
- * LLM_PROVIDER_IDS 的子集，且保留字面量类型（z.enum(TEXT_PROVIDER_IDS) 需要）。
+ * Text-generation providers (for scenarios like extraction that "write out a piece of text").
+ * jev is a structured decision model that doesn't generate text, so it's excluded; `as const
+ * satisfies` guarantees this stays a subset of LLM_PROVIDER_IDS while preserving the literal
+ * types (needed by z.enum(TEXT_PROVIDER_IDS)).
  */
 export const TEXT_PROVIDER_IDS = [
   "claude",
@@ -39,26 +40,28 @@ export const TEXT_PROVIDER_IDS = [
 
 export type TextLLMProvider = (typeof TEXT_PROVIDER_IDS)[number];
 
-// 校验任意输入是不是合法的 provider（API/MCP 路由解析请求时用）
+// Validates whether an arbitrary input is a legal provider (used when the API/MCP route parses a request)
 export function isLLMProvider(value: unknown): value is LLMProvider {
   return typeof value === "string" && (LLM_PROVIDER_IDS as readonly string[]).includes(value);
 }
 
-// 校验任意输入是不是"能写文字的 provider"（extraction 的 REST/MCP 用）
+// Validates whether an arbitrary input is a "provider that can write text" (used by extraction's REST/MCP)
 export function isTextProvider(value: unknown): value is TextLLMProvider {
   return typeof value === "string" && (TEXT_PROVIDER_IDS as readonly string[]).includes(value);
 }
 
-/** 单次调用的超时（毫秒）：上游卡住时尽快失败（见性能评审） */
+/** Timeout for a single call, in milliseconds: fail fast when upstream is stuck (see the performance review) */
 const LLM_CALL_TIMEOUT_MS = 20_000;
 
 /**
- * 超时/暂时性错误的自动重试延迟（毫秒）。P1-2（2026-09-21）：只重试一次，
- * 且只对"这次大概率是临时抖动"的错误重试（超时/限流/上游5xx/网络错误）；
- * 401/403/400/422 这类"重试也没用"的错误不重试，直接失败。
- * 这一层重试只发生在单个 provider 内部，不影响、也不替代 lib/shared/llm-chain.ts
- * 的"跨 provider 换下一家"降级链——两者是叠加关系：先在本 provider 内重试一次，
- * 仍失败才轮到降级链换下一个 provider。
+ * Retry delay (in milliseconds) for automatic retries on timeouts/transient errors. P1-2
+ * (2026-09-21): only retries once, and only for errors that are likely just "temporary
+ * jitter this time" (timeout/rate-limited/upstream 5xx/network error); errors like
+ * 401/403/400/422, where "retrying wouldn't help anyway", fail immediately without a retry.
+ * This retry layer only happens within a single provider — it doesn't affect or replace the
+ * "switch to the next provider" degradation chain in lib/shared/llm-chain.ts. The two stack:
+ * first retry once within this provider, and only move on to the next provider in the
+ * degradation chain if that retry also fails.
  */
 const RETRY_DELAY_MS = 2_000;
 
@@ -80,24 +83,26 @@ export const LLM_PROVIDERS: { id: LLMProvider; label: string; cloudOnly: boolean
   { id: "openai", label: "ChatGPT (OpenAI)", cloudOnly: false },
   { id: "deepseek", label: "DeepSeek", cloudOnly: false },
   { id: "gemini", label: "Gemini (Google)", cloudOnly: false },
-  { id: "lmstudio", label: "本地 LM Studio", cloudOnly: true }, // cloudOnly=true 这个命名有点反直觉：意思是"只能在非云端环境用"，见下面 isLocalLLMAvailable
-  { id: "jev", label: "Jev (TypeSafe 结构化决策)", cloudOnly: false }, // 只能做结构化判断，不支持文本生成，见 lib/llm/jev.ts
+  { id: "lmstudio", label: "Local LM Studio", cloudOnly: true }, // cloudOnly=true is a somewhat counterintuitive name here: it actually means "only usable in a non-cloud environment" — see isLocalLLMAvailable below
+  { id: "jev", label: "Jev (TypeSafe structured decisions)", cloudOnly: false }, // Can only make structured judgments, doesn't support text generation, see lib/llm/jev.ts
 ];
 
-// 判断当前是不是跑在 Vercel 云端——Vercel 会自动设置这个环境变量
+// Whether we're currently running on Vercel's cloud — Vercel sets this environment variable automatically
 function isRunningOnVercel(): boolean {
   return process.env.VERCEL === "1";
 }
 
-// 本地 LM Studio 只有在不是 Vercel 云端部署时才可用（见 CLAUDE.md 的说明：
-// Vercel 服务器访问不到操作者自己电脑上的 LM Studio）
+// Local LM Studio is only available when this isn't a Vercel cloud deployment (see the note
+// in CLAUDE.md: Vercel's servers can't reach an LM Studio instance running on the operator's
+// own machine)
 export function isLocalLLMAvailable(): boolean {
   return !isRunningOnVercel();
 }
 
 /**
- * 各 provider 对应的环境变量名（写死一份，和 .env.example 保持一致）。
- * LM Studio 不需要 key（靠“是不是 Vercel 云端”判断），Jev 用 TYPESAFE_API_KEY，单独处理。
+ * The environment variable name for each provider (hardcoded, kept in sync with .env.example).
+ * LM Studio doesn't need a key (it's gated by "is this Vercel cloud" instead), and Jev uses
+ * TYPESAFE_API_KEY, handled separately.
  */
 const PROVIDER_KEY_ENV_VARS: Record<Exclude<LLMProvider, "lmstudio" | "jev">, string> = {
   claude: "ANTHROPIC_API_KEY",
@@ -107,11 +112,13 @@ const PROVIDER_KEY_ENV_VARS: Record<Exclude<LLMProvider, "lmstudio" | "jev">, st
 };
 
 /**
- * 这个 provider 现在能不能用（key 配没配齐）。
+ * Whether this provider is currently usable (whether its key is fully configured).
  *
- * 环境变量在进程启动后不会变，所以这里直接读、不做缓存（规范禁止模块级可变状态）。
- * 说明：LM Studio 不需要 apiKey，只要在本地/Docker 环境就算就绪；
- *       Jev 用 isJevAvailable()（TYPESAFE_API_KEY），避免两处各写一份判断。
+ * Environment variables don't change once the process has started, so this reads them
+ * directly with no caching (the conventions forbid module-level mutable state).
+ * Note: LM Studio doesn't need an apiKey — it just needs to be a local/Docker environment to
+ * be considered ready; Jev uses isJevAvailable() (TYPESAFE_API_KEY), to avoid writing this
+ * check in two places.
  */
 export function isProviderConfigured(provider: LLMProvider): boolean {
   if (provider === "lmstudio") return isLocalLLMAvailable();
@@ -120,10 +127,13 @@ export function isProviderConfigured(provider: LLMProvider): boolean {
 }
 
 /**
- * 文本模型的安全兜底顺序（2026-09-21 新增，P0-2，见 DECISION_LOG 决策 25）：
- * 首选（显式传入的 provider）排最前，其余按固定顺序补齐；只保留当前配了 key 的。
- * gemini 放第一是因为它是本项目的 demo 兜底（见 CLAUDE.md）；lmstudio 只有本地可用。
- * 现算现用，不做模块级缓存（规范禁止模块级可变状态；环境变量本身进程内不变）。
+ * The safe fallback order for text models (added 2026-09-21, P0-2, see DECISION_LOG decision 25):
+ * the preferred provider (if explicitly passed in) comes first, the rest fill in behind it in
+ * a fixed order; only ones with a key currently configured are kept.
+ * gemini is first because it's this project's demo fallback (see CLAUDE.md); lmstudio is only
+ * available locally.
+ * Computed fresh on every use, with no module-level caching (the conventions forbid
+ * module-level mutable state; environment variables don't change within a process anyway).
  */
 const TEXT_FALLBACK_ORDER: readonly TextLLMProvider[] = [
   "gemini",
@@ -145,63 +155,67 @@ export function orderedTextProviders(preferred?: LLMProvider): TextLLMProvider[]
   return ordered.filter((provider) => isProviderConfigured(provider));
 }
 
-/** provider 不可用时给用户的可读说明（含要配哪个环境变量） */
+/** A readable explanation for the user when a provider is unavailable (including which environment variable to configure) */
 function unavailableProviderMessage(provider: LLMProvider): string {
   switch (provider) {
     case "lmstudio":
-      return "本地 LM Studio 只能在本地/Docker 部署模式下使用，当前部署环境（Vercel）不支持，请换一个 provider";
+      return "Local LM Studio can only be used in local/Docker deployment mode; the current deployment environment (Vercel) doesn't support it — please switch to a different provider";
     case "jev":
-      return "缺少 TYPESAFE_API_KEY 环境变量，无法调用 Jev。请在 .env.local 或部署平台配置该变量，或改用其他 provider";
+      return "Missing the TYPESAFE_API_KEY environment variable, cannot call Jev. Please configure this variable in .env.local or on the deployment platform, or switch to a different provider";
     default:
-      return `provider「${provider}」当前不可用：缺少环境变量 ${PROVIDER_KEY_ENV_VARS[provider]}（或在部署平台上没有配置）。请在 .env.local / 部署平台补上后重试，或换一个已配置的 provider`;
+      return `Provider "${provider}" is currently unavailable: the environment variable ${PROVIDER_KEY_ENV_VARS[provider]} is missing (or not configured on the deployment platform). Please add it in .env.local / the deployment platform and try again, or switch to a provider that's already configured`;
   }
 }
 
 function getModel(provider: LLMProvider): LanguageModel {
   switch (provider) {
     case "claude":
-      // 模型名以 Anthropic 官方文档为准，这里先用一个当前可用的型号，AI 写代码时如有需要自行核实最新名称
+      // Follow Anthropic's official docs for the model name; using a currently available model here — if the AI writing this code needs to, verify the latest name itself
       return anthropic("claude-sonnet-4-5");
     case "openai":
       return createOpenAI({ apiKey: process.env.OPENAI_API_KEY })("gpt-4o-mini");
     case "deepseek":
-      // DeepSeek 的 API 兼容 OpenAI 协议，复用 openai provider，只换 baseURL + apiKey
+      // DeepSeek's API is OpenAI-protocol-compatible, so we reuse the openai provider and just swap the baseURL + apiKey
       return createOpenAI({
         apiKey: process.env.DEEPSEEK_API_KEY,
         baseURL: "https://api.deepseek.com/v1",
       })("deepseek-chat");
     case "gemini":
-      // gemini-2.0-flash 已被 Google 下线，API 返回的错误里明确建议改用 gemini-3.6-flash
+      // gemini-2.0-flash has been deprecated by Google; the API's error response explicitly recommends switching to gemini-3.6-flash
       return google("gemini-3.6-flash");
     case "lmstudio":
       if (!isLocalLLMAvailable()) {
         throw new Error(
-          "本地 LM Studio 只能在本地/Docker 部署模式下使用，当前部署环境（Vercel）不支持，请换一个 provider"
+          "Local LM Studio can only be used in local/Docker deployment mode; the current deployment environment (Vercel) doesn't support it — please switch to a different provider"
         );
       }
-      // LM Studio 同样兼容 OpenAI 协议，本地起服务不需要真的 apiKey
+      // LM Studio is also OpenAI-protocol-compatible; running it locally doesn't need a real apiKey
       return createOpenAI({
         apiKey: "lm-studio",
         baseURL: process.env.LM_STUDIO_BASE_URL || "http://localhost:1234/v1",
       })("local-model");
     case "jev":
-      // Jev 是结构化决策模型，不走文本生成这条路，主动给出可读的错误而不是让 SDK 报奇怪的类型错
+      // Jev is a structured decision model and doesn't go through the text-generation path; raise a readable error proactively instead of letting the SDK throw a confusing type error
       throw new Error(
-        "Jev 只能做结构化决策（分类/比对），不支持文本生成/抽取。请改用 lib/llm 的 callJev()，或换一个文本 LLM provider。"
+        "Jev only supports structured decisions (classification/comparison), not text generation/extraction. Use lib/llm's callJev() instead, or switch to a text-generation LLM provider."
       );
   }
 }
 
 /**
- * 统一的 LLM 调用入口。所有模块都应该通过这个函数调用 LLM，不要各自直接用 SDK。
- * 遵守"调试规范"：外部调用失败要能被上层感知（抛出有意义的错误），不在这里静默吞掉。
+ * The unified LLM call entry point. Every module should call LLMs through this function —
+ * don't use an SDK directly on your own.
+ * Follows the "debugging convention": an external call failure must be perceptible to the
+ * caller (throw a meaningful error), never swallowed silently here.
  *
- * 失败约定（2026-09-20 可靠性/安全评审；2026-09-21 P1-2 加自动重试）：
- * - 本地没配 key → LLMConfigError（可读，含环境变量名），不重试（配置问题重试也没用）
- * - 上游超时/限流/5xx/网络错误 → 等 `RETRY_DELAY_MS` 后原样重试一次；仍失败才抛出
- *   UpstreamServiceError（message 只含 provider + 状态 + 稳定 code；原始错误详情只进
- *   console.warn，不拼进 message、不原样回传）
- * - 401/403/400/422 这类确定性错误 → 不重试，直接抛出
+ * Failure convention (2026-09-20 reliability/security review; 2026-09-21 P1-2 added automatic retry):
+ * - No key configured locally -> LLMConfigError (readable, includes the environment variable
+ *   name), no retry (retrying a configuration problem wouldn't help)
+ * - Upstream timeout/rate-limit/5xx/network error -> wait `RETRY_DELAY_MS` and retry once
+ *   as-is; only throw UpstreamServiceError if it still fails (message only contains provider +
+ *   status + a stable code; the raw error detail only goes to console.warn, never appended
+ *   into the message or passed through as-is)
+ * - Deterministic errors like 401/403/400/422 -> no retry, thrown immediately
  */
 export async function callLLM(
   provider: LLMProvider,
@@ -218,7 +232,7 @@ export async function callLLM(
       model,
       system: options?.system,
       prompt,
-      // 单次调用 20s 超时：上游卡住时不拖着整个请求
+      // A single call times out after 20s: don't let the whole request hang when upstream is stuck
       abortSignal: AbortSignal.timeout(LLM_CALL_TIMEOUT_MS),
     });
     return text;
@@ -232,7 +246,7 @@ export async function callLLM(
       throw firstUpstreamErr;
     }
     console.warn(
-      `[llm] ${provider} 首次调用失败（${firstUpstreamErr.code}），${RETRY_DELAY_MS}ms 后重试一次`
+      `[llm] The first call to ${provider} failed (${firstUpstreamErr.code}), retrying once after ${RETRY_DELAY_MS}ms`
     );
     await delay(RETRY_DELAY_MS);
     try {
@@ -245,7 +259,7 @@ export async function callLLM(
 
 function toUpstreamServiceError(provider: LLMProvider, err: unknown): UpstreamServiceError {
   const detail = err instanceof Error ? err.message : String(err);
-  console.warn(`[llm] 调用 ${provider} 失败（原始信息只进服务端日志）：${detail}`);
+  console.warn(`[llm] Call to ${provider} failed (raw details only go to the server log): ${detail}`);
 
   if (isTimeoutError(err)) {
     return new UpstreamServiceError({ provider, status: 504, code: "timeout" });
@@ -269,8 +283,9 @@ function upstreamCodeOf(statusCode: number): string {
   return "http_error";
 }
 
-// Jev（TypeSafe System One）适配层：和 callLLM 是并列的两条能力，不是同一个东西。
-// 需要"让模型在固定选项里做判断"时用 callJev；需要"写出一段文字"时用 callLLM。
+// The Jev (TypeSafe System One) adapter layer: a capability parallel to callLLM, not the same
+// thing. Use callJev when you need "the model to make a judgment among fixed options"; use
+// callLLM when you need "a piece of text written out".
 export {
   callJev,
   isJevAvailable,
@@ -283,7 +298,7 @@ export {
   type JevState,
 } from "./jev";
 
-// LLM 层的可读错误类型：REST/MCP 的错误映射层用它（见 lib/shared/request-errors.ts）
+// Readable error types for the LLM layer: used by the REST/MCP error-mapping layer (see lib/shared/request-errors.ts)
 export {
   LLMConfigError,
   UpstreamServiceError,

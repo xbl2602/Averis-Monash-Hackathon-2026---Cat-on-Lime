@@ -5,10 +5,10 @@ import { isLLMProvider } from "@/lib/llm";
 import { toClientError } from "@/lib/shared/request-errors";
 
 // POST { "email_id": "email_004", "provider": "jev" } -> { category, confidence, needs_review }
-// provider 可省略：不传时走混合引擎（规则 → Jev → Gemini 文本兜底）
+// provider is optional: when omitted, uses the hybrid engine (rules → Jev → Gemini text fallback)
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// 单文档请求最多 1 次外部调用（20s 超时）+ 本地读取，30s 足够且能更快暴露问题
+// A single-document request makes at most 1 external call (20s timeout) plus a local read; 30s is enough and surfaces problems faster
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
@@ -16,22 +16,22 @@ export async function POST(req: NextRequest) {
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ error: "请求体不是合法 JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Request body is not valid JSON" }, { status: 400 });
   }
 
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return NextResponse.json({ error: "请求体必须是一个 JSON 对象" }, { status: 400 });
+    return NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 });
   }
   const body = raw as { email_id?: unknown; provider?: unknown };
 
   if (typeof body.email_id !== "string" || body.email_id.trim() === "") {
-    return NextResponse.json({ error: "缺少 email_id 参数（必须是非空字符串）" }, { status: 400 });
+    return NextResponse.json({ error: "Missing email_id parameter (must be a non-empty string)" }, { status: 400 });
   }
 
   const provider = body.provider;
   if (provider !== undefined && !isLLMProvider(provider)) {
     return NextResponse.json(
-      { error: `不支持的 provider：${String(provider)}` },
+      { error: `Unsupported provider: ${String(provider)}` },
       { status: 400 }
     );
   }
@@ -46,17 +46,17 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** 浏览器/工具直接打开这个地址时，返回接口用法说明（不执行任何处理） */
+/** When a browser/tool opens this address directly, return usage instructions for the endpoint (no processing performed) */
 export async function GET() {
   return NextResponse.json({
     endpoint: "/features/classification/api",
     method: "POST",
     description:
-      "对一封样例邮件做分类（BL_COMPARISON / SI_REQUEST / INVOICE_QUERY / GENERAL / SPAM）。不传 provider 时走混合引擎：规则优先 → Jev → Gemini 文本兜底",
+      "Classifies a sample email (BL_COMPARISON / SI_REQUEST / INVOICE_QUERY / GENERAL / SPAM). When provider is omitted, uses the hybrid engine: rules first → Jev → Gemini text fallback",
     body: {
-      email_id: "样例数据里的邮件ID，例如 email_004",
+      email_id: "The email ID in the sample data, e.g. email_004",
       provider:
-        "可选：claude | openai | deepseek | gemini | lmstudio | jev；不传 = 混合引擎（选 jev 会额外返回置信度）",
+        "Optional: claude | openai | deepseek | gemini | lmstudio | jev; omit for the hybrid engine (choosing jev also returns a confidence score)",
     },
     example: { email_id: "email_004" },
   });

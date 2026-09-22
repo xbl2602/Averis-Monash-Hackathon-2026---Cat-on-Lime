@@ -1,14 +1,14 @@
 /**
- * 全量评测脚本（本地跑）：
- * 样例数据 → 引擎跑完整流水线 → 对照 ground_truth 算分 → 增量写入 verification_results。
+ * Full evaluation script (runs locally):
+ * Sample data -> engine runs the full pipeline -> score against ground_truth -> incrementally write to verification_results.
  *
- * 用法（在项目根目录）：
- *   npm run evaluate                 # 跑全量（增量：指纹和版本没变的邮件直接跳过）
- *   npm run evaluate -- --force      # 忽略指纹强制重算
- *   npm run evaluate -- --limit=50   # 只跑前 50 封（调试）
- *   npm run evaluate -- --no-write   # 只算分，不写库
+ * Usage (from the project root):
+ *   npm run evaluate                 # full run (incremental: emails whose fingerprint and version are unchanged are skipped)
+ *   npm run evaluate -- --force      # ignore fingerprints and force recomputation
+ *   npm run evaluate -- --limit=50   # only run the first 50 emails (debugging)
+ *   npm run evaluate -- --no-write   # score only, don't write to the database
  *
- * ground_truth 仅用于自测/调参（官方 Discord 已澄清允许）；不要把它写进最终提交文件。
+ * ground_truth is for self-testing/tuning only (the official Discord has clarified this is allowed); do not include it in the final submission file.
  */
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -52,14 +52,14 @@ async function main() {
 
   const gt = JSON.parse(await readFile(GT_PATH, "utf-8")) as Record<string, EmailVerificationResult>;
   const emailFiles = (await readdir(path.join(SAMPLE_DIR, "inbox"))).filter((f) => f.endsWith(".json")).sort();
-  console.log(`样例邮件：${emailFiles.length} 封`);
+  console.log(`Sample emails: ${emailFiles.length}`);
 
   const inputs = await loadSamplePipelineInputs(
     undefined,
     Number.isFinite(LIMIT) ? LIMIT : undefined
   );
 
-  // 增量：读已有结果，指纹+版本都没变、且上次成功的直接复用
+  // Incremental: read existing results and directly reuse ones where the fingerprint + version are unchanged and the last run succeeded
   const existing =
     !FORCE && isSupabaseServiceAvailable() ? await loadStoredVerificationRows() : new Map();
 
@@ -93,24 +93,24 @@ async function main() {
       toRun.push(input);
     }
   }
-  console.log(`增量跳过：${reused.length} 封；本次要跑：${toRun.length} 封；引擎版本：${PIPELINE_LOGIC_VERSION}`);
+  console.log(`Incrementally skipped: ${reused.length}; to run this time: ${toRun.length}; engine version: ${PIPELINE_LOGIC_VERSION}`);
 
   const cacheCountBefore = await countCacheRows();
   const startedAt = Date.now();
   const outcome = await runBatchPipeline(toRun, {
     concurrency: 4,
     onProgress: (done, total, emailId) => {
-      if (done % 25 === 0 || done === total) console.log(`  进度 ${done}/${total}（最近：${emailId}）`);
+      if (done % 25 === 0 || done === total) console.log(`  Progress ${done}/${total} (most recent: ${emailId})`);
     },
   });
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
 
-  console.log(`完成：成功 ${outcome.succeeded.length}，失败 ${outcome.failed.length}，耗时 ${elapsed}s`);
+  console.log(`Done: succeeded ${outcome.succeeded.length}, failed ${outcome.failed.length}, elapsed ${elapsed}s`);
   for (const failure of outcome.failed) {
-    console.error(`  [失败] ${failure.input.email.email_id}: ${failure.error instanceof Error ? failure.error.message : failure.error}`);
+    console.error(`  [FAILED] ${failure.input.email.email_id}: ${failure.error instanceof Error ? failure.error.message : failure.error}`);
   }
 
-  // 汇总结果（旧结果 + 新结果）
+  // Combine results (old results + new results)
   const ours = new Map<string, EmailVerificationResult>();
   for (const item of reused) ours.set(item.email_id, item.result);
   for (const item of outcome.succeeded) ours.set(item.input.email.email_id, item.outcome.result);
@@ -122,10 +122,10 @@ async function main() {
     await writeResults(outcome.succeeded, hashByEmail);
     const cacheCountAfter = await countCacheRows();
     if (cacheCountBefore !== null && cacheCountAfter !== null) {
-      console.log(`模型调用缓存：新增 ${cacheCountAfter - cacheCountBefore} 条，累计 ${cacheCountAfter} 条`);
+      console.log(`Model-call cache: added ${cacheCountAfter - cacheCountBefore}, total ${cacheCountAfter}`);
     }
   } else if (!NO_WRITE && !isSupabaseServiceAvailable()) {
-    console.log("（没有 service key，跳过写库；缓存也没启用）");
+    console.log("(no service key, skipping database write; cache is also disabled)");
   }
 }
 
@@ -141,10 +141,10 @@ function resultKey(result: EmailVerificationResult) {
 
 function printReport(ours: Map<string, EmailVerificationResult>, gt: Record<string, EmailVerificationResult>) {
   const categories: EmailCategory[] = ["BL_COMPARISON", "SI_REQUEST", "INVOICE_QUERY", "GENERAL", "SPAM"];
-  // 只统计"这次真正有结果"的邮件（--limit 调试时不会拿全量当分母）
+  // Only count emails that "actually got a result this time" (so debugging with --limit doesn't use the full set as the denominator)
   const ids = Object.keys(gt).filter((id) => ours.has(id));
 
-  // 阶段一：分类 macro-F1
+  // Stage 1: classification macro-F1
   const perCategory = categories.map((category) => {
     let tp = 0, fp = 0, fn = 0;
     for (const id of ids) {
@@ -161,7 +161,7 @@ function printReport(ours: Map<string, EmailVerificationResult>, gt: Record<stri
   });
   const macroF1 = perCategory.reduce((sum, item) => sum + item.f1, 0) / categories.length;
 
-  // 端到端（五个字段全对）
+  // End-to-end (all five fields correct)
   let endToEnd = 0;
   let statusHit = 0;
   let reviewHit = 0;
@@ -178,7 +178,7 @@ function printReport(ours: Map<string, EmailVerificationResult>, gt: Record<stri
     if (truth.status === "NEEDS_REVIEW") {
       reviewTotal += 1;
       if (mine.review_reason === truth.review_reason) reviewHit += 1;
-      else trapProblems.push(`${id} 原因：实际=${truth.review_reason} 我方=${mine.review_reason ?? "(没判review)"}`);
+      else trapProblems.push(`${id} reason: actual=${truth.review_reason} ours=${mine.review_reason ?? "(no review verdict)"}`);
     }
     const mineDefects = new Set(mine.defect_fields);
     const truthDefects = new Set(truth.defect_fields);
@@ -186,9 +186,9 @@ function printReport(ours: Map<string, EmailVerificationResult>, gt: Record<stri
     for (const field of mineDefects) if (!truthDefects.has(field)) fpDefect += 1;
 
     if (Number(id.slice(6)) >= 501 && resultKey(mine) !== resultKey(truth)) {
-      trapProblems.push(`${id} 整条：实际=${truth.status}/${truth.review_reason ?? "-"}/${JSON.stringify(truth.defect_fields)} 我方=${mine.status}/${mine.review_reason ?? "-"}/${JSON.stringify(mine.defect_fields)}`);
+      trapProblems.push(`${id} full row: actual=${truth.status}/${truth.review_reason ?? "-"}/${JSON.stringify(truth.defect_fields)} ours=${mine.status}/${mine.review_reason ?? "-"}/${JSON.stringify(mine.defect_fields)}`);
     } else if (resultKey(mine) !== resultKey(truth)) {
-      trapProblems.push(`${id} 整条：实际=${truth.category}/${truth.status}/${truth.review_reason ?? "-"}/${JSON.stringify(truth.defect_fields)} 我方=${mine.category}/${mine.status}/${mine.review_reason ?? "-"}/${JSON.stringify(mine.defect_fields)}`);
+      trapProblems.push(`${id} full row: actual=${truth.category}/${truth.status}/${truth.review_reason ?? "-"}/${JSON.stringify(truth.defect_fields)} ours=${mine.category}/${mine.status}/${mine.review_reason ?? "-"}/${JSON.stringify(mine.defect_fields)}`);
     }
   }
 
@@ -197,18 +197,18 @@ function printReport(ours: Map<string, EmailVerificationResult>, gt: Record<stri
   const defectRecall = tpDefect + fnDefect === 0 ? 0 : tpDefect / (tpDefect + fnDefect);
   const defectF1 = defectPrecision + defectRecall === 0 ? 0 : (2 * defectPrecision * defectRecall) / (defectPrecision + defectRecall);
 
-  console.log("\n================ 评测报告 ================");
-  console.log(`阶段一 分类 macro-F1: ${(macroF1 * 100).toFixed(2)}%`);
+  console.log("\n================ Evaluation report ================");
+  console.log(`Stage 1 classification macro-F1: ${(macroF1 * 100).toFixed(2)}%`);
   for (const item of perCategory) {
     console.log(`  ${item.category.padEnd(14)} P=${precise(item.precision, 1)} R=${precise(item.recall, 1)} F1=${precise(item.f1, 1)} (tp=${item.tp} fp=${item.fp} fn=${item.fn})`);
   }
-  console.log(`\n端到端 完全一致: ${endToEnd}/${ids.length} (${precise(endToEnd, ids.length)})`);
-  console.log(`status 命中: ${statusHit}/${ids.length} (${precise(statusHit, ids.length)})`);
-  console.log(`NEEDS_REVIEW 原因命中: ${reviewHit}/${reviewTotal} (${precise(reviewHit, reviewTotal)})`);
-  console.log(`缺陷字段: TP=${tpDefect} FP=${fpDefect} FN=${fnDefect} | P=${precise(defectPrecision, 1)} R=${precise(defectRecall, 1)} F1=${precise(defectF1, 1)}`);
+  console.log(`\nEnd-to-end exact match: ${endToEnd}/${ids.length} (${precise(endToEnd, ids.length)})`);
+  console.log(`status match: ${statusHit}/${ids.length} (${precise(statusHit, ids.length)})`);
+  console.log(`NEEDS_REVIEW reason match: ${reviewHit}/${reviewTotal} (${precise(reviewHit, reviewTotal)})`);
+  console.log(`Defect fields: TP=${tpDefect} FP=${fpDefect} FN=${fnDefect} | P=${precise(defectPrecision, 1)} R=${precise(defectRecall, 1)} F1=${precise(defectF1, 1)}`);
 
   if (trapProblems.length) {
-    console.log("\n--- 陷阱/不一致明细 ---");
+    console.log("\n--- Trap/mismatch details ---");
     for (const line of trapProblems) console.log(`  ${line}`);
   }
 }
@@ -222,10 +222,10 @@ function printEngineSummary(succeeded: { outcome: PipelineOutcome }[]) {
     }
     console.log(`  ${label}: ${[...stats.entries()].map(([k, v]) => `${k}=${v}`).join(" ")}`);
   };
-  console.log("\n--- 引擎使用统计（本次新跑的） ---");
-  count("分类", (outcome) => outcome.meta.classifier);
-  count("比对", (outcome) => outcome.meta.comparer ?? "-");
-  count("抽取(SI)", (outcome) => outcome.meta.extractor.si ?? "-");
+  console.log("\n--- Engine usage stats (this run's newly processed emails) ---");
+  count("classification", (outcome) => outcome.meta.classifier);
+  count("comparison", (outcome) => outcome.meta.comparer ?? "-");
+  count("extraction(SI)", (outcome) => outcome.meta.extractor.si ?? "-");
 }
 
 async function writeResults(
@@ -236,7 +236,7 @@ async function writeResults(
     buildSuccessRow(input, outcome, hashByEmail.get(input.email.email_id) ?? computeInputHash(input))
   );
   await upsertVerificationRows(rows);
-  console.log(`已写入 verification_results：${rows.length} 行（upsert，含 input_hash / logic_version）`);
+  console.log(`Written to verification_results: ${rows.length} rows (upsert, includes input_hash / logic_version)`);
 }
 
 async function countCacheRows(): Promise<number | null> {
@@ -269,6 +269,6 @@ async function loadEnvLocal() {
 }
 
 main().catch((err) => {
-  console.error("\n评测失败：", err);
+  console.error("\nEvaluation failed:", err);
   process.exit(1);
 });

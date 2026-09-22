@@ -1,18 +1,21 @@
 /**
- * 扁平化（normalize）：把文字统一成"大小写忽略、空白折叠、全角转半角"的规范形式。
+ * Flattening (normalize): put text into a canonical form — case-insensitive, whitespace
+ * collapsed, full-width characters converted to half-width.
  *
- * 两个用途：
- * 1. 导入邮件时算一份，存进数据库的 *_normalized 字段，供预览/检索使用；
- * 2. 以后比对字段时先各自扁平化再比较，避免"1,000 vs 1000"以外的
- *    纯格式差异（大小写、多空格）被误报成不一致。
+ * Two uses:
+ * 1. Computed once on email import and stored in the *_normalized database column, for
+ *    preview/search;
+ * 2. Later, when comparing fields, flatten both sides first so pure formatting differences
+ *    (case, extra spaces — beyond things like "1,000 vs 1000") aren't misreported as mismatches.
  *
- * 注意：扁平化只用于"比较/检索"，不要把扁平化后的文本喂给 LLM 抽取
- * （全小写、空白折叠会丢信息，影响抽取质量）。
+ * Note: flattening is only for "comparison/search" — never feed flattened text into the LLM for
+ * extraction (lowercasing and collapsing whitespace loses information and hurts extraction
+ * quality).
  */
 export function normalizeText(input: string): string {
   return input
-    .normalize("NFKC") // 全角字母/数字/空格 → 半角
+    .normalize("NFKC") // full-width letters/digits/spaces → half-width
     .toLowerCase()
-    .replace(/\s+/g, " ") // 连续空白（含换行、制表、不换行空格）折叠成一个空格
+    .replace(/\s+/g, " ") // collapse runs of whitespace (including newlines, tabs, non-breaking spaces) into a single space
     .trim();
 }

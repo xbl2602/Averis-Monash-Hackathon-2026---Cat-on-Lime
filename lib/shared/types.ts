@@ -1,21 +1,24 @@
 /**
- * 三个 feature 模块（classification / extraction / comparison）之间传递数据用的类型。
- * 这些类型直接对应官方要求的提交格式（见 SHARED_INTERFACES.md 和
- * data/sample/README.md），改动前先跟操作者确认，因为三人都依赖这里。
+ * Types used to pass data between the three feature modules (classification / extraction /
+ * comparison). These types map directly to the official submission format required (see
+ * SHARED_INTERFACES.md and data/sample/README.md) — confirm with the operator before changing
+ * anything here, since all three people depend on it.
  */
 
-// 官方题目里的邮箱数据长这样（见 data/sample/inbox/email_*.json）
+// This is the shape of the mailbox data in the official problem set (see data/sample/inbox/email_*.json)
 export interface InboxEmail {
   email_id: string;
   from: string;
   subject: string;
   body: string;
-  attachments: string[]; // 例如 "attachments/email_004_SI.txt"
+  attachments: string[]; // e.g. "attachments/email_004_SI.txt"
 }
 
-// classification 模块的输出。
-// 注意：运行时清单和类型都定义在这里（唯一来源），筛选/校验/下拉选项都从这里派生，
-// 不要在别的模块再写一份类别清单（见 DATA_FLOW.md 数据流规则第 4 条）。
+// Output of the classification module.
+// Note: the runtime list and the type are both defined here (single source of truth); any
+// filtering/validation/dropdown options should be derived from here — don't write another
+// copy of the category list in another module (see rule 4 of the data-flow rules in
+// DATA_FLOW.md).
 export const EMAIL_CATEGORIES = [
   "BL_COMPARISON",
   "SI_REQUEST",
@@ -25,11 +28,11 @@ export const EMAIL_CATEGORIES = [
 ] as const;
 export type EmailCategory = (typeof EMAIL_CATEGORIES)[number];
 
-// comparison 模块的输出状态（运行时清单同样以这里为唯一来源）
+// Output status of the comparison module (the runtime list here is likewise the single source of truth)
 export const COMPARISON_STATUSES = ["OK", "MISMATCH", "NEEDS_REVIEW"] as const;
 export type ComparisonStatus = (typeof COMPARISON_STATUSES)[number];
 
-// 拿不准的原因（status 是 NEEDS_REVIEW 时必须给一个）
+// Reason given when we're not sure (required whenever status is NEEDS_REVIEW)
 export const REVIEW_REASONS = [
   "wrong_doc_type",
   "missing_attachment",
@@ -38,8 +41,9 @@ export const REVIEW_REASONS = [
 ] as const;
 export type ReviewReason = (typeof REVIEW_REASONS)[number];
 
-// 官方要求比对的 7 个字段，SI 和 BL 上这几个字段的叫法可能不一样，
-// extraction 模块要负责"按含义对齐"，不是按原文字段名对齐
+// The 7 fields the official spec requires us to compare. SI and BL may label these fields
+// differently, so the extraction module is responsible for "aligning by meaning", not by
+// matching the original field name verbatim.
 export const COMPARED_FIELDS = [
   "shipper",
   "consignee",
@@ -51,36 +55,39 @@ export const COMPARED_FIELDS = [
 ] as const;
 export type ComparedField = (typeof COMPARED_FIELDS)[number];
 
-// extraction 模块的输出：从一份文档（SI 或 BL）里抽出来的字段
+// Output of the extraction module: the fields pulled out of one document (SI or BL)
 export type ExtractedDocumentFields = Partial<Record<ComparedField, string>>;
 
-// extraction 模块对"这份文档实际是什么"的判断（OTHER = 明显不是 SI/BL，如商业发票/装箱单/产地证）
+// The extraction module's judgment of "what this document actually is" (OTHER = clearly not
+// an SI/BL, e.g. a commercial invoice/packing list/certificate of origin)
 export type DocumentType = "SI" | "BL" | "OTHER" | "UNKNOWN";
 
-// 字段级出处（2026-09-21 P1-7）：规则解析命中的原文位置（行号 + 原句）；
-// LLM 兜底抽到的字段没有行证据，只标来源（不要假装有出处）
+// Field-level evidence (2026-09-21 P1-7): the source location matched by rule-based parsing
+// (line number + original sentence); fields obtained via the LLM fallback have no line
+// evidence and are only tagged with their source (don't fake evidence that isn't there)
 export interface FieldEvidence {
-  /** 规则解析命中时：原文行号（从 1 开始） */
+  /** When matched by rule-based parsing: the line number in the original text (1-based) */
   line?: number;
-  /** 规则解析命中时：实际取到值的那一行原文（行尾空白已去） */
+  /** When matched by rule-based parsing: the actual line of original text the value came from (trailing whitespace stripped) */
   text?: string;
   source: "rules" | "llm";
 }
 export type ExtractedDocumentEvidence = Partial<Record<ComparedField, FieldEvidence>>;
 
-// extraction 模块的完整输出
+// The complete output of the extraction module
 export interface ExtractDocumentResult {
   document_type: DocumentType;
   fields: ExtractedDocumentFields;
-  /** 字段主要靠"规则解析"还是"LLM 兜底"得出，用于排查与统计 */
+  /** Whether the fields mainly came from "rule-based parsing" or the "LLM fallback" — used for debugging and stats */
   extracted_by: "rules" | "llm";
-  /** 每个抽到的字段的出处（只包含真的抽到的字段） */
+  /** The source of each extracted field (only includes fields that were actually extracted) */
   evidence: ExtractedDocumentEvidence;
 }
 
-// comparison 模块的输出，同时也是最终要交给官方评分系统的那份结果的"单条"格式
-// （最终提交文件是 { [email_id]: EmailVerificationResult } 这样一个大对象，
-//  见 data/sample/sample_submission.json）
+// Output of the comparison module, which is also the "single record" format of the result
+// ultimately handed to the official scoring system
+// (the final submission file is one big object shaped like { [email_id]: EmailVerificationResult },
+//  see data/sample/sample_submission.json)
 export interface EmailVerificationResult {
   category: EmailCategory;
   status: ComparisonStatus;
@@ -89,5 +96,5 @@ export interface EmailVerificationResult {
   has_defect: boolean;
 }
 
-// 最终要提交给官方评分系统的完整文件格式
+// The full file format ultimately submitted to the official scoring system
 export type SubmissionFile = Record<string, EmailVerificationResult>;
