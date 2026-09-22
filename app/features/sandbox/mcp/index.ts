@@ -25,7 +25,7 @@ export const sandboxMcpTool = {
     provider: z
       .enum(LLM_PROVIDER_IDS)
       .optional()
-      .describe("不传 = 和线上默认引擎一致（规则优先，缺字段才用 Gemini 兜底，比对用 Jev 复核）"),
+      .describe("不传 = 和线上默认引擎一致（规则优先，缺字段才用文本模型回退链 gemini → deepseek → … 兜底，比对用 Jev 复核）"),
   },
   annotations: {
     readOnlyHint: true,

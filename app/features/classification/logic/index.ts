@@ -5,7 +5,7 @@ import {
   type JevQuestion,
   type LLMProvider,
 } from "@/lib/llm";
-import { callTextLLMChain } from "@/lib/shared/llm-chain";
+import { CHAIN_BUDGET_MS, callTextLLMChain } from "@/lib/shared/llm-chain";
 import { callWithCache } from "@/lib/shared/llm-cache";
 import { EMAIL_CATEGORIES, type InboxEmail, type EmailCategory } from "@/lib/shared/types";
 import { classifyByRules, classifyByRulesBestEffort } from "./rules";
@@ -13,7 +13,7 @@ import { classifyByRules, classifyByRulesBestEffort } from "./rules";
 export interface ClassifyEmailInput {
   email: InboxEmail;
   /**
-   * 显式指定用哪个模型；**不传时走混合引擎**（规则优先 → Jev → Gemini 文本兜底），
+   * 显式指定用哪个模型；**不传时走混合引擎**（规则优先 → Jev → 文本模型回退链：gemini → deepseek → …），
    * 这样本地没配任何 key 也能靠规则给出结果（demo 兜底，见 CLAUDE.md）。
    */
   provider?: LLMProvider;
@@ -46,6 +46,12 @@ const CATEGORY_DEFINITIONS: Record<EmailCategory, string> = {
 
 // 低于这个置信度就标记为需要人工介入（0.85 是操作者定的保守值：宁可多提示人工复核，也不放过去）
 const JEV_CONFIDENCE_THRESHOLD = 0.85;
+
+/**
+ * 混合分类里"Jev + 文本模型链"两步合计最多花多久（2026-09-22）：分类接口的平台上限是 30s，
+ * 留出规则、读邮件、返回响应的余量。Jev 卡满 10s 时，文本模型链还剩 14s（首选卡住也能换到下一个）。
+ */
+const MODEL_STEPS_BUDGET_MS = 24_000;
 
 /**
  * 单一入口：显式按 provider 调用（给 REST/MCP/界面用）。
@@ -83,6 +89,7 @@ export async function classifyEmailHybrid(
     return { category: ruled.category, confidence: null, needs_review: false, engine: "rules" };
   }
 
+  const modelStepsStartedAt = Date.now();
   if (isJevAvailable()) {
     try {
       const jev = await classifyWithJev(input.email);
@@ -95,7 +102,9 @@ export async function classifyEmailHybrid(
   }
 
   try {
-    const llm = await classifyWithTextChain(input.email, input.provider);
+    // Jev 用掉的时间从模型步骤的总预算里扣掉，保证整步守得住接口的 30s 上限（见 lib/shared/llm-chain.ts）
+    const budgetMs = Math.min(CHAIN_BUDGET_MS, MODEL_STEPS_BUDGET_MS - (Date.now() - modelStepsStartedAt));
+    const llm = await classifyWithTextChain(input.email, input.provider, budgetMs);
     return { ...llm, engine: "llm" };
   } catch (err) {
     console.warn(
@@ -184,13 +193,15 @@ async function classifyWithTextLLM(
  */
 async function classifyWithTextChain(
   email: InboxEmail,
-  preferred?: LLMProvider
+  preferred: LLMProvider | undefined,
+  budgetMs: number
 ): Promise<ClassifyEmailResult> {
   const prompt = buildClassificationPrompt(email);
   const { text } = await callTextLLMChain({
     purpose: "classification_llm",
     prompt,
     preferred,
+    budgetMs,
   });
   return toTextLlmClassification(text);
 }

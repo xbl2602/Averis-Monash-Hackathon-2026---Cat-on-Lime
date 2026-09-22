@@ -115,7 +115,8 @@ export async function runEmailPipeline(
       ? await extractFields({
           documentText: siDoc.text,
           documentType: "SI",
-          provider: options.textProvider,
+          // 页面上选的模型是"首选"不是"唯一"：和分类一样走回退链，首选失败自动换下一个
+          preferredProvider: options.textProvider,
         })
       : null;
   const bl =
@@ -123,7 +124,7 @@ export async function runEmailPipeline(
       ? await extractFields({
           documentText: blDoc.text,
           documentType: "BL",
-          provider: options.textProvider,
+          preferredProvider: options.textProvider,
         })
       : null;
   meta.extractor = { si: si?.extracted_by ?? null, bl: bl?.extracted_by ?? null };

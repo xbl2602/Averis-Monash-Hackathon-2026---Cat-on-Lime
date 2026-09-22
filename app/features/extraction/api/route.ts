@@ -94,7 +94,7 @@ export async function GET() {
     body: {
       attachment_path: '样例数据里的附件相对路径，例如 "attachments/email_004_SI.txt"',
       documentType: '必填："SI" 或 "BL"',
-      provider: `可选文本兜底模型，缺省 gemini；${PROVIDER_HINT}`,
+      provider: `可选：只用这一个文本模型兜底（选谁就只试谁）；不传 = 规则缺字段时走回退链 gemini → deepseek → …（只试配了 key 的）；${PROVIDER_HINT}`,
     },
     example: { attachment_path: "attachments/email_004_SI.txt", documentType: "SI" },
   });

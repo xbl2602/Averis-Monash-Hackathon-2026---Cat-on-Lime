@@ -136,6 +136,7 @@ Key design decisions (each recorded with an ID in [`docs/DECISION_LOG.md`](docs/
 - **Numeric fields never go to the model in comparison**: Jev tested poorly at number comparison, so container counts and weights are normalized in code and compared exactly; only semantic questions ("are these two texts saying the same thing?") go to Jev (threshold 0.85, tuned on the sample set to 0 false positives / 0 false negatives).
 - **An explicit provider never silently switches**: if you asked for a provider, only that one is tried; failure is failure — no secretly swapping in another model to fake success.
 - **Every fallback level has its own try/catch**: one mail's model failure can't take down the batch; `degraded` rows are picked up for recompute with one `retry_failed`.
+- **Fallback is time-boxed so it actually gets to run**: each model attempt times out at 10 s, a model is retried once only for fast transient errors (rate limit / 5xx / network — never for a hang), and the whole chain has a 20 s budget with a 12 s cap per model. So a stuck first-choice model hands over to the next one in ~10 s, and if everything is down the step still ends inside the platform's 30 s limit with a flagged best-effort answer, instead of the whole request being killed. Both classification and field extraction use the chain.
 - **Human review isn't the end, it's data**: every confirm / correct / disposition / defer / undo lands in `review_actions` (append-only audit log), with optimistic locking (`updated_at`) so two people editing the same row can't silently overwrite each other.
 
 ## 🛳 Self Hosting — One Codebase, Three Ways to Run
@@ -144,7 +145,9 @@ Key design decisions (each recorded with an ID in [`docs/DECISION_LOG.md`](docs/
 
 Once the repo is connected to Vercel, pushing to `main` auto-deploys. Fill in every variable from `.env.example` in the Vercel project's Environment Variables (`LM_STUDIO_BASE_URL` excluded — the cloud can't use it).
 
-**Live demo**: https://hackathonaveris.vercel.app (tracks GitHub `main`, redeploys on push. Supabase read access + service key, Jev and Gemini are configured and verified live; full batch can really write online; Claude/OpenAI/DeepSeek key status see "Environment Variables").
+**Live demo**: https://hackathonaveris.vercel.app (tracks GitHub `main`, redeploys on push. Supabase read access + service key, Jev, Gemini and DeepSeek are configured and verified live; full batch can really write online. Claude and ChatGPT are deliberately not configured — see below).
+
+> **Why Claude and ChatGPT have no API key on the demo.** Their APIs are the most expensive of the five providers, and a public demo that anyone can click would bill every call to the team. The integration itself is complete: both are in the provider list, go through the same `lib/llm` interface, and join the fallback chain automatically as soon as a key is added in Vercel — no code change. Until then, choosing either returns a readable "missing `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`" message and the fallback chain simply skips them. The live text-model chain is Gemini → DeepSeek (plus Jev for structured decisions); none of this affects the 520 sample emails, which the rules decide on their own.
 
 ### B. Docker
 
@@ -385,7 +388,7 @@ curl -sD headers.txt -o submission.json \
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Free project at [supabase.com](https://supabase.com), Project Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only, for imports/writes; never with a `NEXT_PUBLIC_` prefix |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Fill what you have; a missing one only disables that provider; demo text fallback is Gemini |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Fill what you have; a missing one only disables that provider and the fallback chain skips it. The live demo sets Gemini and DeepSeek; Claude and ChatGPT are left empty on purpose because their APIs are expensive (see "Live demo" above) |
 | `TYPESAFE_API_KEY` / `JEV_MODEL` | Jev structured decisions, see `lib/llm/jev.ts` |
 | `LM_STUDIO_BASE_URL` | Local/Docker only, default `http://localhost:1234/v1`; unusable from Vercel cloud |
 | `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` | Config-center encryption + write-guard token, see `.env.example` comments |
@@ -472,7 +475,7 @@ Each is a deliberate trade, not inability — each says why the current answer i
 - Whole-batch entry ready: `POST /features/pipeline/api` + MCP `run_batch` (incremental skip of unchanged, single-mail failure can't sink the batch, failures leave traces; `dry_run` computes without writing)
 - Deploy verified: MCP handshake + all tools, result query/export, extraction (TXT/PDF/XLSX/DOCX), Jev/Gemini classification, whole batch — all tested live on local `next start`, the Docker image, and hosted Vercel
 - Two fixed server bugs: see "Challenges We Solved" #1, #2
-- LLM keys: local lacks cloud keys like `ANTHROPIC_API_KEY` (graceful degrade, rules path unaffected); on Vercel the Supabase service key, Jev (`TYPESAFE_API_KEY`) and Gemini are set and verified live (incl. real `run_batch` writes). `DEEPSEEK_API_KEY` is set on Vercel; Claude/OpenAI not yet (selecting them returns a readable missing-key error)
+- LLM keys: local lacks cloud keys like `ANTHROPIC_API_KEY` (graceful degrade, rules path unaffected); on Vercel the Supabase service key, Jev (`TYPESAFE_API_KEY`) and Gemini are set and verified live (incl. real `run_batch` writes). DeepSeek is set and verified live (2026-09-22, real classification calls). Claude/OpenAI are intentionally not configured because their APIs are expensive; selecting them returns a readable missing-key error and the fallback chain skips them
 - Phase 2 (merged, see [PHASE2_SPEC.md](docs/PHASE2_SPEC.md), Chinese): **config center** (GUI-editable, AES-256-GCM-encrypted secrets, open reads / tokened writes), **mail placeholder APIs** (Gmail connection state + multi-Supabase switching with deactivate/restore), **import upload** (single/multi/folder, validation chain, content-hash dedupe, SI/BL recognition by content, originals in Storage). New business tables + `uploads` bucket (RLS in `scripts/phase2-rls.sql`; live policies per console).
   - **Live writes configured**: `ENCRYPTION_MASTER_KEY` / `ADMIN_TOKEN` on Vercel (production + preview), verified live: tokenless writes 401, tokened writes work, secrets stored encrypted; local `.env.local` mirrors them. Add both when deploying elsewhere (see `.env.example`)
   - GUI (config/upload/review/sandbox pages) wired by teammate A: **read [docs/UI_GUIDE.md](docs/UI_GUIDE.md) first** (Chinese); field contracts in [SHARED_INTERFACES.md](docs/SHARED_INTERFACES.md) config / mail / import / review / sandbox chapters (Chinese)

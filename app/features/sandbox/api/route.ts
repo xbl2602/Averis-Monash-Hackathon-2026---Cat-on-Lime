@@ -44,7 +44,7 @@ export async function GET() {
       from: "可选：发件人",
       si: '必填：{ name: "xxx.pdf", data_base64: "..." }，支持 txt/md/pdf/docx/xlsx，单文件不超过 1.5MB',
       bl: "必填：格式同 si",
-      provider: "可选：claude | openai | deepseek | gemini | lmstudio | jev；不传 = 和线上默认引擎一致（规则优先，缺字段才用 Gemini 兜底，比对用 Jev 复核）",
+      provider: "可选：claude | openai | deepseek | gemini | lmstudio | jev；不传 = 和线上默认引擎一致（规则优先，缺字段才用文本模型回退链 gemini → deepseek → … 兜底，比对用 Jev 复核）",
     },
   });
 }

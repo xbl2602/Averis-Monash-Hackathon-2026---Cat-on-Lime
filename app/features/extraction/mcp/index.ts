@@ -20,7 +20,7 @@ export const extractionMcpTool = {
     provider: z
       .enum(TEXT_PROVIDER_IDS)
       .optional()
-      .describe("文本兜底模型，缺省 gemini；不支持 jev（jev 只能做结构化判断）"),
+      .describe("可选：只用这一个文本模型兜底（选谁就只试谁）；不传 = 走回退链 gemini → deepseek → …；不支持 jev（jev 只能做结构化判断）"),
   },
   annotations: {
     readOnlyHint: true,

@@ -4,7 +4,7 @@
  */
 import { resolveConfigValue } from "@/lib/shared/config-store";
 import { getActiveSupabaseConfig } from "@/lib/shared/supabase";
-import { isLocalLLMAvailable } from "@/lib/llm";
+import { JEV_TIMEOUT_MS, isLocalLLMAvailable, resolveJevModel } from "@/lib/llm";
 
 export type TestTarget = "claude" | "openai" | "deepseek" | "gemini" | "typesafe" | "supabase" | "lmstudio";
 
@@ -76,7 +76,14 @@ async function testLlmKey(target: "claude" | "openai" | "deepseek" | "gemini"): 
 
   const { url, headers } = endpoints[target];
   const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-  if (response.ok) return { ok: true, detail: `${target} key 有效，服务可达` };
+  // 列模型接口不产生费用，所以查不出"余额不足"——2026-09-22 DeepSeek 在这里显示有效，真调用却返回 402。
+  // 成功时如实说明验证了什么、没验证什么，免得把"key 能登录"读成"模型能用"。
+  if (response.ok) {
+    return { ok: true, detail: `${target} key 有效，服务可达（只验证了 key，没有实际生成；余额不足等问题要实际调用一次才会暴露）` };
+  }
+  if (response.status === 402) {
+    return { ok: false, detail: `${target} 返回 402：账户余额不足或需要付费，请到服务商后台充值` };
+  }
   if (response.status === 401 || response.status === 403) {
     return { ok: false, detail: `${target} 拒绝了这个 key（HTTP ${response.status}），请检查是否填错或已过期` };
   }
@@ -86,15 +93,18 @@ async function testLlmKey(target: "claude" | "openai" | "deepseek" | "gemini"): 
 async function testTypesafe(): Promise<TestResult> {
   const key = (await resolveConfigValue("llm.typesafe_api_key")) as string | null;
   if (!key) return { ok: false, detail: "未配置 TypeSafe Jev 的 API key" };
-  // 用最小 state+question 发一次真实请求，验证 key 与端点
+  // 用最小 state+question 发一次真实请求，验证 key 与端点。
+  // 2026-09-22 修：以前漏了必填的 model 字段，TypeSafe 一律回 422（"body.model Field required"），
+  // 设置页因此一直显示 Jev 连不上，而真实的分类/比对调用（带 model）其实是好的。model 取值和真实调用同源。
   const response = await fetch("https://api.typesafe.ai/v1/systemone", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      state: { probe: true },
+      model: resolveJevModel(),
+      state: { probe: "connection test" },
       questions: { ok: { type: "noul", instructions: "这是一个测试请求，回答是" } },
     }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
   });
   if (response.ok) return { ok: true, detail: "TypeSafe Jev key 有效，服务可达" };
   if (response.status === 401) return { ok: false, detail: "TypeSafe 拒绝了这个 key（401），请检查是否填错" };

@@ -34,7 +34,7 @@ interface ClassifyEmailResult {
 
 ## 用哪个模型（provider）
 
-三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`。缺省行为（2026-09-21 起）：分类 = 混合引擎（规则 → Jev → 文本模型链：首选 gemini，失败依次降级 deepseek → openai → claude → lmstudio，只试配了 key 的；全部失败用"尽力规则"降级并标 `needs_review`），抽取 = 规则优先、缺字段才用 Gemini 兜底，比对 = 规范化精确比较 + 文字候选差异交 Jev（Jev 失败时保守降级为"候选差异全部不一致"，不整封失败）。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
+三个模块的 `api` / `mcp` 都接受一个**可选**参数 `provider`。缺省行为（2026-09-21 起）：分类 = 混合引擎（规则 → Jev → 文本模型链：首选 gemini，失败依次降级 deepseek → openai → claude → lmstudio，只试配了 key 的；全部失败用"尽力规则"降级并标 `needs_review`），抽取 = 规则优先、缺字段才走同一条文本模型回退链兜底（2026-09-22 起；之前只试 Gemini 一个，决策39），显式传 provider 时只用那一个，比对 = 规范化精确比较 + 文字候选差异交 Jev（Jev 失败时保守降级为"候选差异全部不一致"，不整封失败）。可选值来自 `lib/llm` 的 `LLM_PROVIDER_IDS`：`claude` / `openai` / `deepseek` / `gemini` / `lmstudio` / `jev`。前端下拉框要列 provider 时，直接用 `lib/llm` 导出的 `LLM_PROVIDERS`，不要自己另写一份清单。
 
 - `jev`（TypeSafe System One 结构化决策模型）**只能做分类/比对**，靠 `callJev()` 调用，不能用于 extraction 那种"写出一段文字"的任务；extraction 的 REST/MCP 只接受文本 provider（`lib/llm` 的 `TEXT_PROVIDER_IDS`，明确排除 jev），显式传 jev 会得到可读的 400/参数错误。
 - 不传 provider 的分类接口保持 `{ category, confidence, needs_review }` 三字段契约不变（混合引擎的 `engine` 字段不外露）。
@@ -274,7 +274,7 @@ MCP 传输方式是无状态 Streamable HTTP + JSON 响应（GET/DELETE 返回 4
 | `limit` | 单次最多跑几封，1~520，默认 50；剩余数量在响应的 `remaining` 里（Vercel 函数上限 60s，大批量分几次调）。匿名（未带口令）的 `dry_run` 预览再封顶 20 封 |
 | `force` | true = 忽略增量指纹强制重算，默认 false |
 | `dry_run` | true = 只算不写库（不需要 service key），默认 false；匿名时只预览清单头部固定前缀（≤20 封） |
-| `provider` | 文本兜底模型，默认 gemini；不能用 jev（返回 400） |
+| `provider` | **首选**文本模型：分类和抽取的兜底都走回退链、它排最前，失败自动换下一个配了 key 的（2026-09-22 起抽取也如此，决策39）；不传 = 默认顺序 gemini → deepseek → …；不能用 jev（返回 400） |
 | `concurrency` | 同时最多处理几封（也是一块的大小），1~8，默认 4 |
 | `retry_failed` | true = 一键重试（2026-09-21 新增）：服务端自动挑出结果表里 `processing_status='failed'` 或 `model_provider` 含 `degraded` 的邮件并强制重算；不能和 `email_ids` 同时用；没有目标时 `ran=0` 正常返回 |
 
@@ -538,6 +538,21 @@ Supabase 客户端解析：**启用项目（`supabase_projects.is_active`） > �
 ## LLM 调用约定
 
 所有模块都通过 [`lib/llm/index.ts`](lib/llm/index.ts) 导出的 `callLLM(provider, prompt, options)` 调用 LLM，不要在 feature 模块内部直接 import 具体某个 LLM 的 SDK。可用的 `provider` 值见上面的"用哪个模型（provider）"。
+
+**两种调用方式（2026-09-22 口径，决策39）**：
+- **显式指定（选谁就只试谁）**：`callLLM(provider, prompt, { system?, timeoutMs? })`。用户/调用方明确点名某个模型时用，失败就是失败，绝不悄悄换模型。
+- **回退链（混合引擎用）**：[`lib/shared/llm-chain.ts`](lib/shared/llm-chain.ts) 的 `callTextLLMChain({ purpose, prompt, preferred?, system?, budgetMs? })`。
+  顺序 = 首选最前，其余按 gemini → deepseek → openai → claude → lmstudio，只试配了 key 的。分类、抽取、附件类型识别的兜底都走它。
+
+**时间规则（守住平台 30s 接口上限，保证回退真的来得及发生）**：
+- 单次尝试超时 10s；只对"很快就失败"的暂时性错误（429 / 5xx / 网络）重试一次，**超时不重试**（直接换下一个）；
+  SDK 自带的重试已关掉（`maxRetries: 0`），重试只发生在 `callLLM` 这一处。
+- 回退链默认总时限 20s（`CHAIN_BUDGET_MS`），单个模型最多占 12s，剩余不足 3s 就不再尝试下一个；混合分类会把 Jev 已用掉的时间扣掉。
+- Jev 单次超时 10s（`JEV_TIMEOUT_MS`），不重试。
+
+**错误**：`LLMConfigError`（没配 key / 当前环境不可用，映射 503）与 `UpstreamServiceError`（上游出错，映射 429/502/504）。
+`UpstreamServiceError.code` ∈ `rate_limited / unauthorized / payment_required / invalid_request / upstream_error / timeout / network_error / invalid_response / http_error`；
+message 是按 code 选的固定模板（"上游服务（x）返回 402（payment_required）：账户余额不足…"），绝不包含上游原文。
 
 **Jev 是例外**：它不生成文本，走 `lib/llm` 导出的另一个函数 `callJev(state, questions)`（实现在 [`lib/llm/jev.ts`](lib/llm/jev.ts)），输入一组 typed question（`noul` 是/否概率 / `choice` 选项 / `score` 打分），返回带 `confidence` 的结构化答案。环境变量是 `TYPESAFE_API_KEY`（选填 `JEV_MODEL`，默认 `jev-latest`），见 [`.env.example`](.env.example)。
 

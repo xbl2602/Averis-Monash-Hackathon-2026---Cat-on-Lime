@@ -5,6 +5,7 @@
  * - 明显不是 SI/BL 的文档直接返回 document_type=OTHER（上层据此判 wrong_doc_type），不浪费调用
  */
 import { callLLM, type LLMProvider } from "@/lib/llm";
+import { callTextLLMChain } from "@/lib/shared/llm-chain";
 import { callWithCache } from "@/lib/shared/llm-cache";
 import {
   COMPARED_FIELDS,
@@ -22,8 +23,16 @@ import {
 export interface ExtractFieldsInput {
   documentText: string;
   documentType: "SI" | "BL";
-  /** 规则缺字段时用哪个文本模型兜底，默认 gemini */
+  /**
+   * 显式指定：规则缺字段时**只用这一个**模型兜底，失败就只用规则结果（选谁就只试谁，不偷偷换模型）。
+   * REST/MCP 的单文档接口传了 provider 时用这个。
+   */
   provider?: LLMProvider;
+  /**
+   * 首选：规则缺字段时走文本模型回退链，这个排最前，失败自动换下一个配了 key 的（流水线用这个）。
+   * provider 和 preferredProvider 都不传 = 走回退链、按默认顺序（gemini → deepseek → …）。
+   */
+  preferredProvider?: LLMProvider;
 }
 
 export async function extractFields(input: ExtractFieldsInput): Promise<ExtractDocumentResult> {
@@ -72,17 +81,13 @@ export async function extractFields(input: ExtractFieldsInput): Promise<ExtractD
 async function tryLlmExtraction(
   input: ExtractFieldsInput
 ): Promise<ExtractedDocumentFields | null> {
-  const provider = input.provider ?? "gemini";
   const prompt = buildExtractionPrompt(input);
+  // 2026-09-22：以前是 `provider ?? "gemini"`，只试一个模型——Gemini 一出问题，抽取就没有备用模型，
+  // 和分类的"失败自动换下一个"不一致（流水线页的说明也因此不准确）。现在只有显式指定时才只试一个。
+  const route = input.provider ? `只用 ${input.provider}` : `回退链（首选 ${input.preferredProvider ?? "默认顺序"}）`;
 
   try {
-    const { value: raw } = await callWithCache({
-      purpose: "extraction_llm",
-      provider,
-      model: provider,
-      request: { prompt },
-      execute: () => callLLM(provider, prompt),
-    });
+    const raw = input.provider ? await callOneProvider(input.provider, prompt) : await callFallbackChain(input.preferredProvider, prompt);
     const parsed = parseJsonObject(raw);
     if (!parsed) {
       console.warn(`[extraction] LLM 兜底返回的不是合法 JSON，本次只用规则结果：${raw.slice(0, 200)}`);
@@ -93,11 +98,28 @@ async function tryLlmExtraction(
     // LLM 兜底失败（例如没配 key）时降级为"只用规则结果"：缺的字段会在上层被判 missing_value，
     // 不会因为一次兜底失败把整批拖垮；这里打印原因，方便排查（不是静默吞掉）
     console.warn(
-      `[extraction] LLM 兜底调用失败（${provider}），本次只用规则结果：`,
+      `[extraction] LLM 兜底调用失败（${route}），本次只用规则结果：`,
       err instanceof Error ? err.message : err
     );
     return null;
   }
+}
+
+async function callOneProvider(provider: LLMProvider, prompt: string): Promise<string> {
+  const { value } = await callWithCache({
+    purpose: "extraction_llm",
+    provider,
+    model: provider,
+    request: { prompt },
+    execute: () => callLLM(provider, prompt),
+  });
+  return value;
+}
+
+// 缓存键和单模型路径一致（purpose/provider/model/request 相同），切换路径不会让已缓存的结果失效
+async function callFallbackChain(preferred: LLMProvider | undefined, prompt: string): Promise<string> {
+  const { text } = await callTextLLMChain({ purpose: "extraction_llm", prompt, preferred });
+  return text;
 }
 
 function buildExtractionPrompt(input: ExtractFieldsInput): string {

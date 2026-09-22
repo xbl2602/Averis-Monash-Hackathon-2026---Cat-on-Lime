@@ -48,11 +48,17 @@ export type JevState = string | Record<string, unknown> | unknown[];
 const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_JEV_MODEL = "jev-latest";
 /**
- * 单次调用超时 20s（与 callLLM 一致），超时/失败直接失败、不在这里重试——
- * Jev 失败时上层（分类/比对的混合引擎）会直接转去下一级降级路径（见 DECISION_LOG 决策25），
- * 这和 callLLM 内部"同一 provider 重试一次"是不同的失败处理策略，两者不冲突。
+ * 单次调用超时 10s（与 callLLM 单次尝试一致；2026-09-22 从 20s 降下来：实测 Jev 约 1.3s，
+ * 而分类里 Jev 后面还排着文本模型链，Jev 卡满 20s 会把 30s 的接口上限吃掉大半）。
+ * 超时/失败直接失败、不在这里重试——Jev 失败时上层（分类/比对的混合引擎）会直接转去下一级降级路径
+ * （见 DECISION_LOG 决策25），这和 callLLM 内部"同一 provider 重试一次"是不同的失败处理策略，两者不冲突。
  */
-const JEV_TIMEOUT_MS = 20_000;
+export const JEV_TIMEOUT_MS = 10_000;
+
+/** 实际调用用哪个 Jev 模型（TypeSafe 接口的必填字段）。连接测试也用它，保证测的和真调用的是同一个东西 */
+export function resolveJevModel(): string {
+  return process.env.JEV_MODEL || DEFAULT_JEV_MODEL;
+}
 
 // 有没有配 TYPESAFE_API_KEY——界面/逻辑可以据此决定要不要让用户选 Jev
 export function isJevAvailable(): boolean {
@@ -95,7 +101,7 @@ export async function callJev(
     );
   }
 
-  const model = process.env.JEV_MODEL || DEFAULT_JEV_MODEL;
+  const model = resolveJevModel();
 
   let response: Response;
   try {

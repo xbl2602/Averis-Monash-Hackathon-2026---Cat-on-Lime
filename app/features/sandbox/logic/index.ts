@@ -33,7 +33,8 @@ export async function runAdhocTest(request: RunAdhocTestRequest): Promise<RunAdh
     throw new SandboxRequestError(`不支持的 provider：${request.provider}`);
   }
   const provider = request.provider as LLMProvider | undefined;
-  // 抽取只接受文本 provider（jev 不做文本生成）；传了 jev 就用抽取自己的默认值（gemini），不报错
+  // 抽取只接受文本 provider（jev 不做文本生成）；传了 jev 就按没指定处理（抽取走默认回退链），不报错。
+  // 指定了文本 provider 时"选谁就只试谁"，和分类一致；没指定时分类/抽取都走和流水线一样的混合引擎。
   const textProvider: TextLLMProvider | undefined =
     provider && isTextProvider(provider) ? provider : undefined;
 

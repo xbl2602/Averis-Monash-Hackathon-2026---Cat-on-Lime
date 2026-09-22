@@ -49,26 +49,33 @@ export function isTextProvider(value: unknown): value is TextLLMProvider {
   return typeof value === "string" && (TEXT_PROVIDER_IDS as readonly string[]).includes(value);
 }
 
-/** 单次调用的超时（毫秒）：上游卡住时尽快失败（见性能评审） */
-const LLM_CALL_TIMEOUT_MS = 20_000;
+/**
+ * 单次尝试的超时（毫秒）。2026-09-22 从 20s 降到 10s：实测 Gemini 分类约 2s，10s 足够正常调用；
+ * 旧值下一个卡住的模型要拖 42s（20s × 2 + 2s），比分类/抽取/sandbox 接口 30s 的平台上限还长，
+ * 回退链还没来得及换下一个模型，整个请求就先被平台掐断了。
+ */
+const LLM_CALL_TIMEOUT_MS = 10_000;
+
+/** 一次 callLLM（含那一次重试）默认最多花多久；回退链会传一个更小的值进来（见 lib/shared/llm-chain.ts） */
+const LLM_PROVIDER_BUDGET_MS = 22_000;
+
+/** 剩余时间不够一次像样的尝试就不再重试（避免发出一个注定超时的请求） */
+const MIN_ATTEMPT_MS = 3_000;
 
 /**
- * 超时/暂时性错误的自动重试延迟（毫秒）。P1-2（2026-09-21）：只重试一次，
- * 且只对"这次大概率是临时抖动"的错误重试（超时/限流/上游5xx/网络错误）；
- * 401/403/400/422 这类"重试也没用"的错误不重试，直接失败。
- * 这一层重试只发生在单个 provider 内部，不影响、也不替代 lib/shared/llm-chain.ts
- * 的"跨 provider 换下一家"降级链——两者是叠加关系：先在本 provider 内重试一次，
- * 仍失败才轮到降级链换下一个 provider。
+ * 暂时性错误的自动重试延迟（毫秒）。只重试一次，且只对"很快就失败、大概率是临时抖动"的错误重试
+ * （限流/上游5xx/网络错误）；401/403/402/400/422 这类"重试也没用"的错误不重试。
+ *
+ * 2026-09-22 两处改动：
+ * - **超时不再原地重试**：卡住的服务再等一次多半还是卡，直接交给回退链换下一个 provider 更划算。
+ * - **关掉 SDK 自带的重试**（generateText 的 maxRetries 默认是 2）：以前 SDK 内部重试 2 次、这里再重试 1 次，
+ *   实测一个持续 500 的模型会被请求 6 次、拖 14s，和"只重试一次"的设计不符。现在重试只发生在这一处。
+ * 这一层重试只发生在单个 provider 内部；"换下一家"由 lib/shared/llm-chain.ts 负责，两者是叠加关系。
  */
 const RETRY_DELAY_MS = 2_000;
 
 function isRetryableUpstreamError(err: UpstreamServiceError): boolean {
-  return (
-    err.code === "timeout" ||
-    err.code === "rate_limited" ||
-    err.code === "upstream_error" ||
-    err.code === "network_error"
-  );
+  return err.code === "rate_limited" || err.code === "upstream_error" || err.code === "network_error";
 }
 
 function delay(ms: number): Promise<void> {
@@ -196,30 +203,36 @@ function getModel(provider: LLMProvider): LanguageModel {
  * 统一的 LLM 调用入口。所有模块都应该通过这个函数调用 LLM，不要各自直接用 SDK。
  * 遵守"调试规范"：外部调用失败要能被上层感知（抛出有意义的错误），不在这里静默吞掉。
  *
- * 失败约定（2026-09-20 可靠性/安全评审；2026-09-21 P1-2 加自动重试）：
+ * 失败约定（2026-09-20 可靠性/安全评审；2026-09-21 P1-2 加自动重试；2026-09-22 收紧时间）：
  * - 本地没配 key → LLMConfigError（可读，含环境变量名），不重试（配置问题重试也没用）
- * - 上游超时/限流/5xx/网络错误 → 等 `RETRY_DELAY_MS` 后原样重试一次；仍失败才抛出
+ * - 上游限流/5xx/网络错误 → 等 `RETRY_DELAY_MS` 后重试一次（前提是剩余时间还够）；仍失败才抛出
  *   UpstreamServiceError（message 只含 provider + 状态 + 稳定 code；原始错误详情只进
  *   console.warn，不拼进 message、不原样回传）
- * - 401/403/400/422 这类确定性错误 → 不重试，直接抛出
+ * - 超时 → 不重试，直接抛出（交给回退链换下一个 provider）
+ * - 401/402/403/400/422 这类确定性错误 → 不重试，直接抛出
+ *
+ * `timeoutMs` = 这一次 callLLM（含重试）最多花多久，默认 LLM_PROVIDER_BUDGET_MS；每次尝试的超时取
+ * min(LLM_CALL_TIMEOUT_MS, 剩余时间)，所以调用方给的时间上限一定守得住。
  */
 export async function callLLM(
   provider: LLMProvider,
   prompt: string,
-  options?: { system?: string }
+  options?: { system?: string; timeoutMs?: number }
 ): Promise<string> {
   if (!isProviderConfigured(provider)) {
     throw new LLMConfigError(unavailableProviderMessage(provider));
   }
   const model = getModel(provider);
+  const deadline = Date.now() + (options?.timeoutMs ?? LLM_PROVIDER_BUDGET_MS);
 
   const attemptOnce = async (): Promise<string> => {
     const { text } = await generateText({
       model,
       system: options?.system,
       prompt,
-      // 单次调用 20s 超时：上游卡住时不拖着整个请求
-      abortSignal: AbortSignal.timeout(LLM_CALL_TIMEOUT_MS),
+      // 重试只在下面这一处做；SDK 默认的内部重试会让"重试一次"变成最多 6 次请求
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(Math.max(1, Math.min(LLM_CALL_TIMEOUT_MS, deadline - Date.now()))),
     });
     return text;
   };
@@ -228,7 +241,8 @@ export async function callLLM(
     return await attemptOnce();
   } catch (firstErr) {
     const firstUpstreamErr = toUpstreamServiceError(provider, firstErr);
-    if (!isRetryableUpstreamError(firstUpstreamErr)) {
+    const timeLeftAfterDelay = deadline - Date.now() - RETRY_DELAY_MS;
+    if (!isRetryableUpstreamError(firstUpstreamErr) || timeLeftAfterDelay < MIN_ATTEMPT_MS) {
       throw firstUpstreamErr;
     }
     console.warn(
@@ -250,8 +264,8 @@ function toUpstreamServiceError(provider: LLMProvider, err: unknown): UpstreamSe
   if (isTimeoutError(err)) {
     return new UpstreamServiceError({ provider, status: 504, code: "timeout" });
   }
-  const statusCode = (err as { statusCode?: unknown }).statusCode;
-  if (typeof statusCode === "number" && Number.isFinite(statusCode)) {
+  const statusCode = upstreamStatusOf(err);
+  if (statusCode !== null) {
     return new UpstreamServiceError({
       provider,
       status: statusCode,
@@ -261,8 +275,24 @@ function toUpstreamServiceError(provider: LLMProvider, err: unknown): UpstreamSe
   return new UpstreamServiceError({ provider, status: 502, code: "network_error" });
 }
 
+/**
+ * 上游真实的 HTTP 状态码。SDK 有时会把原始错误包一层（RetryError 的 lastError、或 cause），
+ * 以前只看最外层，实测上游明明回的是 500，报出来却成了"502 network_error"。
+ */
+function upstreamStatusOf(err: unknown): number | null {
+  let current: unknown = err;
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
+    const statusCode = (current as { statusCode?: unknown }).statusCode;
+    if (typeof statusCode === "number" && Number.isFinite(statusCode)) return statusCode;
+    const wrapped = current as { lastError?: unknown; cause?: unknown };
+    current = wrapped.lastError ?? wrapped.cause;
+  }
+  return null;
+}
+
 function upstreamCodeOf(statusCode: number): string {
   if (statusCode === 401 || statusCode === 403) return "unauthorized";
+  if (statusCode === 402) return "payment_required";
   if (statusCode === 429) return "rate_limited";
   if (statusCode === 400 || statusCode === 422) return "invalid_request";
   if (statusCode >= 500) return "upstream_error";
@@ -272,8 +302,10 @@ function upstreamCodeOf(statusCode: number): string {
 // Jev（TypeSafe System One）适配层：和 callLLM 是并列的两条能力，不是同一个东西。
 // 需要"让模型在固定选项里做判断"时用 callJev；需要"写出一段文字"时用 callLLM。
 export {
+  JEV_TIMEOUT_MS,
   callJev,
   isJevAvailable,
+  resolveJevModel,
   type JevAnswer,
   type JevChoiceAnswer,
   type JevNoulAnswer,
