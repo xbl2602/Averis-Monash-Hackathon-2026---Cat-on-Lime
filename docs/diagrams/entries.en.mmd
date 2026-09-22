@@ -1,0 +1,7 @@
+%% Source: README Ecosystem section multi-entry diagram + docs/diagrams/entries.en.png.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/entries.en.mmd -o docs/diagrams/entries.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% 1→3 fan laid out LR in two columns (~4:3); write-guard details folded into labels, anonymous dry_run see caption.
+flowchart LR
+    L["One shared logic/<br/>classify·extract·compare·batch·review"] --> G["Web UI<br/>pages for people"]
+    L --> A["REST API<br/>reads open · writes need token"]
+    L --> M["MCP Server<br/>tools for AI agents"]

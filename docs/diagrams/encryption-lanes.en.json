@@ -1,0 +1,155 @@
+{
+  "diagram_type": "workflow",
+  "edges": [
+    {
+      "from": "secrets",
+      "id": "write-path",
+      "label": "write path",
+      "to": "encrypt",
+      "variant": "emphasis"
+    },
+    {
+      "from": "masterkey",
+      "id": "key-to-enc",
+      "label": "same key",
+      "to": "encrypt",
+      "variant": "security"
+    },
+    {
+      "from": "encrypt",
+      "id": "store-cipher",
+      "label": "ciphertext",
+      "to": "apptable",
+      "variant": "emphasis"
+    },
+    {
+      "from": "apptable",
+      "id": "read-path",
+      "label": "read path",
+      "to": "decrypt"
+    },
+    {
+      "from": "masterkey",
+      "id": "key-to-dec",
+      "label": "same key",
+      "to": "decrypt",
+      "variant": "security"
+    },
+    {
+      "from": "decrypt",
+      "id": "masked-out",
+      "label": "masked values",
+      "to": "readapi"
+    }
+  ],
+  "lanes": [
+    {
+      "id": "s01",
+      "label": "Secrets in"
+    },
+    {
+      "id": "s02",
+      "label": "Encrypt"
+    },
+    {
+      "id": "s03",
+      "label": "Store"
+    },
+    {
+      "id": "s04",
+      "label": "Decrypt & read"
+    }
+  ],
+  "mainPath": [
+    "secrets",
+    "encrypt",
+    "apptable",
+    "decrypt",
+    "readapi"
+  ],
+  "meta": {
+    "animation": "trace",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "title": "Secret encryption: write once, decrypt on use",
+    "views": [
+      {
+        "focus": [
+          "encrypt",
+          "masterkey",
+          "secrets"
+        ],
+        "id": "write-path",
+        "label": "Write path",
+        "note": "Secrets are encrypted server-side; the master key never leaves env vars."
+      },
+      {
+        "focus": [
+          "apptable",
+          "decrypt",
+          "readapi"
+        ],
+        "id": "read-path",
+        "label": "Read path",
+        "note": "The table holds ciphertext only; reads return masks."
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "col": 0,
+      "id": "secrets",
+      "label": "Secrets",
+      "lane": "s01",
+      "sublabel": "LLM keys etc.",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 1,
+      "id": "masterkey",
+      "label": "Master key",
+      "lane": "s01",
+      "sublabel": "env var only",
+      "type": "security",
+      "width": 132
+    },
+    {
+      "col": 1,
+      "id": "encrypt",
+      "label": "Server encrypt",
+      "lane": "s02",
+      "sublabel": "AES-256-GCM",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 2,
+      "id": "apptable",
+      "label": "app_config table",
+      "lane": "s03",
+      "sublabel": "ciphertext only",
+      "type": "database",
+      "width": 132
+    },
+    {
+      "col": 3,
+      "id": "readapi",
+      "label": "Read API",
+      "lane": "s04",
+      "sublabel": "masked only",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 2,
+      "id": "decrypt",
+      "label": "Decrypt on use",
+      "lane": "s04",
+      "sublabel": "server-side",
+      "type": "backend",
+      "width": 132
+    }
+  ],
+  "schema_version": 2
+}

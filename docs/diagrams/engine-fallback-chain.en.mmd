@@ -1,0 +1,18 @@
+%% Source: README engine diagram + docs/diagrams/engine-fallback-chain.en.png are both generated here.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/engine-fallback-chain.en.mmd -o docs/diagrams/engine-fallback-chain.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Criteria per docs/DECISION_SPEC.md §2: low-confidence Jev outputs directly + flags review, never enters the text chain;
+%% text-chain success outputs without review flag; best-effort fallback (degraded) always flags review. Chain order see README caption.
+%% Branches naturally stretch the width to 4 columns; the tail merges into 1 node to hold the height, ~1:1 overall.
+flowchart TB
+    A[Email input] --> B{High-precision rules<br/>can decide?}
+    B -- Yes --> Z1["engine: rules<br/>direct output"]
+    B -- No --> C{Jev available?}
+    C -- Available --> J[Jev structured verdict]
+    C -- Unavailable / failed --> D["Text LLM chain<br/>only tries keyed providers"]
+    J -- "≥ 0.85 accept" --> Z2["engine: jev<br/>direct output"]
+    J -- "Below 0.85" --> F2["Output result<br/>flagged needs_review"]
+    D -- Success --> Z3["engine: llm<br/>direct output"]
+    D -- All failed --> E["engine: degraded<br/>best effort · flagged needs_review"]
+    F2 --> G["Human review queue<br/>confirm / correct / defer / undo / bulk"]
+    E --> G
+    G --> I[("Audit log review_actions<br/>exports overlay human verdicts")]

@@ -1,0 +1,13 @@
+%% Source: README write-guard section encryption diagram + docs/diagrams/encryption.en.png.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/encryption.en.mmd -o docs/diagrams/encryption.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Criteria per lib/shared/crypto.ts header comment: master key never enters DB/git/echo; read APIs only return masks; same key encrypts and decrypts.
+%% block grid syntax (in flowchart two sourceless nodes would stack vertically, so block locks the cells in one row).
+block-beta
+  columns 2
+  IN["Secrets<br/>LLM keys etc."] K["Master key<br/>env var only"]
+  E["Server-side encrypt<br/>AES-256-GCM"] DB["app_config table<br/>ciphertext only"]
+  D["Decrypt server-side on use<br/>read APIs return masks only"]:2
+  IN --> E
+  K --> E
+  E --> DB
+  DB --> D

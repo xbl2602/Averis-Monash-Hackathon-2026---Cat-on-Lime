@@ -1,0 +1,8 @@
+%% Source: concept diagram for the README Architecture section ("everything is a plugin") + docs/diagrams/plugin-concept.en.png.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/plugin-concept.en.mmd -o docs/diagrams/plugin-concept.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% The six modules onboarded as new folders (config/mail/import/results/review/sandbox) are listed in the caption.
+flowchart TB
+    T["Thin entry<br/>Web / REST / MCP only adapt parameters"]
+    F["Fat plugin<br/>each feature ships its own logic"]
+    S["Small core<br/>only cross-module sharing"]
+    T --> F --> S

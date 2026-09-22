@@ -1,0 +1,8 @@
+%% Source: README Engine section Jev roles diagram + docs/diagrams/jev-roles.en.png.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/jev-roles.en.mmd -o docs/diagrams/jev-roles.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Criteria per docs/DECISION_SPEC.md §2.3/§4.2: Jev only does choice/noul, never generates natural language; threshold 0.85.
+flowchart TB
+    Q["Uncertain question<br/>rules cannot decide"] --> J["Jev: structured decision<br/>choice / noul + confidence"]
+    Q --> T["Text LLM: open fallback<br/>extraction fill-in / classify chain"]
+    J --> C["≥0.85 accept<br/>below 0.85 goes to human queue"]
+    T --> U["Only tries keyed providers<br/>one by one until success"]

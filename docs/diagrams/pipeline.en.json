@@ -1,0 +1,202 @@
+{
+  "diagram_type": "workflow",
+  "edges": [
+    {
+      "from": "webui",
+      "id": "webui-in",
+      "label": "mail in",
+      "to": "classification"
+    },
+    {
+      "from": "rest",
+      "id": "rest-in",
+      "label": "mail in",
+      "to": "classification"
+    },
+    {
+      "from": "mcp",
+      "id": "mcp-in",
+      "label": "mail in",
+      "to": "classification"
+    },
+    {
+      "from": "classification",
+      "id": "c-to-e",
+      "to": "extraction"
+    },
+    {
+      "from": "extraction",
+      "id": "e-to-k",
+      "to": "comparison"
+    },
+    {
+      "from": "comparison",
+      "id": "k-to-lib",
+      "label": "persist + guard",
+      "to": "sharedlib",
+      "variant": "emphasis"
+    },
+    {
+      "from": "plugins",
+      "id": "plug-to-lib",
+      "to": "sharedlib",
+      "variant": "dashed"
+    },
+    {
+      "from": "sharedlib",
+      "id": "lib-to-db",
+      "label": "upsert",
+      "to": "supabase",
+      "variant": "emphasis"
+    }
+  ],
+  "lanes": [
+    {
+      "id": "entries",
+      "label": "Entries"
+    },
+    {
+      "id": "pipe",
+      "label": "Pipeline"
+    },
+    {
+      "id": "shared",
+      "label": "Shared"
+    },
+    {
+      "id": "store",
+      "label": "Storage"
+    }
+  ],
+  "mainPath": [
+    "webui",
+    "classification",
+    "extraction",
+    "comparison",
+    "sharedlib",
+    "supabase"
+  ],
+  "meta": {
+    "animation": "trace",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "title": "Verify pipeline: three entries, one logic",
+    "views": [
+      {
+        "focus": [
+          "classification",
+          "mcp",
+          "rest",
+          "webui"
+        ],
+        "id": "entries-flow",
+        "label": "Entries to pipeline",
+        "note": "Three thin entries feed one pipeline; nothing else calls in."
+      },
+      {
+        "focus": [
+          "classification",
+          "comparison",
+          "extraction"
+        ],
+        "id": "pipe",
+        "label": "Classify, extract, compare",
+        "note": "One-way pipe: classify, then extract, then compare."
+      },
+      {
+        "focus": [
+          "plugins",
+          "sharedlib",
+          "supabase"
+        ],
+        "id": "persist",
+        "label": "Shared code, one database",
+        "note": "Plugins and lib share one logic; Supabase is the only shared state."
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "col": 0,
+      "id": "webui",
+      "label": "Web UI",
+      "lane": "entries",
+      "sublabel": "people click",
+      "type": "frontend",
+      "width": 132
+    },
+    {
+      "col": 1,
+      "id": "rest",
+      "label": "REST API",
+      "lane": "entries",
+      "sublabel": "programs call",
+      "type": "frontend",
+      "width": 132
+    },
+    {
+      "col": 2,
+      "id": "mcp",
+      "label": "MCP Server",
+      "lane": "entries",
+      "sublabel": "agents call",
+      "type": "frontend",
+      "width": 132
+    },
+    {
+      "col": 0,
+      "id": "classification",
+      "label": "classification",
+      "lane": "pipe",
+      "sublabel": "mail category",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 1,
+      "id": "extraction",
+      "label": "extraction",
+      "lane": "pipe",
+      "sublabel": "field values",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 2,
+      "id": "comparison",
+      "label": "comparison",
+      "lane": "pipe",
+      "sublabel": "diff + review flag",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 1,
+      "id": "plugins",
+      "label": "Support plugins",
+      "lane": "shared",
+      "sublabel": "batch · query · review",
+      "type": "backend",
+      "width": 132
+    },
+    {
+      "col": 2,
+      "id": "sharedlib",
+      "label": "lib/ shared",
+      "lane": "shared",
+      "sublabel": "LLM · cache · fan-out · crypto",
+      "type": "backend",
+      "width": 160
+    },
+    {
+      "col": 2,
+      "id": "supabase",
+      "label": "Supabase",
+      "lane": "store",
+      "sublabel": "tables · views · cache",
+      "type": "database",
+      "width": 132
+    }
+  ],
+  "schema_version": 2
+}

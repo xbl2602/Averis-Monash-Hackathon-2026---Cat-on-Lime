@@ -1,0 +1,15 @@
+%% Source: README architecture overview + docs/diagrams/architecture.en.png are both generated here.
+%% Re-render (repo root): npx -y @mermaid-js/mermaid-cli -i docs/diagrams/architecture.en.mmd -o docs/diagrams/architecture.en.png -c docs/diagrams/mermaid-config.json -b white -s 2
+%% Funnel semantics (deliberate): all three entries point at the same logic/; there are no "three pipelines".
+%% Module list is not expanded in the figure, see the README Features table. block grid locked at ~4:3.
+block-beta
+  columns 3
+  UI["Web UI<br/>used by people"] REST["REST API<br/>called by programs"] MCP["MCP Server<br/>called by agents"]
+  LOGIC["One shared logic/: classify · extract · compare · batch · review · query/export · upload · config"]:3
+  LIB["lib/ shared area: LLM adapter · fingerprint cache · bounded concurrency · encrypted write-guard"]:3
+  DB[("Supabase: tables + views + cache")]:3
+  UI --> LOGIC
+  REST --> LOGIC
+  MCP --> LOGIC
+  LOGIC --> LIB
+  LIB --> DB
