@@ -78,7 +78,7 @@
 
 ## ⚡ Try It — Start With the Live Demo
 
-**Judges: please use the live URL**: https://hackathonaveris.vercel.app (kept online during judging) — open the "Full pipeline preview" page and hit Run preview. To try your own SI/BL documents: open the "Sandbox" page (`/features/sandbox`), no database writes, no setup needed.
+**Judges: please use the live URL**: https://hackathonaveris.vercel.app  (kept online during judging) — open the "Full pipeline preview" page and hit Run preview. To try your own SI/BL documents: open the "Sandbox" page (`/features/sandbox`), no database writes, no setup needed.
 
 The preview needs no keys: the rules engine runs first and the preview uses the sample data shipped in the repo (nothing is written to the DB). **Historical stats / conflict list / submission export** read data already imported into the hosted database — just open and look.
 
